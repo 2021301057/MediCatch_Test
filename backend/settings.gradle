@@ -1,0 +1,9 @@
+rootProject.name = 'medicatch-backend'
+
+include 'eureka-server'
+include 'gateway-service'
+include 'user-service'
+include 'health-service'
+include 'insurance-service'
+include 'analysis-service'
+include 'chat-service'

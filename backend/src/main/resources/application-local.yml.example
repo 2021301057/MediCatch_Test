@@ -1,0 +1,12 @@
+# 이 파일을 application-local.yml로 복사 후 실제 값 입력
+# application-local.yml은 .gitignore에 포함되어 있어 커밋되지 않음
+
+spring:
+  datasource:
+    username: root
+    password: 여기에_DB_비밀번호
+
+codef:
+  client-id: 여기에_CODEF_CLIENT_ID
+  client-secret: 여기에_CODEF_CLIENT_SECRET
+  public-key: 여기에_CODEF_PUBLIC_KEY
