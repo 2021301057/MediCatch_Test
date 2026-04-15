@@ -15,11 +15,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      timeout: 2000
+#  data:
+#    redis:
+#      host: localhost
+#      port: 6379
+#      timeout: 2000
 
 server:
   port: 8002
