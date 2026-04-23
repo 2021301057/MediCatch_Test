@@ -5,6 +5,7 @@ import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
 import com.medicatch.user.dto.SignupStep2Request;
+import com.medicatch.user.dto.SignupStep3Request;
 import com.medicatch.user.dto.UserProfileResponse;
 import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
@@ -31,7 +32,7 @@ public class AuthController {
     }
 
     /**
-     * 회원가입 1단계: CODEF 내보험다보여 1차 등록 요청 (SMS/PASS 인증 트리거)
+     * 회원가입 1단계: CODEF 1차 요청 (PASS/SMS 인증 트리거)
      */
     @PostMapping("/signup/step1")
     public ResponseEntity<SignupStep1Response> signupStep1(@Valid @RequestBody SignupRequest request) {
@@ -41,12 +42,22 @@ public class AuthController {
     }
 
     /**
-     * 회원가입 2단계: 인증번호 확인 후 계정 생성 및 JWT 발급
+     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인)
      */
     @PostMapping("/signup/step2")
-    public ResponseEntity<AuthResponse> signupStep2(@Valid @RequestBody SignupStep2Request request) {
+    public ResponseEntity<Map<String, String>> signupStep2(@Valid @RequestBody SignupStep2Request request) {
         log.info("POST /api/auth/signup/step2 - sessionKey: {}", request.getSessionKey());
-        AuthResponse response = authService.signupStep2(request);
+        authService.signupStep2(request);
+        return ResponseEntity.ok(Map.of("message", "이메일로 발송된 인증번호를 입력해주세요."));
+    }
+
+    /**
+     * 회원가입 3단계: 이메일 인증 완료 → 계정 생성 및 JWT 발급
+     */
+    @PostMapping("/signup/step3")
+    public ResponseEntity<AuthResponse> signupStep3(@Valid @RequestBody SignupStep3Request request) {
+        log.info("POST /api/auth/signup/step3 - sessionKey: {}", request.getSessionKey());
+        AuthResponse response = authService.signupStep3(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -62,9 +73,6 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
             log.warn("Login failed: {}", e.getMessage());
             throw e;
-        } catch (Exception e) {
-            log.error("Login error: {}", e.getMessage(), e);
-            throw e;
         }
     }
 
@@ -74,20 +82,12 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@RequestBody Map<String, String> request) {
         log.info("POST /api/auth/refresh");
-        try {
-            String refreshToken = request.get("refreshToken");
-            if (refreshToken == null || refreshToken.isEmpty()) {
-                throw new IllegalArgumentException("Refresh token is required");
-            }
-            AuthResponse response = authService.refreshToken(refreshToken);
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            log.warn("Token refresh failed: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Token refresh error: {}", e.getMessage(), e);
-            throw e;
+        String refreshToken = request.get("refreshToken");
+        if (refreshToken == null || refreshToken.isEmpty()) {
+            throw new IllegalArgumentException("Refresh token is required");
         }
+        AuthResponse response = authService.refreshToken(refreshToken);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -96,33 +96,26 @@ public class AuthController {
     @GetMapping("/profile")
     public ResponseEntity<UserProfileResponse> getProfile() {
         log.info("GET /api/auth/profile");
-        try {
-            String userIdString = (String) SecurityContextHolder.getContext()
-                    .getAuthentication()
-                    .getPrincipal();
-            Long userId = Long.parseLong(userIdString);
+        String userIdString = (String) SecurityContextHolder.getContext()
+                .getAuthentication().getPrincipal();
+        Long userId = Long.parseLong(userIdString);
 
-            User user = authService.getUserById(userId);
-            int codefConnectionCount = (int) user.getCodefConnections().stream()
-                    .filter(conn -> conn.isActive())
-                    .count();
+        User user = authService.getUserById(userId);
+        int codefConnectionCount = (int) user.getCodefConnections().stream()
+                .filter(conn -> conn.isActive()).count();
 
-            UserProfileResponse response = UserProfileResponse.builder()
-                    .id(user.getId())
-                    .email(user.getEmail())
-                    .name(user.getName())
-                    .birthDate(user.getBirthDate())
-                    .gender(user.getGender().name())
-                    .createdAt(user.getCreatedAt())
-                    .updatedAt(user.getUpdatedAt())
-                    .codefConnectionCount(codefConnectionCount)
-                    .build();
+        UserProfileResponse response = UserProfileResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .name(user.getName())
+                .birthDate(user.getBirthDate())
+                .gender(user.getGender().name())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .codefConnectionCount(codefConnectionCount)
+                .build();
 
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("Get profile error: {}", e.getMessage(), e);
-            throw e;
-        }
+        return ResponseEntity.ok(response);
     }
 
     /**

@@ -6,6 +6,7 @@ import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
 import com.medicatch.user.dto.SignupStep2Request;
+import com.medicatch.user.dto.SignupStep3Request;
 import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.repository.UserRepository;
@@ -35,7 +36,7 @@ public class AuthService {
     }
 
     /**
-     * 회원가입 1단계: 유효성 검사 후 CODEF 내보험다보여 1차 등록 요청
+     * 회원가입 1단계: 유효성 검사 → CODEF 1차 요청 (PASS/SMS 인증 트리거)
      */
     public SignupStep1Response signupStep1(SignupRequest request) {
         log.info("회원가입 step1 시작 - email: {}", request.getEmail());
@@ -79,20 +80,27 @@ public class AuthService {
                 request.getAuthMethod() != null ? request.getAuthMethod() : "0"
         );
 
-        log.info("회원가입 step1 완료 - email: {}, requiresTwoWay: {}", request.getEmail(), step1Response.isRequiresTwoWay());
+        log.info("회원가입 step1 완료 - email: {}", request.getEmail());
         return step1Response;
     }
 
     /**
-     * 회원가입 2단계: CODEF 2차 인증 완료 후 DB 저장 및 JWT 발급
+     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인)
      */
-    public AuthResponse signupStep2(SignupStep2Request request) {
+    public void signupStep2(SignupStep2Request request) {
         log.info("회원가입 step2 시작 - sessionKey: {}", request.getSessionKey());
+        codefService.registerStep2(request.getSessionKey(), request.getSmsAuthNo());
+        log.info("회원가입 step2 완료 - sessionKey: {}", request.getSessionKey());
+    }
 
-        CodefService.SignupSessionData sessionData = codefService.registerStep2(
-                request.getSessionKey(),
-                request.getSmsAuthNo()
-        );
+    /**
+     * 회원가입 3단계: CODEF 3차 요청 (이메일 인증) → DB 저장 → JWT 발급
+     */
+    public AuthResponse signupStep3(SignupStep3Request request) {
+        log.info("회원가입 step3 시작 - sessionKey: {}", request.getSessionKey());
+
+        CodefService.SignupSessionData sessionData =
+                codefService.registerStep3(request.getSessionKey(), request.getEmailAuthNo());
 
         User.Gender gender = User.Gender.valueOf(sessionData.getGender());
 
@@ -160,29 +168,19 @@ public class AuthService {
         log.info("토큰 갱신 시작");
 
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            log.warn("토큰 갱신 실패: 유효하지 않은 refresh token");
             throw new IllegalArgumentException("Invalid refresh token");
         }
-
         String tokenType = jwtTokenProvider.getTokenType(refreshToken);
         if (!"refresh".equals(tokenType)) {
-            log.warn("토큰 갱신 실패: refresh token이 아님");
             throw new IllegalArgumentException("Token is not a refresh token");
         }
-
         Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
         if (userId == null) {
-            log.warn("토큰 갱신 실패: userId 추출 불가");
             throw new IllegalArgumentException("Invalid refresh token");
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> {
-                    log.warn("토큰 갱신 실패: 사용자 없음 - userId: {}", userId);
-                    return new IllegalArgumentException("User not found");
-                });
-
-        log.info("토큰 갱신 완료 - userId: {}", userId);
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());

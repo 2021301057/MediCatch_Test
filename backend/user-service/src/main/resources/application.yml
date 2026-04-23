@@ -29,11 +29,12 @@ jwt:
   refresh-token-expire: 604800000
 
 codef:
-  client-id: ${CODEF_CLIENT_ID:YOUR_CODEF_CLIENT_ID}
-  client-secret: ${CODEF_CLIENT_SECRET:YOUR_CODEF_CLIENT_SECRET}
-  token-url: https://api.codef.io/oauth/token
-  rsa-public-key: ${CODEF_RSA_PUBLIC_KEY:}
-  credit4u-register-url: ${CODEF_CREDIT4U_URL:https://api.codef.io/v1/kr/etc/credit4u/member/sign-up}
+  client-id: ${CODEF_CLIENT_ID:YOUR_CLIENT_ID}
+  client-secret: ${CODEF_CLIENT_SECRET:YOUR_CLIENT_SECRET}
+  demo-client-id: ${CODEF_DEMO_CLIENT_ID:YOUR_DEMO_CLIENT_ID}
+  demo-client-secret: ${CODEF_DEMO_CLIENT_SECRET:YOUR_DEMO_CLIENT_SECRET}
+  public-key: ${CODEF_PUBLIC_KEY:}
+  use-demo: ${CODEF_USE_DEMO:true}
 
 eureka:
   client:

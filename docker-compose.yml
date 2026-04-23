@@ -73,6 +73,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:-medicatch-jwt-secret-key-2026}
       CODEF_CLIENT_ID: ${CODEF_CLIENT_ID}
       CODEF_CLIENT_SECRET: ${CODEF_CLIENT_SECRET}
+      CODEF_DEMO_CLIENT_ID: ${CODEF_DEMO_CLIENT_ID}
+      CODEF_DEMO_CLIENT_SECRET: ${CODEF_DEMO_CLIENT_SECRET}
+      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY}
+      CODEF_USE_DEMO: ${CODEF_USE_DEMO:-true}
     depends_on:
       mysql:
         condition: service_healthy

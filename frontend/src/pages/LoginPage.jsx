@@ -5,9 +5,8 @@ import useAuthStore from '../store/authStore';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [signupStep, setSignupStep] = useState(1); // 1 | 2
+  const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
   const [sessionKey, setSessionKey] = useState('');
-  const [requiresTwoWay, setRequiresTwoWay] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -23,6 +22,7 @@ export default function LoginPage() {
   });
 
   const [smsAuthNo, setSmsAuthNo] = useState('');
+  const [emailAuthNo, setEmailAuthNo] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -41,6 +41,7 @@ export default function LoginPage() {
       setSignupStep(1);
       setSessionKey('');
       setSmsAuthNo('');
+      setEmailAuthNo('');
     }
   }, [mode]);
 
@@ -114,7 +115,6 @@ export default function LoginPage() {
       });
 
       setSessionKey(data.sessionKey);
-      setRequiresTwoWay(data.requiresTwoWay);
       setSignupStep(2);
     } catch (err) {
       const msg = err.response?.data?.message || '';
@@ -133,21 +133,49 @@ export default function LoginPage() {
     }
   };
 
-  // ── 회원가입 Step2 ────────────────────────────────────
+  // ── 회원가입 Step2: PASS/SMS 인증 확인 ───────────────────
   const handleSignupStep2 = async (e) => {
     e.preventDefault();
     setError('');
     setFieldErrors({});
 
-    if (requiresTwoWay && form.authMethod === '0' && !smsAuthNo.trim()) {
+    if (form.authMethod === '0' && !smsAuthNo.trim()) {
       setFieldErrors({ smsAuthNo: 'SMS 인증번호를 입력해주세요.' });
       return;
     }
 
     setLoading(true);
     try {
-      const { data } = await authAPI.signupStep2({ sessionKey, smsAuthNo: smsAuthNo.trim() });
+      await authAPI.signupStep2({ sessionKey, smsAuthNo: smsAuthNo.trim() });
+      setSignupStep(3); // 이메일 인증 단계로
+    } catch (err) {
+      const msg = err.response?.data?.message || '';
+      const fe = err.response?.data?.fieldErrors;
+      if (fe && Object.keys(fe).length > 0) {
+        setFieldErrors(fe);
+        if (!fe.smsAuthNo && !fe.general) setError(msg || '인증에 실패했습니다.');
+      } else {
+        setError(msg || '인증에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // ── 회원가입 Step3: 이메일 인증번호 확인 + 가입 완료 ─────────
+  const handleSignupStep3 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+
+    if (!emailAuthNo.trim()) {
+      setFieldErrors({ emailAuthNo: '이메일 인증번호를 입력해주세요.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data } = await authAPI.signupStep3({ sessionKey, emailAuthNo: emailAuthNo.trim() });
       setSuccessMessage('회원가입이 완료되었습니다!');
       setTimeout(() => {
         login(data.user, data.accessToken, data.refreshToken);
@@ -156,12 +184,11 @@ export default function LoginPage() {
     } catch (err) {
       const msg = err.response?.data?.message || '';
       const fe = err.response?.data?.fieldErrors;
-
       if (fe && Object.keys(fe).length > 0) {
         setFieldErrors(fe);
-        if (!fe.smsAuthNo && !fe.general) setError(msg || '인증에 실패했습니다.');
+        if (!fe.emailAuthNo && !fe.general) setError(msg || '인증에 실패했습니다.');
       } else {
-        setError(msg || '인증에 실패했습니다. 다시 시도해주세요.');
+        setError(msg || '이메일 인증에 실패했습니다. 다시 시도해주세요.');
       }
     } finally {
       setLoading(false);
@@ -219,20 +246,19 @@ export default function LoginPage() {
           <div style={s.formCard}>
             <header style={s.formHead}>
               <h2 style={s.formTitle}>
-                {isLogin
-                  ? '다시 오신 것을 환영합니다'
-                  : signupStep === 1
-                  ? '계정 만들기'
-                  : '본인 인증'}
+                {isLogin ? '다시 오신 것을 환영합니다'
+                  : signupStep === 1 ? '계정 만들기'
+                  : signupStep === 2 ? '본인 인증'
+                  : '이메일 인증'}
               </h2>
               <p style={s.formSub}>
                 {isLogin
                   ? '이메일로 로그인하고 내 건강·보험 현황을 확인하세요.'
                   : signupStep === 1
                   ? '몇 가지 정보만 입력하면 시작할 수 있어요.'
-                  : form.authMethod === '0'
-                  ? '휴대폰으로 발송된 SMS 인증번호를 입력해주세요.'
-                  : 'PASS 앱에서 인증 요청을 수락해주세요.'}
+                  : signupStep === 2
+                  ? (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')
+                  : '가입에 사용할 이메일로 발송된 인증번호를 입력해주세요.'}
               </p>
             </header>
 
@@ -387,10 +413,40 @@ export default function LoginPage() {
                 {error && <div style={s.error}>{error}</div>}
 
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
-                  {loading ? '처리 중...' : '가입 완료 →'}
+                  {loading ? '처리 중...' : '인증 완료 →'}
                 </button>
                 <button type="button" onClick={goBackToStep1} style={s.backBtn}>
                   ← 다시 입력하기
+                </button>
+              </form>
+            )}
+
+            {/* ── 회원가입 Step3: 이메일 인증 ── */}
+            {!isLogin && signupStep === 3 && (
+              <form onSubmit={handleSignupStep3} style={s.form}>
+                <Field label="이메일 인증번호" icon="📧" error={fieldErrors.emailAuthNo}>
+                  <input
+                    value={emailAuthNo}
+                    onChange={(e) => {
+                      setEmailAuthNo(e.target.value);
+                      if (fieldErrors.emailAuthNo) setFieldErrors((prev) => { const next = { ...prev }; delete next.emailAuthNo; return next; });
+                    }}
+                    placeholder="이메일로 받은 인증번호 입력"
+                    maxLength={10}
+                    style={{ ...s.input, ...(fieldErrors.emailAuthNo ? s.inputError : {}) }}
+                    autoFocus
+                  />
+                </Field>
+
+                {fieldErrors.emailAuthNo && <div style={s.error}>{fieldErrors.emailAuthNo}</div>}
+                {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {error && <div style={s.error}>{error}</div>}
+
+                <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
+                  {loading ? '처리 중...' : '가입 완료 →'}
+                </button>
+                <button type="button" onClick={goBackToStep1} style={s.backBtn}>
+                  ← 처음부터 다시 입력하기
                 </button>
               </form>
             )}
