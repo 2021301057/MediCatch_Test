@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+
 @Slf4j
 @Service
 @Transactional
@@ -45,11 +47,20 @@ public class AuthService {
             throw new IllegalArgumentException("Email already exists");
         }
 
+        // 주민등록번호에서 생년월일·성별 파생
+        LocalDate birthDate;
         User.Gender gender;
         try {
-            gender = User.Gender.valueOf(request.getGender().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new SignupFieldException("gender", "성별 값이 올바르지 않습니다. M 또는 F를 입력해주세요.");
+            String id13 = request.getIdentity();
+            int yy = Integer.parseInt(id13.substring(0, 2));
+            int mm = Integer.parseInt(id13.substring(2, 4));
+            int dd = Integer.parseInt(id13.substring(4, 6));
+            char gd = id13.charAt(6);
+            int fullYear = (gd == '3' || gd == '4') ? 2000 + yy : 1900 + yy;
+            birthDate = LocalDate.of(fullYear, mm, dd);
+            gender = (gd == '1' || gd == '3') ? User.Gender.M : User.Gender.F;
+        } catch (Exception e) {
+            throw new SignupFieldException("identity", "주민등록번호 형식이 올바르지 않습니다.");
         }
 
         String bcryptHash = passwordEncoder.encode(request.getPassword());
@@ -57,7 +68,7 @@ public class AuthService {
         SignupStep1Response step1Response = codefService.registerStep1WithPassword(
                 request.getEmail(),
                 request.getName(),
-                request.getBirthDate(),
+                birthDate,
                 gender.name(),
                 request.getId(),
                 request.getPassword(),

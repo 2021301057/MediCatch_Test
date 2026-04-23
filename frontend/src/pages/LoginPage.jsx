@@ -14,8 +14,6 @@ export default function LoginPage() {
     email: '',
     password: '',
     passwordConfirm: '',
-    birthDate: '',
-    gender: 'M',
     agree: false,
     id: '',
     identity: '',
@@ -108,8 +106,6 @@ export default function LoginPage() {
         email: form.email,
         password: form.password,
         passwordConfirm: form.passwordConfirm,
-        birthDate: form.birthDate,
-        gender: form.gender,
         id: form.id,
         identity: cleanIdentity,
         telecom: form.telecom,
@@ -307,18 +303,6 @@ export default function LoginPage() {
                   </Field>
                 </div>
 
-                <div style={s.row2}>
-                  <Field label="생년월일" icon="🎂">
-                    <input name="birthDate" type="date" value={form.birthDate} onChange={handle} style={s.input} required />
-                  </Field>
-                  <Field label="성별" icon="⚧">
-                    <select name="gender" value={form.gender} onChange={handle} style={s.input}>
-                      <option value="M">남성</option>
-                      <option value="F">여성</option>
-                    </select>
-                  </Field>
-                </div>
-
                 {/* CODEF 구분선 */}
                 <div style={s.divider}><span style={s.dividerText}>내보험다보여 가입 정보</span></div>
 
@@ -327,7 +311,7 @@ export default function LoginPage() {
                 </Field>
 
                 <Field label="주민등록번호 (13자리)" icon="🔢" error={fieldErrors.identity}>
-                  <input name="identity" value={form.identity} onChange={handle} placeholder="하이픈(-) 없이 13자리 입력" maxLength={13} style={{ ...s.input, ...(fieldErrors.identity ? s.inputError : {}) }} required />
+                  <input name="identity" type="password" value={form.identity} onChange={handle} placeholder="하이픈(-) 없이 13자리 입력" maxLength={13} style={{ ...s.input, ...(fieldErrors.identity ? s.inputError : {}) }} required autoComplete="off" />
                 </Field>
 
                 <div style={s.row2}>
