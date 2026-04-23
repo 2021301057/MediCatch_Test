@@ -25,6 +25,9 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column
+    private String codefId; // CODEF 내보험다보여 로그인 아이디
+
     @Column(nullable = false)
     private String passwordHash;
 

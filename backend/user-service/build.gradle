@@ -37,6 +37,9 @@ dependencies {
     runtimeOnly 'com.mysql:mysql-connector-j'
     implementation 'org.springframework.boot:spring-boot-starter-data-jdbc'
 
+    // EasyCodef SDK
+    implementation 'io.codef.api:easycodef-java:1.0.6'
+
     // Encryption
     implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
     implementation 'commons-codec:commons-codec:1.15'
