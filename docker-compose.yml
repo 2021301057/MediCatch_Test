@@ -19,20 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  kafka:
-    image: bitnami/kafka:3.6
-    container_name: medicatch-kafka
-    environment:
-      KAFKA_CFG_NODE_ID: 0
-      KAFKA_CFG_PROCESS_ROLES: controller,broker
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-    ports:
-      - "9092:9092"
-
   rabbitmq:
     image: rabbitmq:3.12-management
     container_name: medicatch-rabbitmq
@@ -42,12 +28,6 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
-
-  redis:
-    image: redis:7.2
-    container_name: medicatch-redis
-    ports:
-      - "6379:6379"
 
   # ── MSA 서비스 ───────────────────────────────────
   eureka-server:
@@ -98,12 +78,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_health
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       CODEF_HEALTH_API_URL: ${CODEF_HEALTH_API_URL:-https://api.codef.io}
     depends_on:
       - mysql
-      - kafka
 
   insurance-service:
     build: ./backend/insurance-service
@@ -114,11 +92,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_insurance
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     depends_on:
       - mysql
-      - kafka
 
   analysis-service:
     build: ./backend/analysis-service
@@ -129,12 +105,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_analysis
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       RABBITMQ_HOST: rabbitmq
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     depends_on:
       - mysql
-      - kafka
       - rabbitmq
 
   chat-service:
@@ -148,10 +122,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_REDIS_HOST: redis
     depends_on:
       - mysql
-      - redis
 
   # ── 프론트엔드 ────────────────────────────────────
   frontend:
