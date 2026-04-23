@@ -190,7 +190,7 @@ public class CodefService {
     }
 
     private EasyCodefServiceType serviceType() {
-        return useDemo ? EasyCodefServiceType.DEMO : EasyCodefServiceType.REAL;
+        return useDemo ? EasyCodefServiceType.DEMO : EasyCodefServiceType.API;
     }
 
     private SignupSessionData getValidSession(String sessionKey) {
