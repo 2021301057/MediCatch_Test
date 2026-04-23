@@ -7,7 +7,13 @@ COPY settings.gradle .
 COPY eureka-server/build.gradle eureka-server/
 COPY eureka-server/src eureka-server/src/
 RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
-RUN ./gradlew :eureka-server:bootJar -x test --no-daemon
+ENV GRADLE_OPTS="-Dorg.gradle.daemon=false \
+  -Dorg.gradle.internal.http.connectionTimeout=120000 \
+  -Dorg.gradle.internal.http.socketTimeout=120000"
+RUN for i in 1 2 3; do \
+      ./gradlew :eureka-server:bootJar -x test --no-daemon && break; \
+      echo "Retry $i/3 in 20s..."; sleep 20; \
+    done
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

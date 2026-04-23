@@ -7,7 +7,13 @@ COPY settings.gradle .
 COPY insurance-service/build.gradle insurance-service/
 COPY insurance-service/src insurance-service/src/
 RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
-RUN ./gradlew :insurance-service:bootJar -x test --no-daemon
+ENV GRADLE_OPTS="-Dorg.gradle.daemon=false \
+  -Dorg.gradle.internal.http.connectionTimeout=120000 \
+  -Dorg.gradle.internal.http.socketTimeout=120000"
+RUN for i in 1 2 3; do \
+      ./gradlew :insurance-service:bootJar -x test --no-daemon && break; \
+      echo "Retry $i/3 in 20s..."; sleep 20; \
+    done
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
