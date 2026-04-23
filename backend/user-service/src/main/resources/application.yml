@@ -20,6 +20,8 @@ server:
   port: 8001
   servlet:
     context-path: /
+  error:
+    include-message: always
 
 jwt:
   secret: medicatch-secret-key-for-jwt-token-generation-2024-secure-key-make-it-long
@@ -31,6 +33,7 @@ codef:
   client-secret: ${CODEF_CLIENT_SECRET:YOUR_CODEF_CLIENT_SECRET}
   token-url: https://api.codef.io/oauth/token
   rsa-public-key: ${CODEF_RSA_PUBLIC_KEY:}
+  credit4u-register-url: ${CODEF_CREDIT4U_URL:https://api.codef.io/v1/kr/etc/credit4u/member/sign-up}
 
 eureka:
   client:

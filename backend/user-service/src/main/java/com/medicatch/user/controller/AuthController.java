@@ -3,17 +3,20 @@ package com.medicatch.user.controller;
 import com.medicatch.user.dto.AuthResponse;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
+import com.medicatch.user.dto.SignupStep1Response;
+import com.medicatch.user.dto.SignupStep2Request;
 import com.medicatch.user.dto.UserProfileResponse;
 import com.medicatch.user.entity.User;
+import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -28,25 +31,27 @@ public class AuthController {
     }
 
     /**
-     * Register new user
+     * 회원가입 1단계: CODEF 내보험다보여 1차 등록 요청 (SMS/PASS 인증 트리거)
      */
-    @PostMapping("/signup")
-    public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest request) {
-        log.info("POST /api/auth/signup - email: {}", request.getEmail());
-        try {
-            AuthResponse response = authService.signup(request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (IllegalArgumentException e) {
-            log.warn("Signup failed: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Signup error: {}", e.getMessage(), e);
-            throw e;
-        }
+    @PostMapping("/signup/step1")
+    public ResponseEntity<SignupStep1Response> signupStep1(@Valid @RequestBody SignupRequest request) {
+        log.info("POST /api/auth/signup/step1 - email: {}", request.getEmail());
+        SignupStep1Response response = authService.signupStep1(request);
+        return ResponseEntity.ok(response);
     }
 
     /**
-     * Login user
+     * 회원가입 2단계: 인증번호 확인 후 계정 생성 및 JWT 발급
+     */
+    @PostMapping("/signup/step2")
+    public ResponseEntity<AuthResponse> signupStep2(@Valid @RequestBody SignupStep2Request request) {
+        log.info("POST /api/auth/signup/step2 - sessionKey: {}", request.getSessionKey());
+        AuthResponse response = authService.signupStep2(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * 로그인
      */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -64,7 +69,7 @@ public class AuthController {
     }
 
     /**
-     * Refresh access token
+     * 토큰 갱신
      */
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@RequestBody Map<String, String> request) {
@@ -86,13 +91,12 @@ public class AuthController {
     }
 
     /**
-     * Get user profile
+     * 프로필 조회
      */
     @GetMapping("/profile")
     public ResponseEntity<UserProfileResponse> getProfile() {
         log.info("GET /api/auth/profile");
         try {
-            // Get user ID from JWT token (set by security filter)
             String userIdString = (String) SecurityContextHolder.getContext()
                     .getAuthentication()
                     .getPrincipal();
@@ -122,10 +126,29 @@ public class AuthController {
     }
 
     /**
-     * Health check endpoint
+     * 헬스체크
      */
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "UP", "service", "user-service"));
+    }
+
+    // ── 예외 핸들러 ──────────────────────────────────────────────────
+
+    @ExceptionHandler(SignupFieldException.class)
+    public ResponseEntity<Map<String, Object>> handleSignupFieldException(SignupFieldException e) {
+        log.warn("회원가입 필드 오류: {}", e.getFieldErrors());
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", e.getMessage());
+        body.put("fieldErrors", e.getFieldErrors());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("잘못된 요청: {}", e.getMessage());
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 }

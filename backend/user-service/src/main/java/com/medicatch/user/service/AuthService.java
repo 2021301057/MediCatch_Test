@@ -4,14 +4,15 @@ import com.medicatch.user.config.JwtTokenProvider;
 import com.medicatch.user.dto.AuthResponse;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
+import com.medicatch.user.dto.SignupStep1Response;
+import com.medicatch.user.dto.SignupStep2Request;
 import com.medicatch.user.entity.User;
+import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
 
 @Slf4j
 @Service
@@ -21,50 +22,81 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final CodefService codefService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                       JwtTokenProvider jwtTokenProvider, CodefService codefService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.codefService = codefService;
     }
 
     /**
-     * Register new user
+     * 회원가입 1단계: 유효성 검사 후 CODEF 내보험다보여 1차 등록 요청
      */
-    public AuthResponse signup(SignupRequest request) {
-        log.info("Processing signup for email: {}", request.getEmail());
+    public SignupStep1Response signupStep1(SignupRequest request) {
+        log.info("회원가입 step1 시작 - email: {}", request.getEmail());
 
-        // Validate password confirmation
         if (!request.getPassword().equals(request.getPasswordConfirm())) {
-            throw new IllegalArgumentException("Passwords do not match");
+            throw new SignupFieldException("password", "비밀번호가 일치하지 않습니다.");
         }
-
-        // Check if user already exists
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email already exists");
         }
 
-        // Parse gender
         User.Gender gender;
         try {
             gender = User.Gender.valueOf(request.getGender().toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid gender. Must be M or F");
+            throw new SignupFieldException("gender", "성별 값이 올바르지 않습니다. M 또는 F를 입력해주세요.");
         }
 
-        // Create new user
+        String bcryptHash = passwordEncoder.encode(request.getPassword());
+
+        SignupStep1Response step1Response = codefService.registerStep1WithPassword(
+                request.getEmail(),
+                request.getName(),
+                request.getBirthDate(),
+                gender.name(),
+                request.getId(),
+                request.getPassword(),
+                bcryptHash,
+                request.getIdentity(),
+                request.getTelecom(),
+                request.getPhoneNo(),
+                request.getAuthMethod() != null ? request.getAuthMethod() : "0"
+        );
+
+        log.info("회원가입 step1 완료 - email: {}, requiresTwoWay: {}", request.getEmail(), step1Response.isRequiresTwoWay());
+        return step1Response;
+    }
+
+    /**
+     * 회원가입 2단계: CODEF 2차 인증 완료 후 DB 저장 및 JWT 발급
+     */
+    public AuthResponse signupStep2(SignupStep2Request request) {
+        log.info("회원가입 step2 시작 - sessionKey: {}", request.getSessionKey());
+
+        CodefService.SignupSessionData sessionData = codefService.registerStep2(
+                request.getSessionKey(),
+                request.getSmsAuthNo()
+        );
+
+        User.Gender gender = User.Gender.valueOf(sessionData.getGender());
+
         User user = User.builder()
-                .email(request.getEmail())
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .name(request.getName())
-                .birthDate(request.getBirthDate())
+                .email(sessionData.getEmail())
+                .passwordHash(sessionData.getBcryptHash())
+                .name(sessionData.getName())
+                .birthDate(sessionData.getBirthDate())
                 .gender(gender)
+                .codefId(sessionData.getCodefId())
                 .build();
 
         User savedUser = userRepository.save(user);
-        log.info("User registered successfully: {}", savedUser.getId());
+        log.info("회원가입 완료 - userId: {}, codefId: {}", savedUser.getId(), savedUser.getCodefId());
 
-        // Generate tokens
         String accessToken = jwtTokenProvider.generateAccessToken(savedUser.getId(), savedUser.getEmail());
         String refreshToken = jwtTokenProvider.generateRefreshToken(savedUser.getId());
 
@@ -79,27 +111,24 @@ public class AuthService {
     }
 
     /**
-     * Login user
+     * 로그인
      */
     public AuthResponse login(LoginRequest request) {
-        log.info("Processing login for email: {}", request.getEmail());
+        log.info("로그인 시작 - email: {}", request.getEmail());
 
-        // Find user by email
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> {
-                    log.warn("Login failed: user not found for email: {}", request.getEmail());
+                    log.warn("로그인 실패: 사용자 없음 - email: {}", request.getEmail());
                     return new IllegalArgumentException("Invalid email or password");
                 });
 
-        // Verify password
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.warn("Login failed: incorrect password for email: {}", request.getEmail());
+            log.warn("로그인 실패: 비밀번호 불일치 - email: {}", request.getEmail());
             throw new IllegalArgumentException("Invalid email or password");
         }
 
-        log.info("Login successful for user: {}", user.getId());
+        log.info("로그인 성공 - userId: {}", user.getId());
 
-        // Generate tokens
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
@@ -114,41 +143,36 @@ public class AuthService {
     }
 
     /**
-     * Refresh access token using refresh token
+     * 토큰 갱신
      */
     public AuthResponse refreshToken(String refreshToken) {
-        log.info("Processing token refresh");
+        log.info("토큰 갱신 시작");
 
-        // Validate refresh token
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            log.warn("Token refresh failed: invalid refresh token");
+            log.warn("토큰 갱신 실패: 유효하지 않은 refresh token");
             throw new IllegalArgumentException("Invalid refresh token");
         }
 
-        // Check token type
         String tokenType = jwtTokenProvider.getTokenType(refreshToken);
         if (!"refresh".equals(tokenType)) {
-            log.warn("Token refresh failed: token is not a refresh token");
+            log.warn("토큰 갱신 실패: refresh token이 아님");
             throw new IllegalArgumentException("Token is not a refresh token");
         }
 
-        // Extract user ID
         Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
         if (userId == null) {
-            log.warn("Token refresh failed: could not extract userId from token");
+            log.warn("토큰 갱신 실패: userId 추출 불가");
             throw new IllegalArgumentException("Invalid refresh token");
         }
 
-        // Get user
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
-                    log.warn("Token refresh failed: user not found: {}", userId);
+                    log.warn("토큰 갱신 실패: 사용자 없음 - userId: {}", userId);
                     return new IllegalArgumentException("User not found");
                 });
 
-        log.info("Token refreshed for user: {}", userId);
+        log.info("토큰 갱신 완료 - userId: {}", userId);
 
-        // Generate new tokens
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
@@ -163,7 +187,7 @@ public class AuthService {
     }
 
     /**
-     * Get user by ID
+     * 사용자 조회
      */
     @Transactional(readOnly = true)
     public User getUserById(Long userId) {
