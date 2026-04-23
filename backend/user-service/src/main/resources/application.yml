@@ -29,8 +29,8 @@ jwt:
   refresh-token-expire: 604800000
 
 codef:
-  client-id: ${CODEF_CLIENT_ID:YOUR_CLIENT_ID}
-  client-secret: ${CODEF_CLIENT_SECRET:YOUR_CLIENT_SECRET}
+  api-client-id: ${CODEF_API_CLIENT_ID:YOUR_API_CLIENT_ID}
+  api-client-secret: ${CODEF_API_CLIENT_SECRET:YOUR_API_CLIENT_SECRET}
   demo-client-id: ${CODEF_DEMO_CLIENT_ID:YOUR_DEMO_CLIENT_ID}
   demo-client-secret: ${CODEF_DEMO_CLIENT_SECRET:YOUR_DEMO_CLIENT_SECRET}
   public-key: ${CODEF_PUBLIC_KEY:}

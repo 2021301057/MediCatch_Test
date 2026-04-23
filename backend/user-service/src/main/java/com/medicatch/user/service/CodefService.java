@@ -25,10 +25,10 @@ import java.util.concurrent.ThreadLocalRandom;
 @Service
 public class CodefService {
 
-    @Value("${codef.client-id:YOUR_CLIENT_ID}")
+    @Value("${codef.api-client-id:YOUR_API_CLIENT_ID}")
     private String clientId;
 
-    @Value("${codef.client-secret:YOUR_CLIENT_SECRET}")
+    @Value("${codef.api-client-secret:YOUR_API_CLIENT_SECRET}")
     private String clientSecret;
 
     @Value("${codef.demo-client-id:YOUR_DEMO_CLIENT_ID}")
