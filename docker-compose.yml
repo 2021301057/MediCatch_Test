@@ -29,7 +29,9 @@ services:
 
   # ── MSA 서비스 ───────────────────────────────────
   eureka-server:
-    build: ./backend/eureka-server
+    build:
+      context: ./backend
+      dockerfile: eureka-server/Dockerfile
     container_name: medicatch-eureka
     ports:
       - "8761:8761"
@@ -39,11 +41,14 @@ services:
       retries: 5
 
   gateway-service:
-    build: ./backend/gateway-service
+    build:
+      context: ./backend
+      dockerfile: gateway-service/Dockerfile
     container_name: medicatch-gateway
     ports:
       - "8000:8000"
     environment:
+      SERVER_PORT: 8000
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       JWT_SECRET: ${JWT_SECRET:-medicatch-jwt-secret-key-2026}
     depends_on:
@@ -51,11 +56,14 @@ services:
         condition: service_healthy
 
   user-service:
-    build: ./backend/user-service
+    build:
+      context: ./backend
+      dockerfile: user-service/Dockerfile
     container_name: medicatch-user
     ports:
       - "8001:8001"
     environment:
+      SERVER_PORT: 8001
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_user
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
@@ -68,60 +76,77 @@ services:
         condition: service_healthy
 
   health-service:
-    build: ./backend/health-service
+    build:
+      context: ./backend
+      dockerfile: health-service/Dockerfile
     container_name: medicatch-health
     ports:
       - "8002:8002"
     environment:
+      SERVER_PORT: 8002
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_health
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       CODEF_HEALTH_API_URL: ${CODEF_HEALTH_API_URL:-https://api.codef.io}
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
   insurance-service:
-    build: ./backend/insurance-service
+    build:
+      context: ./backend
+      dockerfile: insurance-service/Dockerfile
     container_name: medicatch-insurance
     ports:
       - "8003:8003"
     environment:
+      SERVER_PORT: 8003
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_insurance
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
   analysis-service:
-    build: ./backend/analysis-service
+    build:
+      context: ./backend
+      dockerfile: analysis-service/Dockerfile
     container_name: medicatch-analysis
     ports:
       - "8004:8004"
     environment:
+      SERVER_PORT: 8004
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_analysis
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       RABBITMQ_HOST: rabbitmq
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     depends_on:
-      - mysql
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
 
   chat-service:
-    build: ./backend/chat-service
+    build:
+      context: ./backend
+      dockerfile: chat-service/Dockerfile
     container_name: medicatch-chat
     ports:
       - "8007:8007"
     environment:
+      SERVER_PORT: 8007
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_chat
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
   # ── 프론트엔드 ────────────────────────────────────
   frontend:
