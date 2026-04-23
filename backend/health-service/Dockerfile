@@ -6,7 +6,7 @@ COPY build.gradle .
 COPY settings.gradle .
 COPY health-service/build.gradle health-service/
 COPY health-service/src health-service/src/
-RUN chmod +x ./gradlew
+RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
 RUN ./gradlew :health-service:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine

@@ -6,7 +6,7 @@ COPY build.gradle .
 COPY settings.gradle .
 COPY chat-service/build.gradle chat-service/
 COPY chat-service/src chat-service/src/
-RUN chmod +x ./gradlew
+RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
 RUN ./gradlew :chat-service:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine

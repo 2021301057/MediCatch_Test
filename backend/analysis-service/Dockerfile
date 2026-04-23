@@ -6,7 +6,7 @@ COPY build.gradle .
 COPY settings.gradle .
 COPY analysis-service/build.gradle analysis-service/
 COPY analysis-service/src analysis-service/src/
-RUN chmod +x ./gradlew
+RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
 RUN ./gradlew :analysis-service:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine

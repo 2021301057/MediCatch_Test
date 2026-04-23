@@ -6,7 +6,7 @@ COPY build.gradle .
 COPY settings.gradle .
 COPY eureka-server/build.gradle eureka-server/
 COPY eureka-server/src eureka-server/src/
-RUN chmod +x ./gradlew
+RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
 RUN ./gradlew :eureka-server:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine

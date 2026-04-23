@@ -6,7 +6,7 @@ COPY build.gradle .
 COPY settings.gradle .
 COPY gateway-service/build.gradle gateway-service/
 COPY gateway-service/src gateway-service/src/
-RUN chmod +x ./gradlew
+RUN sed -i 's/\r$//' gradlew && chmod +x ./gradlew
 RUN ./gradlew :gateway-service:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
