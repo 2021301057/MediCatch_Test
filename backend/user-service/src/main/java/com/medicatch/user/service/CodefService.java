@@ -60,6 +60,9 @@ public class CodefService {
             String codefId, String rawPassword, String bcryptHash,
             String identity, String telecom, String phoneNo, String authMethod) {
         try {
+            if (publicKey == null || publicKey.isBlank()) {
+                throw new SignupFieldException("general", "CODEF 공개키가 설정되지 않았습니다. 관리자에게 문의하세요.");
+            }
             String rsaPassword = EasyCodefUtil.encryptRSA(rawPassword, publicKey);
             String checkParamUUID = generateCheckParamUUID();
 
