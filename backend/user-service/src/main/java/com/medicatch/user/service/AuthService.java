@@ -85,12 +85,40 @@ public class AuthService {
     }
 
     /**
-     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인)
+     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인) → DB 저장 → JWT 발급
      */
-    public void signupStep2(SignupStep2Request request) {
+    public AuthResponse signupStep2(SignupStep2Request request) {
         log.info("회원가입 step2 시작 - sessionKey: {}", request.getSessionKey());
         codefService.registerStep2(request.getSessionKey(), request.getSmsAuthNo());
-        log.info("회원가입 step2 완료 - sessionKey: {}", request.getSessionKey());
+
+        CodefService.SignupSessionData sessionData =
+                codefService.completeRegistration(request.getSessionKey());
+
+        User.Gender gender = User.Gender.valueOf(sessionData.getGender());
+
+        User user = User.builder()
+                .email(sessionData.getEmail())
+                .passwordHash(sessionData.getBcryptHash())
+                .name(sessionData.getName())
+                .birthDate(sessionData.getBirthDate())
+                .gender(gender)
+                .codefId(sessionData.getCodefId())
+                .build();
+
+        User savedUser = userRepository.save(user);
+        log.info("회원가입 완료 - userId: {}, codefId: {}", savedUser.getId(), savedUser.getCodefId());
+
+        String accessToken = jwtTokenProvider.generateAccessToken(savedUser.getId(), savedUser.getEmail());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(savedUser.getId());
+
+        return AuthResponse.of(
+                savedUser.getId(),
+                savedUser.getEmail(),
+                savedUser.getName(),
+                accessToken,
+                refreshToken,
+                jwtTokenProvider.getAccessTokenExpiry()
+        );
     }
 
     /**

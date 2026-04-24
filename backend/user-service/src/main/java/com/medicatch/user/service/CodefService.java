@@ -150,6 +150,15 @@ public class CodefService {
         }
     }
 
+    // ── Step2 완료 후 세션 데이터 반환 (이메일 인증 생략) ─────────────────
+
+    public SignupSessionData completeRegistration(String sessionKey) {
+        SignupSessionData session = getValidSession(sessionKey);
+        signupSessions.remove(sessionKey);
+        log.info("CODEF 내보험다보여 가입 완료 (이메일 인증 생략) - codefId: {}", session.getCodefId());
+        return session;
+    }
+
     // ── Step3: 3차 요청 (이메일 인증번호 확인 + 최종 가입 완료) ───────────
 
     public SignupSessionData registerStep3(String sessionKey, String emailAuthNo) {
