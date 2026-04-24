@@ -361,7 +361,7 @@ export default function LoginPage() {
                       placeholder="비밀번호 재입력"
                       style={{
                         ...s.input,
-                        borderColor: pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0',
+                        border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}`,
                       }}
                       required autoComplete="new-password"
                     />
@@ -611,7 +611,7 @@ const s = {
   inputWrap: { position: 'relative' },
   inputIcon: { position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#94a3b8', pointerEvents: 'none' },
   input: { width: '100%', padding: '11px 14px 11px 36px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none', background: '#f8fafc', boxSizing: 'border-box', transition: 'border-color .15s, background .15s' },
-  inputError: { borderColor: '#ef4444' },
+  inputError: { border: '1.5px solid #ef4444' },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   hintError: { fontSize: 12, color: '#dc2626', marginTop: -4 },
   agree: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: '#475569', lineHeight: 1.5, marginTop: 4 },

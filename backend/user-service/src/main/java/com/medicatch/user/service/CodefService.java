@@ -327,21 +327,21 @@ public class CodefService {
     }
 
     private String buildErrorMessage(Map<String, Object> result) {
-        String extra = (String) result.getOrDefault("extraMessage", "");
-        String msg   = (String) result.getOrDefault("message", "CODEF 오류");
-        return (extra != null && !extra.isBlank()) ? extra : msg;
+        String msg = (String) result.getOrDefault("message", "");
+        return (msg != null && !msg.isBlank()) ? msg : "처리 중 오류가 발생했습니다.";
     }
 
     private String resolveErrorField(String message) {
         if (message == null) return "general";
         String m = message.toLowerCase();
-        if (m.contains("주민") || m.contains("identity"))         return "identity";
-        if (m.contains("전화") || m.contains("phone") || m.contains("휴대")) return "phoneNo";
-        if (m.contains("통신") || m.contains("telecom"))          return "telecom";
-        if (m.contains("아이디") || m.contains("userid"))         return "id";
-        if (m.contains("비밀번호") || m.contains("password"))     return "password";
-        if (m.contains("인증번호") || m.contains("sms"))          return "smsAuthNo";
-        if (m.contains("이메일") || m.contains("email"))          return "emailAuthNo";
+        if (m.contains("주민") || m.contains("등록번호"))                             return "identity";
+        if (m.contains("비밀번호") || m.contains("password"))                         return "password";
+        if (m.contains("아이디") || m.contains("userid"))                             return "id";
+        if (m.contains("이메일") || m.contains("email"))                              return "emailAuthNo";
+        if (m.contains("인증번호") || m.contains("sms"))                              return "smsAuthNo";
+        if (m.contains("통신") || m.contains("telecom"))                              return "telecom";
+        if (m.contains("전화") || m.contains("phone") || m.contains("휴대"))         return "phoneNo";
+        if (m.contains("이름") || m.contains("name"))                                 return "name";
         return "general";
     }
 
