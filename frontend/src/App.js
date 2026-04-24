@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import Sidebar from './components/common/Sidebar';
+import Navbar from './components/common/Navbar';
 import useAuthStore from './store/authStore';
 import { authAPI } from './api/services';
 
@@ -20,12 +20,12 @@ function Layout({ children }) {
   const isLogin = location.pathname === '/login';
   if (isLogin) return children;
   return (
-    <div style={{ display: 'flex' }}>
-      <Sidebar />
-      <main style={{ marginLeft: 240, flex: 1, minHeight: '100vh', padding: 28, background: '#f0f4f8' }}>
+    <>
+      <Navbar />
+      <main style={{ minHeight: '100vh' }}>
         {children}
       </main>
-    </div>
+    </>
   );
 }
 
@@ -41,6 +41,7 @@ export default function App() {
     if (isAuthenticated) {
       authAPI.profile().then(r => setUser(r.data)).catch(() => {});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
