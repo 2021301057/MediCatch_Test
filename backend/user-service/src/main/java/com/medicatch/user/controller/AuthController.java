@@ -64,16 +64,6 @@ public class AuthController {
     }
 
     /**
-     * 회원가입 3단계: 이메일 인증 완료 → 계정 생성 및 JWT 발급
-     */
-    @PostMapping("/signup/step3")
-    public ResponseEntity<AuthResponse> signupStep3(@Valid @RequestBody SignupStep3Request request) {
-        log.info("POST /api/auth/signup/step3 - sessionKey: {}", request.getSessionKey());
-        AuthResponse response = authService.signupStep3(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    /**
      * 로그인
      */
     @PostMapping("/login")
