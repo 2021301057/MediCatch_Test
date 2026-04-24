@@ -6,6 +6,7 @@ export const authAPI = {
   signupStep1:  (data) => api.post('/auth/signup/step1', data),
   signupStep2:  (data) => api.post('/auth/signup/step2', data),
   signupStep3:  (data) => api.post('/auth/signup/step3', data),
+  signupStep4:  (data) => api.post('/auth/signup/step4', data),
   refresh:      (token) => api.post('/auth/refresh', { refreshToken: token }),
   profile:      () => api.get('/auth/profile'),
 };

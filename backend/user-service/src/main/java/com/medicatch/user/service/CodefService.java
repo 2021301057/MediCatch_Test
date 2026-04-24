@@ -97,7 +97,7 @@ public class CodefService {
             String sessionKey = UUID.randomUUID().toString();
             signupSessions.put(sessionKey, new SignupSessionData(
                     email, name, birthDate, gender, codefId, bcryptHash, rsaPassword,
-                    authMethod, paramMap, step1Data, null, LocalDateTime.now()
+                    authMethod, paramMap, step1Data, null, null, LocalDateTime.now()
             ));
 
             log.info("CODEF 1차 완료 - sessionKey: {}", sessionKey);
@@ -149,9 +149,9 @@ public class CodefService {
         }
     }
 
-    // ── Step3: 이메일 인증번호 + 등록정보 제출 → 최종 가입 완료 ────────────
+    // ── Step3: 이메일 인증 트리거 (이메일 발송) ───────────────────────────
 
-    public SignupSessionData registerStep3(String sessionKey, String emailAuthNo) {
+    public void registerStep3(String sessionKey) {
         SignupSessionData session = getValidSession(sessionKey);
         try {
             EasyCodef codef = createCodef();
@@ -163,13 +163,46 @@ public class CodefService {
             reqCertMap.put("reqUserId", session.getCodefId());
             reqCertMap.put("reqUserPass", session.getRsaPassword());
             reqCertMap.put("reqEmail", session.getEmail());
+
+            log.info("CODEF 내보험다보여 3차 요청 (이메일 발송 트리거) - sessionKey: {}", sessionKey);
+            String result = codef.requestCertification(REGISTER_URL, serviceType(), reqCertMap);
+            log.debug("CODEF 3차 응답: {}", result);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            checkStep3Result(responseMap);
+
+            session.setStep3ResponseData(toMap(responseMap.get("data")));
+            log.info("CODEF 이메일 인증 발송 완료 - sessionKey: {}", sessionKey);
+
+        } catch (SignupFieldException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 3차 요청 실패: {}", e.getMessage(), e);
+            throw new SignupFieldException("general", "이메일 인증 요청 중 오류가 발생했습니다. 다시 시도해주세요.");
+        }
+    }
+
+    // ── Step4: 이메일 인증번호 확인 → 최종 가입 완료 ─────────────────────
+
+    public SignupSessionData registerStep4(String sessionKey, String emailAuthNo) {
+        SignupSessionData session = getValidSession(sessionKey);
+        try {
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> twoWayInfo = buildTwoWayInfo(session.getStep3ResponseData());
+            HashMap<String, Object> reqCertMap = new HashMap<>(session.getOriginalParams());
+            reqCertMap.put("twoWayInfo", twoWayInfo);
+            reqCertMap.put("is2Way", true);
+            reqCertMap.put("reqUserId", session.getCodefId());
+            reqCertMap.put("reqUserPass", session.getRsaPassword());
+            reqCertMap.put("reqEmail", session.getEmail());
             if (emailAuthNo != null && !emailAuthNo.isBlank()) {
                 reqCertMap.put("emailAuthNo", emailAuthNo);
             }
 
-            log.info("CODEF 내보험다보여 3차 요청 (이메일 인증 + 등록정보) - sessionKey: {}", sessionKey);
+            log.info("CODEF 내보험다보여 4차 요청 (이메일 인증 확인) - sessionKey: {}", sessionKey);
             String result = codef.requestCertification(REGISTER_URL, serviceType(), reqCertMap);
-            log.debug("CODEF 3차 응답: {}", result);
+            log.debug("CODEF 4차 응답: {}", result);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
             checkFinalResult(responseMap);
@@ -181,7 +214,7 @@ public class CodefService {
         } catch (SignupFieldException e) {
             throw e;
         } catch (Exception e) {
-            log.error("CODEF 3차 요청 실패: {}", e.getMessage(), e);
+            log.error("CODEF 4차 요청 실패: {}", e.getMessage(), e);
             throw new SignupFieldException("emailAuthNo", "이메일 인증에 실패했습니다. 인증번호를 확인해주세요.");
         }
     }
@@ -290,6 +323,18 @@ public class CodefService {
     }
 
     @SuppressWarnings("unchecked")
+    private void checkStep3Result(Map<String, Object> responseMap) {
+        Map<String, Object> result = (Map<String, Object>) responseMap.get("result");
+        if (result == null) throw new RuntimeException("CODEF 응답 형식 오류");
+        String code = (String) result.get("code");
+        // 3차: 이메일 발송 트리거 → CF-03002(method:emailAuthNo) 또는 CF-00000 이 정상
+        if (!"CF-03002".equals(code) && !"CF-00000".equals(code)) {
+            String msg = buildErrorMessage(result);
+            throw new SignupFieldException(resolveErrorField(msg), msg.isBlank() ? "이메일 인증 요청에 실패했습니다." : msg);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
     private void checkStep2Result(Map<String, Object> responseMap) {
         Map<String, Object> result = (Map<String, Object>) responseMap.get("result");
         if (result == null) throw new RuntimeException("CODEF 응답 형식 오류");
@@ -378,6 +423,7 @@ public class CodefService {
         private HashMap<String, Object> originalParams;
         private Map<String, Object> step1ResponseData;  // 2차 twoWayInfo 구성용
         private Map<String, Object> step2ResponseData;  // 3차 twoWayInfo 구성용
+        private Map<String, Object> step3ResponseData;  // 4차 twoWayInfo 구성용
         private LocalDateTime createdAt;
     }
 }

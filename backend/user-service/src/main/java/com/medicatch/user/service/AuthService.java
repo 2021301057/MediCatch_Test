@@ -7,6 +7,7 @@ import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
 import com.medicatch.user.dto.SignupStep2Request;
 import com.medicatch.user.dto.SignupStep3Request;
+import com.medicatch.user.dto.SignupStep4Request;
 import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.repository.UserRepository;
@@ -110,13 +111,22 @@ public class AuthService {
     }
 
     /**
-     * 회원가입 3단계: CODEF 3차 요청 (이메일 인증) → DB 저장 → JWT 발급
+     * 회원가입 3단계: CODEF 3차 요청 (이메일 발송 트리거)
      */
-    public AuthResponse signupStep3(SignupStep3Request request) {
+    public void signupStep3(SignupStep3Request request) {
         log.info("회원가입 step3 시작 - sessionKey: {}", request.getSessionKey());
+        codefService.registerStep3(request.getSessionKey());
+        log.info("회원가입 step3 완료 (이메일 발송) - sessionKey: {}", request.getSessionKey());
+    }
+
+    /**
+     * 회원가입 4단계: CODEF 4차 요청 (이메일 인증 확인) → DB 저장 → JWT 발급
+     */
+    public AuthResponse signupStep4(SignupStep4Request request) {
+        log.info("회원가입 step4 시작 - sessionKey: {}", request.getSessionKey());
 
         CodefService.SignupSessionData sessionData =
-                codefService.registerStep3(request.getSessionKey(), request.getEmailAuthNo());
+                codefService.registerStep4(request.getSessionKey(), request.getEmailAuthNo());
 
         User.Gender gender = User.Gender.valueOf(sessionData.getGender());
 

@@ -173,7 +173,7 @@ export default function LoginPage() {
     }
   };
 
-  // ── 회원가입 Step2: PASS/SMS 인증 확인 ───────────────────
+  // ── 회원가입 Step2: PASS/SMS 인증 확인 → 이메일 발송 트리거 ──────
   const handleSignupStep2 = async (e) => {
     e.preventDefault();
     setError('');
@@ -187,6 +187,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await authAPI.signupStep2({ sessionKey, smsAuthNo: smsAuthNo.trim() });
+      // SMS/PASS 확인 후 자동으로 이메일 인증 트리거
+      await authAPI.signupStep3({ sessionKey });
       setSignupStep(3);
     } catch (err) {
       const msg = err.response?.data?.message || '';
@@ -213,7 +215,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const { data } = await authAPI.signupStep3({ sessionKey, emailAuthNo: emailAuthNo.trim() });
+      const { data } = await authAPI.signupStep4({ sessionKey, emailAuthNo: emailAuthNo.trim() });
       setSuccessMessage('회원가입이 완료되었습니다!');
       setTimeout(() => {
         login(data.user, data.accessToken, data.refreshToken);
