@@ -214,8 +214,7 @@ public class CodefService {
                 return;
             }
             if (!"CF-03002".equals(code1)) {
-                String msg = buildErrorMessage(res1);
-                throw new SignupFieldException("id", msg.isBlank() ? "사용할 수 없는 아이디입니다." : msg);
+                throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
             }
 
             // 2차 요청
@@ -233,8 +232,7 @@ public class CodefService {
             String code2 = (String) res2.get("code");
 
             if (!"CF-12832".equals(code2)) {
-                String msg = buildErrorMessage(res2);
-                throw new SignupFieldException("id", msg.isBlank() ? "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다." : msg);
+                throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
             }
             log.info("CODEF 아이디 사용 가능 - codefId: {}", codefId);
 
