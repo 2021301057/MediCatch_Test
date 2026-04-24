@@ -1,168 +1,252 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { insuranceAPI, analysisAPI, healthAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 
-// Mock 데이터 (API 연결 전 사용)
-const MOCK = {
-  summary: { totalPremium: 387000, policyCount: 3, claimOpportunities: 2, riskGrade: 'MEDIUM' },
-  claims: [
-    { id: 1, hospital: '서울성모병원', date: '2026-03-15', amount: 45000, status: 'AVAILABLE', insurance: '삼성생명 실손' },
-    { id: 2, hospital: '연세세브란스', date: '2026-02-28', amount: 120000, status: 'AVAILABLE', insurance: '한화생명 암보험' },
-  ],
-  riskSummary: { stroke: 'LOW', diabetes: 'MEDIUM', cardiovascular: 'LOW' },
+/**
+ * MediCatch 대시보드 — 디자인 handoff에 맞춰 재작성.
+ * 시각적 출력물을 픽셀 단위로 재현하는 것이 목표.
+ */
+
+// ── SVG 아이콘 헬퍼 ──────────────────────────────
+const Icon = ({ children, size = 13 }) => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
+    strokeLinecap="round" strokeLinejoin="round"
+    style={{ width: size, height: size, flexShrink: 0 }}>
+    {children}
+  </svg>
+);
+
+const P = {
+  arrow:  (<path d="M3 8h10M9 4l4 4-4 4" />),
+  check:  (<path d="m3 8 4 4 6-7" />),
+  plus:   (<path d="M8 3v10M3 8h10" />),
+  search: (<><circle cx="7" cy="7" r="4" /><path d="m10 10 3 3" /></>),
+  clip:   (<><rect x="3" y="2" width="10" height="12" rx="1.5" /><path d="M6 2v2h4V2" /><path d="M5.5 8h5M5.5 10.5h3" /></>),
+  chart:  (<path d="M2 14h12M4 14V9M7 14V6M10 14V8M13 14V4" />),
+  chat:   (<><path d="M2 2h12v9H9l-3 3v-3H2V2z" /><path d="M5 6h6M5 8.5h4" /></>),
+  shield: (<path d="M8 1 3 3.5v4C3 10 5.5 12.5 8 14c2.5-1.5 5-4 5-6.5v-4L8 1z" />),
 };
 
-const RISK_COLOR = { HIGH: '#ef4444', MEDIUM: '#f59e0b', LOW: '#22c55e', NORMAL: '#3b82f6' };
-const RISK_LABEL = { HIGH: '고위험', MEDIUM: '중위험', LOW: '저위험', NORMAL: '정상' };
+// ── Mock 데이터 ──────────────────────────────────
+const MOCK = {
+  claims: [
+    { hospital: '서울성모병원', detail: '입원진료 실손 · 2024.03.11', amount: '+45,000원',  date: '3일 전',  ok: true },
+    { hospital: '연세세브란스',  detail: '안과 수술 실손 · 2024.03.04', amount: '+120,000원', date: '10일 전', ok: true },
+    { hospital: '강남성심병원', detail: '물리치료 · 2024.02.20',       amount: '+28,000원',  date: '22일 전', ok: false },
+  ],
+  risks: [
+    { name: '비만증',   pct: 72, level: '위험', cls: 'hi' },
+    { name: '당뇨',    pct: 55, level: '주의', cls: 'mid' },
+    { name: '심뇌관계', pct: 38, level: '보통', cls: 'lo' },
+  ],
+  quickActs: [
+    { icon: 'search', title: '진료 전 보장 확인',   sub: '병원 가기 전에',  path: '/pre-treatment' },
+    { icon: 'clip',   title: '최근 진료 기록',      sub: '미처리 4건',     path: '/medical-records' },
+    { icon: 'chart',  title: '12개월 건강 리포트',  sub: '최신 분석',      path: '/health-report' },
+    { icon: 'chat',   title: 'AI 건강 상담',        sub: '지금 채팅',      path: '/chat' },
+  ],
+  gaps: [
+    { name: '암 진단비 보장', desc: '현재 진단금 미가입 상태', level: '필수', lc: '#BBA8A8', tc: '#7A5050', tb: '#F2ECEC' },
+    { name: '치매 간병 특약', desc: '가족력 고위험군 해당',   level: '권장', lc: '#C0B890', tc: '#7A6A40', tb: '#F4EFDE' },
+  ],
+};
 
 export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [data, setData] = useState(MOCK);
-  const [syncing, setSyncing] = useState(false);
+  const [data] = useState(MOCK);
 
-  const syncCodef = async () => {
-    setSyncing(true);
-    try {
-      await Promise.all([healthAPI.syncFromCodef(), insuranceAPI.syncFromCodef()]);
-      alert('CODEF 데이터 동기화 완료!');
-    } catch { alert('동기화 실패. CODEF 연동을 확인해주세요.'); }
-    finally { setSyncing(false); }
-  };
-
-  const cards = [
-    { label: '월 보험료 합계', value: `${data.summary.totalPremium.toLocaleString()}원`, sub: '3개 보험사', icon: '💰', color: '#1d4ed8', path: '/insurance' },
-    { label: '청구 가능 보험금', value: `${data.summary.claimOpportunities}건 발견`, sub: '지금 확인하세요!', icon: '🔔', color: '#dc2626', path: '/medical-records' },
-    { label: '건강 위험도', value: RISK_LABEL[data.summary.riskGrade], sub: '종합 평가', icon: '❤️', color: RISK_COLOR[data.summary.riskGrade], path: '/checkup' },
-    { label: '보장 공백', value: '2개 항목', sub: '개선 가능', icon: '📊', color: '#f59e0b', path: '/insurance-plan' },
+  const stats = [
+    { lbl: '월 보험료 합계',   val: '387,000원', meta: '3개 보험사 통합',           blue: false },
+    { lbl: '청구 가능 보험금', val: '2건 발견',  pill: '+165,000원 예상',          blue: true },
+    { lbl: '건강 위험도',      val: '중위험',    meta: '비만 · 당뇨 주의 구간',     blue: false },
+    { lbl: '보험 공백',        val: '2개 항목',  meta: '즉시 개선 권장',            blue: false },
   ];
 
   return (
-    <div>
-      {/* 헤더 */}
-      <div style={s.header}>
+    <div className="mc-page fade-in">
+      {/* Header */}
+      <div className="mc-page-top">
         <div>
-          <h2 style={s.greeting}>안녕하세요, {user?.name || '사용자'}님 👋</h2>
-          <p style={s.subtext}>오늘도 건강한 하루 되세요. 놓친 보험금이 없는지 확인해보세요.</p>
+          <div className="mc-greeting-name">안녕하세요, {user?.name || '김사용'} 님</div>
+          <div className="mc-greeting-sub">미처리 보험 청구 2건이 확인됩니다. 지금 청구해보세요.</div>
         </div>
-        <button onClick={syncCodef} disabled={syncing} style={s.syncBtn}>
-          {syncing ? '⏳ 동기화 중...' : '🔄 CODEF 데이터 갱신'}
-        </button>
+        <div className="mc-page-top-right">
+          <button className="mc-btn mc-btn-primary" onClick={() => navigate('/insurance')}>
+            <Icon size={12}>{P.shield}</Icon> 내 보험 현황 보기
+          </button>
+        </div>
       </div>
 
-      {/* 요약 카드 */}
-      <div style={s.cardGrid}>
-        {cards.map(c => (
-          <div key={c.label} onClick={() => navigate(c.path)} style={{ ...s.card, cursor: 'pointer' }}>
-            <div style={{ ...s.cardIcon, background: c.color + '20', color: c.color }}>{c.icon}</div>
-            <div style={s.cardValue} >{c.value}</div>
-            <div style={s.cardLabel}>{c.label}</div>
-            <div style={s.cardSub}>{c.sub}</div>
+      {/* Stats strip */}
+      <div className="mc-stats-strip">
+        {stats.map((s, i) => (
+          <div className="mc-stat-cell" key={i}>
+            <div className="mc-stat-lbl">{s.lbl}</div>
+            <div className={`mc-stat-val${s.blue ? ' blue' : ''}`}>{s.val}</div>
+            {s.pill
+              ? <span className="mc-stat-pill">{s.pill}</span>
+              : <div className="mc-stat-meta">{s.meta}</div>}
           </div>
         ))}
       </div>
 
-      <div style={s.twoCol}>
-        {/* 청구 가능 알림 */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
-            <h3 style={s.sectionTitle}>🔔 청구 가능한 보험금</h3>
-            <button onClick={() => navigate('/medical-records')} style={s.linkBtn}>전체 보기 →</button>
+      {/* Claims + Risk */}
+      <div className="mc-two-col">
+        {/* 청구 가능한 보험금 */}
+        <div>
+          <div className="mc-sec-head">
+            <span className="mc-sec-title">청구 가능한 보험금</span>
+            <button className="mc-sec-link" onClick={() => navigate('/medical-records')}>
+              전체 보기 <Icon>{P.arrow}</Icon>
+            </button>
           </div>
-          {data.claims.map(c => (
-            <div key={c.id} style={s.claimCard}>
-              <div style={s.claimLeft}>
-                <div style={s.claimHospital}>{c.hospital}</div>
-                <div style={s.claimDate}>{c.date} · {c.insurance}</div>
-              </div>
-              <div style={s.claimRight}>
-                <div style={s.claimAmount}>+{c.amount.toLocaleString()}원</div>
-                <button onClick={() => navigate('/medical-records')} style={s.claimBtn}>청구하기</button>
-              </div>
-            </div>
-          ))}
+          <table className="mc-tbl">
+            <thead>
+              <tr>
+                <th>병원 / 내역</th>
+                <th>날짜</th>
+                <th>예상 금액</th>
+                <th>액션</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.claims.map((c, i) => (
+                <tr key={i} onClick={() => navigate('/medical-records')}>
+                  <td>
+                    <div className="mc-tbl-hospital">{c.hospital}</div>
+                    <div className="mc-tbl-detail">{c.detail}</div>
+                  </td>
+                  <td><span className="mc-tbl-date">{c.date}</span></td>
+                  <td><span className="mc-tbl-amount">{c.amount}</span></td>
+                  <td>
+                    {c.ok
+                      ? (
+                        <button
+                          className="mc-tbl-action"
+                          onClick={(e) => { e.stopPropagation(); navigate('/medical-records'); }}
+                        >
+                          <Icon size={11}>{P.check}</Icon> 청구하기
+                        </button>
+                      )
+                      : <span className="mc-tbl-tag">검토 중</span>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mc-tbl-footer">
+            <span className="mc-tbl-footer-label">총 예상 수령액</span>
+            <span className="mc-tbl-footer-value">+193,000원</span>
+          </div>
         </div>
 
-        {/* 건강 위험도 */}
-        <div style={s.section}>
-          <div style={s.sectionHeader}>
-            <h3 style={s.sectionTitle}>❤️ 건강 위험도 요약</h3>
-            <button onClick={() => navigate('/checkup')} style={s.linkBtn}>상세 보기 →</button>
+        {/* Risk */}
+        <div>
+          <div className="mc-sec-head">
+            <span className="mc-sec-title">건강 위험도</span>
+            <button className="mc-sec-link" onClick={() => navigate('/health-report')}>
+              리포트 <Icon>{P.arrow}</Icon>
+            </button>
           </div>
-          {Object.entries(data.riskSummary).map(([key, grade]) => {
-            const labels = { stroke: '뇌졸중', diabetes: '당뇨', cardiovascular: '심뇌혈관' };
-            return (
-              <div key={key} style={s.riskRow}>
-                <span style={s.riskLabel}>{labels[key]}</span>
-                <div style={s.riskBar}>
-                  <div style={{ ...s.riskFill, width: grade === 'HIGH' ? '80%' : grade === 'MEDIUM' ? '50%' : '25%', background: RISK_COLOR[grade] }} />
+          <div className="mc-risk-list">
+            {data.risks.map((r, i) => (
+              <div className="mc-risk-row" key={i}>
+                <div className="mc-risk-meta">
+                  <span className="mc-risk-name">{r.name}</span>
+                  <span className={`mc-risk-lvl ${r.cls}`}>{r.level}</span>
                 </div>
-                <span style={{ ...s.riskGrade, color: RISK_COLOR[grade] }}>{RISK_LABEL[grade]}</span>
+                <div className="mc-risk-bar">
+                  <div className={`mc-risk-fill ${r.cls}`} style={{ width: `${r.pct}%` }} />
+                </div>
               </div>
-            );
-          })}
-          <div style={s.chatPrompt} onClick={() => navigate('/chat')}>
-            <span>💬</span>
-            <span>"내 건강 위험도에 대해 자세히 알려줘" → AI에게 물어보기</span>
+            ))}
+          </div>
+          <div className="mc-ai-strip" onClick={() => navigate('/chat')}>
+            <strong>AI 인사이트</strong> — 내 건강 이력 기반 맞춤 보험·보건 어드바이스 →
           </div>
         </div>
       </div>
 
-      {/* 빠른 기능 */}
-      <div style={s.section}>
-        <h3 style={{ ...s.sectionTitle, marginBottom: 16 }}>⚡ 빠른 기능</h3>
-        <div style={s.quickGrid}>
-          {[
-            { icon: '🔍', title: '도수치료 보험 되나요?', sub: '진료 전 보장 검색', path: '/pre-treatment' },
-            { icon: '📋', title: '최근 진료 기록 확인', sub: '자동 수집된 내역', path: '/medical-records' },
-            { icon: '📈', title: '12개월 건강 리포트', sub: '의료 패턴 분석', path: '/health-report' },
-            { icon: '💬', title: 'AI에게 보험 물어보기', sub: '건강 채팅', path: '/chat' },
-          ].map(q => (
-            <div key={q.title} onClick={() => navigate(q.path)} style={s.quickCard}>
-              <span style={s.quickIcon}>{q.icon}</span>
-              <div style={s.quickTitle}>{q.title}</div>
-              <div style={s.quickSub}>{q.sub}</div>
+      {/* Bottom row */}
+      <div className="mc-three-col">
+        {/* Quick actions */}
+        <div>
+          <div className="mc-sec-head">
+            <span className="mc-sec-title">빠른 기능</span>
+          </div>
+          <div className="mc-action-grid">
+            {data.quickActs.map((a, i) => (
+              <button className="mc-action-cell" key={i} onClick={() => navigate(a.path)}>
+                <div className="mc-action-icon"><Icon size={13}>{P[a.icon]}</Icon></div>
+                <div className="mc-action-title">{a.title}</div>
+                <div className="mc-action-sub">{a.sub}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Insurance gap */}
+        <div>
+          <div className="mc-sec-head">
+            <span className="mc-sec-title">보험 공백</span>
+            <button className="mc-sec-link" onClick={() => navigate('/insurance-plan')}>
+              개선하기 <Icon>{P.arrow}</Icon>
+            </button>
+          </div>
+          <div className="mc-gap-list">
+            {data.gaps.map((g, i) => (
+              <div className="mc-gap-row" key={i}>
+                <div className="mc-gap-accent" style={{ background: g.lc }} />
+                <div className="mc-gap-info">
+                  <div className="mc-gap-name">{g.name}</div>
+                  <div className="mc-gap-sub">{g.desc}</div>
+                </div>
+                <span className="mc-gap-tag" style={{ color: g.tc, background: g.tb }}>{g.level}</span>
+              </div>
+            ))}
+            <div className="mc-gap-footer">
+              <button
+                className="mc-btn mc-btn-primary"
+                style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
+                onClick={() => navigate('/insurance-plan')}
+              >
+                <Icon size={12}>{P.plus}</Icon> 보험 추천 받기
+              </button>
             </div>
-          ))}
+          </div>
+        </div>
+
+        {/* Upcoming widgets */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="mc-sec-head">
+            <span className="mc-sec-title">다가오는 검진</span>
+          </div>
+          <div className="mc-widget">
+            <div className="mc-widget-title">국가건강검진</div>
+            <div className="mc-widget-sub">2024년 대상자 · 예약 필요</div>
+            <button
+              className="mc-btn"
+              style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
+              onClick={() => navigate('/checkup')}
+            >
+              예약하기
+            </button>
+          </div>
+          <div className="mc-widget mc-widget-tight">
+            <div className="mc-widget-section-lbl">최근 청구 현황</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
+              <span style={{ color: 'var(--text-2)' }}>이번 달 청구</span>
+              <span style={{ fontWeight: 700, color: 'var(--blue)' }}>2건</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+              <span style={{ color: 'var(--text-2)' }}>누적 수령액</span>
+              <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>385,000원</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
-const s = {
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
-  greeting: { fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 4 },
-  subtext: { color: '#64748b', fontSize: 14 },
-  syncBtn: { padding: '10px 18px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' },
-  cardGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 },
-  card: { background: '#fff', borderRadius: 14, padding: '20px 18px', boxShadow: '0 1px 4px rgba(0,0,0,.06)' },
-  cardIcon: { width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 12 },
-  cardValue: { fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 2 },
-  cardLabel: { fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 },
-  cardSub: { fontSize: 12, color: '#94a3b8' },
-  twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 },
-  section: { background: '#fff', borderRadius: 14, padding: '20px', boxShadow: '0 1px 4px rgba(0,0,0,.06)', marginBottom: 16 },
-  sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: 700, color: '#0f172a' },
-  linkBtn: { background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: 13 },
-  claimCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f1f5f9' },
-  claimLeft: {},
-  claimHospital: { fontWeight: 600, fontSize: 14, color: '#0f172a', marginBottom: 2 },
-  claimDate: { fontSize: 12, color: '#94a3b8' },
-  claimRight: { textAlign: 'right' },
-  claimAmount: { fontSize: 16, fontWeight: 700, color: '#22c55e', marginBottom: 6 },
-  claimBtn: { padding: '5px 12px', background: '#dcfce7', color: '#16a34a', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 },
-  riskRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 },
-  riskLabel: { width: 70, fontSize: 13, color: '#334155', fontWeight: 500 },
-  riskBar: { flex: 1, height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' },
-  riskFill: { height: '100%', borderRadius: 4, transition: 'width .5s' },
-  riskGrade: { width: 50, fontSize: 12, fontWeight: 700, textAlign: 'right' },
-  chatPrompt: { marginTop: 16, padding: '10px 14px', background: '#f5f3ff', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 12, color: '#7c3aed' },
-  quickGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 },
-  quickCard: { padding: '16px', background: '#f8fafc', borderRadius: 12, cursor: 'pointer', border: '1.5px solid #e2e8f0', transition: 'border-color .15s' },
-  quickIcon: { fontSize: 24, marginBottom: 10, display: 'block' },
-  quickTitle: { fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 4 },
-  quickSub: { fontSize: 11, color: '#94a3b8' },
-};
