@@ -282,7 +282,8 @@ public class CodefService {
         Map<String, Object> result = (Map<String, Object>) responseMap.get("result");
         if (result == null) throw new RuntimeException("CODEF 응답 형식 오류");
         String code = (String) result.get("code");
-        if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
+        // CF-00000: 즉시 성공, CF-03002: 2차 인증 필요, CF-12832: 아이디 사용 가능(미가입)
+        if (!"CF-00000".equals(code) && !"CF-03002".equals(code) && !"CF-12832".equals(code)) {
             String msg = buildErrorMessage(result);
             throw new SignupFieldException(resolveErrorField(msg), msg);
         }
