@@ -44,12 +44,22 @@ public class AuthController {
     }
 
     /**
-     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인) → 계정 생성 및 JWT 발급
+     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인)
      */
     @PostMapping("/signup/step2")
-    public ResponseEntity<AuthResponse> signupStep2(@Valid @RequestBody SignupStep2Request request) {
+    public ResponseEntity<Map<String, String>> signupStep2(@Valid @RequestBody SignupStep2Request request) {
         log.info("POST /api/auth/signup/step2 - sessionKey: {}", request.getSessionKey());
-        AuthResponse response = authService.signupStep2(request);
+        authService.signupStep2(request);
+        return ResponseEntity.ok(Map.of("message", "이메일로 발송된 인증번호를 입력해주세요."));
+    }
+
+    /**
+     * 회원가입 3단계: 이메일 인증 완료 → 계정 생성 및 JWT 발급
+     */
+    @PostMapping("/signup/step3")
+    public ResponseEntity<AuthResponse> signupStep3(@Valid @RequestBody SignupStep3Request request) {
+        log.info("POST /api/auth/signup/step3 - sessionKey: {}", request.getSessionKey());
+        AuthResponse response = authService.signupStep3(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

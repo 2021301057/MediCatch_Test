@@ -15,7 +15,7 @@ public class SignupRequest {
     private String email;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
+    @Size(min = 9, max = 20, message = "비밀번호는 9자 이상 20자 이하여야 합니다")
     private String password;
 
     @NotBlank(message = "Name is required")

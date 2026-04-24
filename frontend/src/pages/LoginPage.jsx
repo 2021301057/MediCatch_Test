@@ -5,7 +5,7 @@ import useAuthStore from '../store/authStore';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [signupStep, setSignupStep] = useState(1); // 1 | 2
+  const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
   const [sessionKey, setSessionKey] = useState('');
 
   const [form, setForm] = useState({
@@ -22,6 +22,7 @@ export default function LoginPage() {
   });
 
   const [smsAuthNo, setSmsAuthNo] = useState('');
+  const [emailAuthNo, setEmailAuthNo] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -40,6 +41,7 @@ export default function LoginPage() {
       setSignupStep(1);
       setSessionKey('');
       setSmsAuthNo('');
+      setEmailAuthNo('');
     }
   }, [mode]);
 
@@ -84,11 +86,51 @@ export default function LoginPage() {
       setError('서비스 이용약관 및 개인정보 처리방침에 동의해주세요.');
       return;
     }
-    if (form.password.length < 8) {
-      setFieldErrors({ password: '비밀번호는 8자 이상 입력해주세요.' });
+
+    // 아이디 형식 (영문 시작, 영문+숫자 6~12자)
+    if (!/^[a-zA-Z][a-zA-Z0-9]{5,11}$/.test(form.id)) {
+      setFieldErrors({ id: '아이디는 영문으로 시작하는 영문+숫자 6~12자여야 합니다.' });
       return;
     }
-    if (form.password !== form.passwordConfirm) {
+
+    // 이메일 도메인
+    const ALLOWED_DOMAINS = ['naver.com','hanmail.net','daum.net','nate.com','korea.kr',
+      'kcredit.or.kr','korea.com','yahoo.com','goe.go.kr','chol.com',
+      'sen.go.kr','gyo6.net','jnu.ac.kr','kakao.com'];
+    const emailDomain = form.email.split('@')[1]?.toLowerCase();
+    if (!emailDomain || !ALLOWED_DOMAINS.includes(emailDomain)) {
+      setFieldErrors({ email: '사용 가능한 이메일 도메인이 아닙니다. (naver.com, daum.net, kakao.com 등)' });
+      return;
+    }
+
+    // 비밀번호 규칙
+    const pw = form.password;
+    if (pw.length < 9 || pw.length > 20) {
+      setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' });
+      return;
+    }
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
+      setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' });
+      return;
+    }
+    for (let i = 0; i < pw.length - 2; i++) {
+      if (pw[i] === pw[i+1] && pw[i] === pw[i+2]) {
+        setFieldErrors({ password: '동일한 문자/숫자를 3자 이상 연속 사용할 수 없습니다.' });
+        return;
+      }
+      const d1 = pw.charCodeAt(i+1) - pw.charCodeAt(i);
+      const d2 = pw.charCodeAt(i+2) - pw.charCodeAt(i+1);
+      if ((d1 === 1 && d2 === 1) || (d1 === -1 && d2 === -1)) {
+        setFieldErrors({ password: '연속되는 문자/숫자를 3자 이상 사용할 수 없습니다.' });
+        return;
+      }
+    }
+    if (pw.toLowerCase().includes(form.id.toLowerCase())) {
+      setFieldErrors({ password: '비밀번호에 아이디를 포함할 수 없습니다.' });
+      return;
+    }
+
+    if (pw !== form.passwordConfirm) {
       setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' });
       return;
     }
@@ -144,7 +186,34 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { data } = await authAPI.signupStep2({ sessionKey, smsAuthNo: smsAuthNo.trim() });
+      await authAPI.signupStep2({ sessionKey, smsAuthNo: smsAuthNo.trim() });
+      setSignupStep(3);
+    } catch (err) {
+      const msg = err.response?.data?.message || '';
+      const fe = err.response?.data?.fieldErrors;
+      if (fe && Object.keys(fe).length > 0) {
+        setFieldErrors(fe);
+        if (!fe.smsAuthNo && !fe.general) setError(msg || '인증에 실패했습니다.');
+      } else {
+        setError(msg || '인증에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 회원가입 Step3: 이메일 인증번호 확인 + 가입 완료 ─────────
+  const handleSignupStep3 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    if (!emailAuthNo.trim()) {
+      setFieldErrors({ emailAuthNo: '이메일 인증번호를 입력해주세요.' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data } = await authAPI.signupStep3({ sessionKey, emailAuthNo: emailAuthNo.trim() });
       setSuccessMessage('회원가입이 완료되었습니다!');
       setTimeout(() => {
         login(data.user, data.accessToken, data.refreshToken);
@@ -155,9 +224,9 @@ export default function LoginPage() {
       const fe = err.response?.data?.fieldErrors;
       if (fe && Object.keys(fe).length > 0) {
         setFieldErrors(fe);
-        if (!fe.smsAuthNo && !fe.general) setError(msg || '인증에 실패했습니다.');
+        if (!fe.emailAuthNo && !fe.general) setError(msg || '인증에 실패했습니다.');
       } else {
-        setError(msg || '인증에 실패했습니다. 다시 시도해주세요.');
+        setError(msg || '이메일 인증에 실패했습니다. 다시 시도해주세요.');
       }
     } finally {
       setLoading(false);
@@ -174,6 +243,7 @@ export default function LoginPage() {
     setSignupStep(1);
     setSessionKey('');
     setSmsAuthNo('');
+    setEmailAuthNo('');
     setError('');
     setFieldErrors({});
   };
@@ -217,14 +287,17 @@ export default function LoginPage() {
               <h2 style={s.formTitle}>
                 {isLogin ? '다시 오신 것을 환영합니다'
                   : signupStep === 1 ? '계정 만들기'
-                  : '본인 인증'}
+                  : signupStep === 2 ? '본인 인증'
+                  : '이메일 인증'}
               </h2>
               <p style={s.formSub}>
                 {isLogin
                   ? '이메일로 로그인하고 내 건강·보험 현황을 확인하세요.'
                   : signupStep === 1
                   ? '몇 가지 정보만 입력하면 시작할 수 있어요.'
-                  : (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')}
+                  : signupStep === 2
+                  ? (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')
+                  : '가입에 사용한 이메일로 발송된 인증번호를 입력해주세요.'}
               </p>
             </header>
 
@@ -280,7 +353,7 @@ export default function LoginPage() {
 
                 <div style={s.row2}>
                   <Field label="비밀번호" icon="🔒" error={fieldErrors.password}>
-                    <input name="password" type="password" value={form.password} onChange={handle} placeholder="8자 이상" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
+                    <input name="password" type="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
                   </Field>
                   <Field label="비밀번호 확인" icon="🔒" error={fieldErrors.passwordConfirm}>
                     <input
@@ -383,6 +456,34 @@ export default function LoginPage() {
                 </button>
                 <button type="button" onClick={goBackToStep1} style={s.backBtn}>
                   ← 다시 입력하기
+                </button>
+              </form>
+            )}
+
+            {/* ── 회원가입 Step3: 이메일 인증 ── */}
+            {!isLogin && signupStep === 3 && (
+              <form onSubmit={handleSignupStep3} style={s.form}>
+                <Field label="이메일 인증번호" icon="📧" error={fieldErrors.emailAuthNo}>
+                  <input
+                    value={emailAuthNo}
+                    onChange={(e) => {
+                      setEmailAuthNo(e.target.value);
+                      if (fieldErrors.emailAuthNo) setFieldErrors((prev) => { const n = { ...prev }; delete n.emailAuthNo; return n; });
+                    }}
+                    placeholder="이메일로 받은 인증번호 입력"
+                    maxLength={10}
+                    style={{ ...s.input, ...(fieldErrors.emailAuthNo ? s.inputError : {}) }}
+                    autoFocus
+                  />
+                </Field>
+                {fieldErrors.emailAuthNo && <div style={s.error}>{fieldErrors.emailAuthNo}</div>}
+                {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {error && <div style={s.error}>{error}</div>}
+                <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
+                  {loading ? '처리 중...' : '가입 완료 →'}
+                </button>
+                <button type="button" onClick={goBackToStep1} style={s.backBtn}>
+                  ← 처음부터 다시 입력하기
                 </button>
               </form>
             )}
