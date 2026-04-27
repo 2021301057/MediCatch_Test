@@ -3,6 +3,7 @@ package com.medicatch.health.controller;
 import com.medicatch.health.entity.CheckupResult;
 import com.medicatch.health.entity.MedicalRecord;
 import com.medicatch.health.entity.MedicationDetail;
+import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,9 +20,11 @@ import java.util.Map;
 public class HealthController {
 
     private final HealthService healthService;
+    private final CodefSyncService codefSyncService;
 
-    public HealthController(HealthService healthService) {
+    public HealthController(HealthService healthService, CodefSyncService codefSyncService) {
         this.healthService = healthService;
+        this.codefSyncService = codefSyncService;
     }
 
     /**
@@ -111,6 +114,57 @@ public class HealthController {
         } catch (Exception e) {
             log.error("Error getting health risk level: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * CODEF 건강 데이터 동기화 1단계: 건강검진(NHIS) + 진료정보(HIRA) 1차 요청
+     */
+    @PostMapping("/sync/step1")
+    public ResponseEntity<Map<String, Object>> syncStep1(@RequestBody Map<String, Object> body) {
+        Long userId = Long.parseLong(body.get("userId").toString());
+        log.info("POST /api/health/sync/step1 - userId: {}", userId);
+        try {
+            CodefSyncService.SyncStep1Response resp = codefSyncService.syncStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.get("telecom"),
+                    (String) body.get("authMethod"),
+                    (String) body.get("startDate"),
+                    (String) body.get("endDate")
+            );
+            return ResponseEntity.ok(Map.of(
+                    "sessionKey",      resp.getSessionKey(),
+                    "authMethod",      resp.getAuthMethod(),
+                    "requiresTwoWay",  resp.isRequiresTwoWay()
+            ));
+        } catch (Exception e) {
+            log.error("건강 데이터 동기화 1차 실패: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * CODEF 건강 데이터 동기화 2단계: 인증 확인 + DB 저장
+     */
+    @PostMapping("/sync/step2")
+    public ResponseEntity<Map<String, Object>> syncStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/step2");
+        try {
+            String sessionKey = (String) body.get("sessionKey");
+            String smsAuthNo  = (String) body.getOrDefault("smsAuthNo", "");
+            CodefSyncService.SyncStep2Result result = codefSyncService.syncStep2(sessionKey, smsAuthNo);
+            return ResponseEntity.ok(Map.of(
+                    "message",          "건강 데이터 동기화가 완료되었습니다.",
+                    "savedCheckups",    result.getSavedCheckups(),
+                    "savedMedicals",    result.getSavedMedicals(),
+                    "savedMedications", result.getSavedMedications()
+            ));
+        } catch (Exception e) {
+            log.error("건강 데이터 동기화 2차 실패: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 

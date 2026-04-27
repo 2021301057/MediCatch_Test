@@ -18,7 +18,8 @@ export const healthAPI = {
   getCheckupByYear:  (year) => api.get(`/health/checkup-results/${year}`),
   getDiseasePredictions: () => api.get('/health/disease-predictions'),
   getCheckupTargets: () => api.get('/health/checkup-targets'),
-  syncFromCodef:     () => api.post('/health/sync'),
+  syncStep1: (data) => api.post('/health/sync/step1', data),
+  syncStep2: (data) => api.post('/health/sync/step2', data),
 };
 
 // ── Insurance ─────────────────────────────────────
@@ -26,7 +27,7 @@ export const insuranceAPI = {
   getPolicies:   () => api.get('/insurance/policies'),
   getCoverage:   (policyId) => api.get(`/insurance/policies/${policyId}/coverage`),
   getSummary:    () => api.get('/insurance/summary'),
-  syncFromCodef: () => api.post('/insurance/sync'),
+  sync:          (data) => api.post('/insurance/sync', data),
 };
 
 // ── Analysis ──────────────────────────────────────

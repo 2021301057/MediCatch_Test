@@ -30,6 +30,11 @@ dependencies {
 
     runtimeOnly 'com.mysql:mysql-connector-j'
 
+    // EasyCodef SDK
+    implementation 'io.codef.api:easycodef-java:1.0.6'
+    implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    implementation 'commons-codec:commons-codec:1.15'
+
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
     compileOnly 'org.projectlombok:lombok'

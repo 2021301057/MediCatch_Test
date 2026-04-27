@@ -2,6 +2,7 @@ package com.medicatch.insurance.controller;
 
 import com.medicatch.insurance.entity.CoverageItem;
 import com.medicatch.insurance.entity.Policy;
+import com.medicatch.insurance.service.CodefInsuranceSyncService;
 import com.medicatch.insurance.service.InsuranceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -16,9 +17,12 @@ import java.util.Map;
 public class InsuranceController {
 
     private final InsuranceService insuranceService;
+    private final CodefInsuranceSyncService codefSyncService;
 
-    public InsuranceController(InsuranceService insuranceService) {
+    public InsuranceController(InsuranceService insuranceService,
+                                CodefInsuranceSyncService codefSyncService) {
         this.insuranceService = insuranceService;
+        this.codefSyncService = codefSyncService;
     }
 
     /**
@@ -114,6 +118,29 @@ public class InsuranceController {
         } catch (Exception e) {
             log.error("Error getting insurance summary: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * CODEF 보험 계약 정보 동기화 (단일 호출)
+     */
+    @PostMapping("/sync")
+    public ResponseEntity<Map<String, Object>> syncInsurance(@RequestBody Map<String, Object> body) {
+        Long userId = Long.parseLong(body.get("userId").toString());
+        log.info("POST /api/insurance/sync - userId: {}", userId);
+        try {
+            int saved = codefSyncService.syncInsuranceData(
+                    userId,
+                    (String) body.get("codefId"),
+                    (String) body.get("codefPassword")
+            );
+            return ResponseEntity.ok(Map.of(
+                    "message",      "보험 데이터 동기화가 완료되었습니다.",
+                    "savedPolicies", saved
+            ));
+        } catch (Exception e) {
+            log.error("보험 데이터 동기화 실패: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 
