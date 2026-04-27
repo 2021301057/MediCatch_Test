@@ -1,0 +1,234 @@
+package com.medicatch.insurance.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medicatch.insurance.entity.CoverageItem;
+import com.medicatch.insurance.entity.Policy;
+import com.medicatch.insurance.repository.PolicyRepository;
+import io.codef.api.EasyCodef;
+import io.codef.api.EasyCodefServiceType;
+import io.codef.api.EasyCodefUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+
+@Slf4j
+@Service
+public class CodefInsuranceSyncService {
+
+    private static final String CONTRACT_URL = "/v1/kr/insurance/0001/credit4u/contract-info";
+
+    @Value("${codef.api-client-id:YOUR_API_CLIENT_ID}")
+    private String clientId;
+    @Value("${codef.api-client-secret:YOUR_API_CLIENT_SECRET}")
+    private String clientSecret;
+    @Value("${codef.demo-client-id:YOUR_DEMO_CLIENT_ID}")
+    private String demoClientId;
+    @Value("${codef.demo-client-secret:YOUR_DEMO_CLIENT_SECRET}")
+    private String demoClientSecret;
+    @Value("${codef.public-key:}")
+    private String publicKey;
+    @Value("${codef.use-demo:true}")
+    private boolean useDemo;
+
+    private final ObjectMapper objectMapper;
+    private final PolicyRepository policyRepository;
+
+    public CodefInsuranceSyncService(ObjectMapper objectMapper, PolicyRepository policyRepository) {
+        this.objectMapper = objectMapper;
+        this.policyRepository = policyRepository;
+    }
+
+    @Transactional
+    public int syncInsuranceData(Long userId, String codefId, String codefPassword) {
+        try {
+            if (publicKey == null || publicKey.isBlank()) {
+                throw new RuntimeException("CODEF 공개키가 설정되지 않았습니다.");
+            }
+            String rsaPassword = EasyCodefUtil.encryptRSA(codefPassword, publicKey);
+
+            HashMap<String, Object> params = new HashMap<>();
+            params.put("organization", "0001");
+            params.put("id",          codefId);
+            params.put("password",    rsaPassword);
+            params.put("type",        "0");
+
+            EasyCodef codef = createCodef();
+            log.info("CODEF 보험 계약 정보 조회 - userId: {}, codefId: {}", userId, codefId);
+            String result = codef.requestProduct(CONTRACT_URL, serviceType(), params);
+            log.debug("보험 계약 응답: {}", result);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(responseMap.get("result"));
+            String code = (String) resultField.get("code");
+
+            if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "보험 정보 조회에 실패했습니다.");
+                throw new RuntimeException(msg);
+            }
+
+            Map<String, Object> data = toMap(responseMap.get("data"));
+            return savePolicies(userId, data);
+
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("보험 데이터 동기화 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("보험 데이터 동기화 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private int savePolicies(Long userId, Map<String, Object> data) {
+        // 기존 데이터 삭제
+        List<Policy> existing = policyRepository.findByUserId(userId);
+        policyRepository.deleteAll(existing);
+
+        List<Policy> toSave = new ArrayList<>();
+
+        // 실손의료비 계약
+        toSave.addAll(parseContracts(userId, data, "resActualLossContractList", "SUPPLEMENTARY"));
+        // 정액형(상해/질병) 계약
+        toSave.addAll(parseContracts(userId, data, "resFlatRateContractList", "ACCIDENT"));
+        // 저축성 계약
+        toSave.addAll(parseContracts(userId, data, "resSavingsContractList", "NATIONAL_HEALTH"));
+        // 자동차 계약
+        toSave.addAll(parseContracts(userId, data, "resCarContractList", "ACCIDENT"));
+        // 재물 계약
+        toSave.addAll(parseContracts(userId, data, "resPropertyContractList", "ACCIDENT"));
+
+        policyRepository.saveAll(toSave);
+        log.info("보험 데이터 저장 완료 - userId: {}, policies: {}", userId, toSave.size());
+        return toSave.size();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Policy> parseContracts(Long userId, Map<String, Object> data,
+                                         String key, String insuranceType) {
+        List<Map<String, Object>> list =
+                (List<Map<String, Object>>) data.getOrDefault(key, List.of());
+        List<Policy> policies = new ArrayList<>();
+
+        for (Map<String, Object> item : list) {
+            String policyNumber = str(item.get("resPolicyNumber"));
+            if (policyNumber == null || policyNumber.isBlank()) continue;
+
+            String startStr = str(item.get("commStartDate"));
+            String endStr   = str(item.get("commEndDate"));
+            LocalDate startDate = parseDate8(startStr);
+            LocalDate endDate   = parseDate8(endStr);
+            boolean isActive    = "정상".equals(str(item.get("resContractStatus")))
+                                  || endDate.isAfter(LocalDate.now());
+
+            String premiumStr = str(item.get("resPremium"));
+            Double monthly    = parseDouble(premiumStr);
+            if (monthly != null && "매년납".equals(str(item.get("resPaymentCycle")))) {
+                monthly = monthly / 12.0;
+            }
+
+            List<CoverageItem> coverageItems = parseCoverageItems(item);
+
+            Policy policy = Policy.builder()
+                    .userId(userId)
+                    .policyNumber(policyNumber)
+                    .insurerName(strOrDefault(item.get("resCompanyNm"), "미상"))
+                    .insuranceType(insuranceType)
+                    .startDate(startDate)
+                    .endDate(endDate)
+                    .isActive(isActive)
+                    .monthlyPremium(monthly)
+                    .annualPremium(monthly != null ? monthly * 12 : null)
+                    .policyDetails(str(item.get("resInsuranceName")))
+                    .coverageItems(coverageItems)
+                    .build();
+
+            // CoverageItem에 policy 참조 설정
+            if (coverageItems != null) {
+                coverageItems.forEach(ci -> ci.setPolicy(policy));
+            }
+            policies.add(policy);
+        }
+        return policies;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<CoverageItem> parseCoverageItems(Map<String, Object> contractItem) {
+        List<Map<String, Object>> covList =
+                (List<Map<String, Object>>) contractItem.getOrDefault("resCoverageLists", List.of());
+        List<CoverageItem> items = new ArrayList<>();
+        int priority = 1;
+
+        for (Map<String, Object> cov : covList) {
+            String name = str(cov.get("resCoverageName"));
+            if (name == null || name.isBlank()) continue;
+
+            items.add(CoverageItem.builder()
+                    .itemName(name)
+                    .category(resolveCoverageCategory(name))
+                    .maxBenefitAmount(parseDouble(cov.get("resCoverageAmount")))
+                    .isCovered("정상".equals(str(cov.get("resCoverageStatus"))))
+                    .conditions(str(cov.get("resAgreementType")))
+                    .priority(priority++)
+                    .build());
+        }
+        return items;
+    }
+
+    private String resolveCoverageCategory(String name) {
+        if (name == null) return "OUTPATIENT";
+        String lower = name.toLowerCase();
+        if (lower.contains("입원"))  return "INPATIENT";
+        if (lower.contains("수술"))  return "SURGERY";
+        if (lower.contains("약"))    return "MEDICATION";
+        return "OUTPATIENT";
+    }
+
+    private EasyCodef createCodef() {
+        EasyCodef codef = new EasyCodef();
+        codef.setClientInfoForDemo(demoClientId, demoClientSecret);
+        codef.setClientInfo(clientId, clientSecret);
+        codef.setPublicKey(publicKey);
+        return codef;
+    }
+
+    private EasyCodefServiceType serviceType() {
+        return useDemo ? EasyCodefServiceType.DEMO : EasyCodefServiceType.API;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toMap(Object obj) {
+        if (obj instanceof Map) return (Map<String, Object>) obj;
+        return new HashMap<>();
+    }
+
+    private String str(Object o) {
+        if (o == null) return null;
+        String s = o.toString().trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private String strOrDefault(Object o, String def) {
+        String s = str(o);
+        return s == null ? def : s;
+    }
+
+    private Double parseDouble(Object o) {
+        if (o == null) return null;
+        String s = o.toString().trim().replaceAll("[^0-9.]", "");
+        if (s.isEmpty()) return null;
+        try { return Double.parseDouble(s); } catch (NumberFormatException e) { return null; }
+    }
+
+    private LocalDate parseDate8(String s) {
+        if (s == null || s.length() < 8) return LocalDate.now();
+        try {
+            return LocalDate.parse(s.substring(0, 8), DateTimeFormatter.ofPattern("yyyyMMdd"));
+        } catch (Exception e) {
+            return LocalDate.now();
+        }
+    }
+}

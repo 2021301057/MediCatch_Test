@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { insuranceAPI, analysisAPI, healthAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
+import CodefSyncModal from '../components/CodefSyncModal';
 
 // Mock 데이터 (API 연결 전 사용)
 const MOCK = {
@@ -20,16 +21,7 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [data, setData] = useState(MOCK);
-  const [syncing, setSyncing] = useState(false);
-
-  const syncCodef = async () => {
-    setSyncing(true);
-    try {
-      await Promise.all([healthAPI.syncFromCodef(), insuranceAPI.syncFromCodef()]);
-      alert('CODEF 데이터 동기화 완료!');
-    } catch { alert('동기화 실패. CODEF 연동을 확인해주세요.'); }
-    finally { setSyncing(false); }
-  };
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const cards = [
     { label: '월 보험료 합계', value: `${data.summary.totalPremium.toLocaleString()}원`, sub: '3개 보험사', icon: '💰', color: '#1d4ed8', path: '/insurance' },
@@ -46,10 +38,17 @@ export default function Dashboard() {
           <h2 style={s.greeting}>안녕하세요, {user?.name || '사용자'}님 👋</h2>
           <p style={s.subtext}>오늘도 건강한 하루 되세요. 놓친 보험금이 없는지 확인해보세요.</p>
         </div>
-        <button onClick={syncCodef} disabled={syncing} style={s.syncBtn}>
-          {syncing ? '⏳ 동기화 중...' : '🔄 CODEF 데이터 갱신'}
+        <button onClick={() => setShowSyncModal(true)} style={s.syncBtn}>
+          🔄 CODEF 데이터 갱신
         </button>
       </div>
+      {showSyncModal && (
+        <CodefSyncModal
+          userId={user?.userId}
+          onClose={() => setShowSyncModal(false)}
+          onSuccess={() => setShowSyncModal(false)}
+        />
+      )}
 
       {/* 요약 카드 */}
       <div style={s.cardGrid}>

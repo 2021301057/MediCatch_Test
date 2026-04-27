@@ -13,4 +13,6 @@ public interface CheckupResultRepository extends JpaRepository<CheckupResult, Lo
     List<CheckupResult> findByUserIdOrderByCheckupDateDesc(Long userId);
 
     List<CheckupResult> findByUserIdAndCheckupDateBetween(Long userId, LocalDate startDate, LocalDate endDate);
+
+    void deleteByUserId(Long userId);
 }
