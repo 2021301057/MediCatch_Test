@@ -5,16 +5,16 @@ import useAuthStore from '../store/authStore';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [signupStep, setSignupStep] = useState(1); // 1 | 2
+  const [signupStep, setSignupStep] = useState(1); // 1: 계정정보 / 2: 보험·건강기록 조회 / 3: SMS 인증
   const [sessionKey, setSessionKey] = useState('');
 
   const [form, setForm] = useState({
     name: '',
+    loginId: '',          // 사이트 로그인 아이디 (= 내보험다보여 아이디 자동 연동)
     email: '',
     password: '',
     passwordConfirm: '',
     agree: false,
-    id: '',
     identity: '',
     telecom: '0',
     phoneNo: '',
@@ -57,31 +57,42 @@ export default function LoginPage() {
     setFieldErrors({});
   };
 
-  // ── 로그인 ───────────────────────────────────────────
+  // ── 로그인 (아이디 + 비밀번호) ────────────────────────────
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const { data } = await authAPI.login({ email: form.email, password: form.password });
+      const { data } = await authAPI.login({ loginId: form.loginId, password: form.password });
       login(data.user, data.accessToken, data.refreshToken);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || '이메일 또는 비밀번호가 올바르지 않습니다.');
+      setError(err.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── 회원가입 Step1 ────────────────────────────────────
-  const handleSignupStep1 = async (e) => {
+  // ── Step1: 계정정보 입력 → 검증만 하고 다음 단계로 ───────────
+  const handleAccountNext = (e) => {
     e.preventDefault();
     setError('');
     setFieldErrors({});
-    setDuplicateEmail('');
 
-    if (!form.agree) {
-      setError('서비스 이용약관 및 개인정보 처리방침에 동의해주세요.');
+    if (!form.name.trim()) {
+      setFieldErrors({ name: '이름을 입력해주세요.' });
+      return;
+    }
+    if (!form.loginId.trim()) {
+      setFieldErrors({ loginId: '아이디를 입력해주세요.' });
+      return;
+    }
+    if (form.loginId.length < 4) {
+      setFieldErrors({ loginId: '아이디는 4자 이상으로 입력해주세요.' });
+      return;
+    }
+    if (!form.email.trim()) {
+      setFieldErrors({ email: '이메일을 입력해주세요.' });
       return;
     }
     if (form.password.length < 8) {
@@ -92,9 +103,28 @@ export default function LoginPage() {
       setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' });
       return;
     }
+    if (!form.agree) {
+      setError('서비스 이용약관 및 개인정보 처리방침에 동의해주세요.');
+      return;
+    }
+
+    setSignupStep(2);
+  };
+
+  // ── Step2: 보험·건강기록 조회 정보 → CODEF 1차 (실제 가입 시작) ──
+  const handleConnectStart = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    setDuplicateEmail('');
+
     const cleanIdentity = form.identity.replace(/-/g, '');
     if (cleanIdentity.length !== 13) {
       setFieldErrors({ identity: '주민등록번호 13자리를 입력해주세요.' });
+      return;
+    }
+    if (!form.phoneNo.trim()) {
+      setFieldErrors({ phoneNo: '전화번호를 입력해주세요.' });
       return;
     }
 
@@ -105,7 +135,8 @@ export default function LoginPage() {
         email: form.email,
         password: form.password,
         passwordConfirm: form.passwordConfirm,
-        id: form.id,
+        // 사이트 아이디(loginId)를 CODEF 아이디(id)로 그대로 사용 — 같은 값으로 통일
+        id: form.loginId,
         identity: cleanIdentity,
         telecom: form.telecom,
         phoneNo: form.phoneNo,
@@ -113,7 +144,7 @@ export default function LoginPage() {
       });
 
       setSessionKey(data.sessionKey);
-      setSignupStep(2);
+      setSignupStep(3);
     } catch (err) {
       const msg = err.response?.data?.message || '';
       const fe = err.response?.data?.fieldErrors;
@@ -124,15 +155,15 @@ export default function LoginPage() {
         setFieldErrors(fe);
         if (!fe.general) setError(msg || '입력 정보를 확인해주세요.');
       } else {
-        setError(msg || '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        setError(msg || '연동 요청에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // ── 회원가입 Step2: PASS/SMS 인증 확인 ───────────────────
-  const handleSignupStep2 = async (e) => {
+  // ── Step3: SMS / PASS 인증 확인 → 가입 완료 + 로그인 ──────────
+  const handleVerify = async (e) => {
     e.preventDefault();
     setError('');
     setFieldErrors({});
@@ -164,16 +195,19 @@ export default function LoginPage() {
     }
   };
 
-  const goLoginWithEmail = () => {
+  const goLoginWithLoginId = () => {
     setMode('login');
     setForm((f) => ({ ...f, password: '', passwordConfirm: '' }));
     setDuplicateEmail('');
   };
 
-  const goBackToStep1 = () => {
-    setSignupStep(1);
-    setSessionKey('');
-    setSmsAuthNo('');
+  const goPrev = () => {
+    if (signupStep === 3) {
+      setSignupStep(2);
+      setSmsAuthNo('');
+    } else if (signupStep === 2) {
+      setSignupStep(1);
+    }
     setError('');
     setFieldErrors({});
   };
@@ -181,6 +215,19 @@ export default function LoginPage() {
   const isLogin = mode === 'login';
   const pwMatch = form.passwordConfirm && form.password === form.passwordConfirm;
   const pwMismatch = form.passwordConfirm && form.password !== form.passwordConfirm;
+
+  // 단계별 헤더 텍스트
+  const stepTitle = isLogin
+    ? '다시 오신 것을 환영합니다'
+    : signupStep === 1 ? '계정 만들기'
+    : signupStep === 2 ? '보험·건강기록 조회 연동'
+    : '본인 인증';
+
+  const stepSub = isLogin
+    ? '아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
+    : signupStep === 1 ? '먼저 계정 정보를 입력해주세요. 아이디는 내보험다보여 인증에도 함께 사용됩니다.'
+    : signupStep === 2 ? `아이디 "${form.loginId}" 계정에 보험·건강 데이터를 연동합니다.`
+    : (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.');
 
   return (
     <div style={s.page}>
@@ -214,21 +261,22 @@ export default function LoginPage() {
         <section style={s.right}>
           <div style={s.formCard}>
             <header style={s.formHead}>
-              <h2 style={s.formTitle}>
-                {isLogin ? '다시 오신 것을 환영합니다'
-                  : signupStep === 1 ? '계정 만들기'
-                  : '본인 인증'}
-              </h2>
-              <p style={s.formSub}>
-                {isLogin
-                  ? '이메일로 로그인하고 내 건강·보험 현황을 확인하세요.'
-                  : signupStep === 1
-                  ? '몇 가지 정보만 입력하면 시작할 수 있어요.'
-                  : (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')}
-              </p>
+              <h2 style={s.formTitle}>{stepTitle}</h2>
+              <p style={s.formSub}>{stepSub}</p>
             </header>
 
-            {/* 탭 – step2에서는 숨김 */}
+            {/* 진행 표시 — 회원가입 단계에서만 */}
+            {!isLogin && (
+              <div style={s.stepper}>
+                <StepDot n={1} active={signupStep >= 1} done={signupStep > 1} label="계정정보" />
+                <StepLine done={signupStep > 1} />
+                <StepDot n={2} active={signupStep >= 2} done={signupStep > 2} label="조회 연동" />
+                <StepLine done={signupStep > 2} />
+                <StepDot n={3} active={signupStep >= 3} done={false} label="본인 인증" />
+              </div>
+            )}
+
+            {/* 탭 – 로그인/회원가입 (회원가입 step1에서만 노출) */}
             {(isLogin || signupStep === 1) && (
               <div style={s.tabs}>
                 <button type="button" onClick={() => switchMode('login')} style={{ ...s.tab, ...(isLogin ? s.tabActive : {}) }}>로그인</button>
@@ -244,18 +292,18 @@ export default function LoginPage() {
                   <div style={s.dupTitle}>이미 가입된 회원입니다</div>
                   <div style={s.dupDesc}><b>{duplicateEmail}</b> 계정이 이미 존재해요. 로그인해주세요.</div>
                 </div>
-                <button type="button" onClick={goLoginWithEmail} style={s.dupBtn}>로그인하러 가기 →</button>
+                <button type="button" onClick={goLoginWithLoginId} style={s.dupBtn}>로그인하러 가기 →</button>
               </div>
             )}
 
             {/* 가입 성공 메시지 */}
             {successMessage && <div style={s.successMsg}>{successMessage}</div>}
 
-            {/* ── 로그인 폼 ── */}
+            {/* ── 로그인 폼 (아이디로 로그인) ── */}
             {isLogin && (
               <form onSubmit={handleLogin} style={s.form}>
-                <Field label="이메일" icon="✉">
-                  <input name="email" type="email" value={form.email} onChange={handle} placeholder="you@example.com" style={s.input} required autoComplete="email" />
+                <Field label="아이디" icon="🪪">
+                  <input name="loginId" value={form.loginId} onChange={handle} placeholder="가입 시 등록한 아이디" style={s.input} required autoComplete="username" />
                 </Field>
                 <Field label="비밀번호" icon="🔒">
                   <input name="password" type="password" value={form.password} onChange={handle} placeholder="비밀번호" style={s.input} required autoComplete="current-password" />
@@ -267,14 +315,18 @@ export default function LoginPage() {
               </form>
             )}
 
-            {/* ── 회원가입 Step1 폼 ── */}
+            {/* ── 회원가입 Step1: 계정정보 ── */}
             {!isLogin && signupStep === 1 && (
-              <form onSubmit={handleSignupStep1} style={s.form}>
+              <form onSubmit={handleAccountNext} style={s.form}>
                 <Field label="이름" icon="👤" error={fieldErrors.name}>
                   <input name="name" value={form.name} onChange={handle} placeholder="홍길동" style={{ ...s.input, ...(fieldErrors.name ? s.inputError : {}) }} required />
                 </Field>
 
-                <Field label="이메일" icon="✉" error={fieldErrors.email}>
+                <Field label="아이디 (내보험다보여 아이디와 동일하게 사용)" icon="🪪" error={fieldErrors.loginId}>
+                  <input name="loginId" value={form.loginId} onChange={handle} placeholder="영문/숫자 4자 이상" style={{ ...s.input, ...(fieldErrors.loginId ? s.inputError : {}) }} required autoComplete="username" />
+                </Field>
+
+                <Field label="이메일 (인증/알림용)" icon="✉" error={fieldErrors.email}>
                   <input name="email" type="email" value={form.email} onChange={handle} placeholder="you@example.com" style={{ ...s.input, ...(fieldErrors.email ? s.inputError : {}) }} required autoComplete="email" />
                 </Field>
 
@@ -295,11 +347,48 @@ export default function LoginPage() {
                   </Field>
                 </div>
 
-                {/* CODEF 구분선 */}
-                <div style={s.divider}><span style={s.dividerText}>내보험다보여 가입 정보</span></div>
+                <label style={s.agree}>
+                  <input type="checkbox" name="agree" checked={form.agree} onChange={handle} />
+                  <span>
+                    <a href="#terms" style={s.link} onClick={(e) => e.preventDefault()}>서비스 이용약관</a>
+                    {' '}및{' '}
+                    <a href="#privacy" style={s.link} onClick={(e) => e.preventDefault()}>개인정보 처리방침</a>에 동의합니다.
+                  </span>
+                </label>
 
-                <Field label="로그인 아이디" icon="🪪" error={fieldErrors.id}>
-                  <input name="id" value={form.id} onChange={handle} placeholder="내보험다보여에서 사용할 아이디" style={{ ...s.input, ...(fieldErrors.id ? s.inputError : {}) }} required />
+                {error && <div style={s.error}>{error}</div>}
+
+                <button type="submit" style={s.cta}>
+                  다음 →
+                </button>
+              </form>
+            )}
+
+            {/* ── 회원가입 Step2: 보험·건강기록 조회 연동 ── */}
+            {!isLogin && signupStep === 2 && (
+              <form onSubmit={handleConnectStart} style={s.form}>
+                {/* 자동 연동 정보 표시 (수정 불가) */}
+                <div style={s.linkedEmail}>
+                  <span style={s.linkedEmailLabel}>이 정보는 다음 계정에 연동됩니다</span>
+                  <div style={s.linkedEmailRow}>
+                    <span style={{ fontSize: 14 }}>🪪</span>
+                    <span style={s.linkedEmailValue}>{form.loginId}</span>
+                    <span style={s.linkedTag}>아이디</span>
+                  </div>
+                  <div style={{ ...s.linkedEmailRow, marginTop: 4 }}>
+                    <span style={{ fontSize: 14 }}>✉</span>
+                    <span style={{ ...s.linkedEmailValue, fontSize: 12.5, fontWeight: 500, color: '#475569' }}>{form.email}</span>
+                    <button type="button" onClick={() => setSignupStep(1)} style={s.linkedEmailEdit}>변경</button>
+                  </div>
+                </div>
+
+                {/* 내보험다보여 아이디 — 자동 채움, read-only */}
+                <Field label="내보험다보여 아이디 (자동 연동됨)" icon="🪪">
+                  <input
+                    value={form.loginId}
+                    readOnly
+                    style={{ ...s.input, background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
+                  />
                 </Field>
 
                 <Field label="주민등록번호 (13자리)" icon="🔢" error={fieldErrors.identity}>
@@ -329,27 +418,22 @@ export default function LoginPage() {
                   <input name="phoneNo" value={form.phoneNo} onChange={handle} placeholder="01012345678 (- 없이)" style={{ ...s.input, ...(fieldErrors.phoneNo ? s.inputError : {}) }} required />
                 </Field>
 
-                <label style={s.agree}>
-                  <input type="checkbox" name="agree" checked={form.agree} onChange={handle} />
-                  <span>
-                    <a href="#terms" style={s.link} onClick={(e) => e.preventDefault()}>서비스 이용약관</a>
-                    {' '}및{' '}
-                    <a href="#privacy" style={s.link} onClick={(e) => e.preventDefault()}>개인정보 처리방침</a>에 동의합니다.
-                  </span>
-                </label>
-
                 {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {fieldErrors.loginId && <div style={s.error}>{fieldErrors.loginId}</div>}
                 {error && <div style={s.error}>{error}</div>}
 
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
                   {loading ? '처리 중...' : '인증 요청 →'}
                 </button>
+                <button type="button" onClick={goPrev} style={s.backBtn}>
+                  ← 이전 단계
+                </button>
               </form>
             )}
 
-            {/* ── 회원가입 Step2 폼 ── */}
-            {!isLogin && signupStep === 2 && (
-              <form onSubmit={handleSignupStep2} style={s.form}>
+            {/* ── 회원가입 Step3: SMS / PASS 인증 ── */}
+            {!isLogin && signupStep === 3 && (
+              <form onSubmit={handleVerify} style={s.form}>
                 {form.authMethod === '0' ? (
                   <Field label="SMS 인증번호" icon="💬" error={fieldErrors.smsAuthNo}>
                     <input
@@ -381,7 +465,7 @@ export default function LoginPage() {
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
                   {loading ? '처리 중...' : '인증 완료 →'}
                 </button>
-                <button type="button" onClick={goBackToStep1} style={s.backBtn}>
+                <button type="button" onClick={goPrev} style={s.backBtn}>
                   ← 다시 입력하기
                 </button>
               </form>
@@ -430,6 +514,21 @@ function FeatureCard({ icon, iconBg, iconColor, title, desc }) {
       </div>
     </div>
   );
+}
+
+function StepDot({ n, active, done, label }) {
+  const bg = done ? '#0ea371' : active ? '#1d4ed8' : '#e2e8f0';
+  const fg = done || active ? '#fff' : '#94a3b8';
+  return (
+    <div style={s.stepDotWrap}>
+      <div style={{ ...s.stepDot, background: bg, color: fg }}>{done ? '✓' : n}</div>
+      <span style={{ ...s.stepDotLabel, color: active ? '#0f172a' : '#94a3b8', fontWeight: active ? 700 : 500 }}>{label}</span>
+    </div>
+  );
+}
+
+function StepLine({ done }) {
+  return <div style={{ ...s.stepLine, background: done ? '#0ea371' : '#e2e8f0' }} />;
 }
 
 // ── 스타일 ───────────────────────────────────────────────
@@ -482,9 +581,25 @@ const s = {
   formHead: { marginBottom: 20 },
   formTitle: { fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: -0.3 },
   formSub: { fontSize: 13, color: '#64748b', marginTop: 6, marginBottom: 0 },
+
+  // Stepper
+  stepper: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 20 },
+  stepDotWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: '0 0 auto' },
+  stepDot: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, transition: 'all .15s' },
+  stepDotLabel: { fontSize: 11, letterSpacing: -0.2 },
+  stepLine: { flex: 1, height: 2, marginBottom: 18, transition: 'background .15s' },
+
   tabs: { display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 4, marginBottom: 18 },
   tab: { flex: 1, padding: '8px 0', border: 'none', background: 'transparent', borderRadius: 8, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: '#64748b', transition: 'all .15s' },
   tabActive: { background: '#fff', color: '#1d4ed8', boxShadow: '0 1px 4px rgba(0,0,0,.08)' },
+
+  // Linked info box (Step2 상단)
+  linkedEmail: { background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 12, padding: '12px 14px', marginBottom: 4 },
+  linkedEmailLabel: { fontSize: 11, fontWeight: 700, color: '#0369a1', letterSpacing: 0.4, textTransform: 'uppercase' },
+  linkedEmailRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 },
+  linkedEmailValue: { flex: 1, fontSize: 14, fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' },
+  linkedEmailEdit: { background: 'none', border: 'none', color: '#0369a1', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '4px 6px' },
+  linkedTag: { fontSize: 10, fontWeight: 700, color: '#0369a1', background: '#dbeafe', padding: '2px 6px', borderRadius: 4, letterSpacing: 0.3 },
 
   // 중복 배너
   dupBanner: { display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 14px', marginBottom: 14 },
@@ -494,10 +609,6 @@ const s = {
 
   // 성공 메시지
   successMsg: { background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12, padding: '12px 16px', color: '#15803d', fontSize: 14, fontWeight: 600, textAlign: 'center', marginBottom: 14 },
-
-  // 구분선
-  divider: { display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0', borderTop: '1px solid #e2e8f0', paddingTop: 8 },
-  dividerText: { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 0.5, whiteSpace: 'nowrap' },
 
   // PASS 안내
   passNotice: { display: 'flex', gap: 14, alignItems: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: '18px 16px' },
@@ -512,7 +623,6 @@ const s = {
   input: { width: '100%', padding: '11px 14px 11px 36px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none', background: '#f8fafc', boxSizing: 'border-box', transition: 'border-color .15s, background .15s' },
   inputError: { borderColor: '#ef4444' },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
-  hintError: { fontSize: 12, color: '#dc2626', marginTop: -4 },
   agree: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: '#475569', lineHeight: 1.5, marginTop: 4 },
   link: { color: '#1d4ed8', fontWeight: 600, textDecoration: 'none' },
   error: { background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', color: '#b91c1c', fontSize: 13 },
