@@ -29,10 +29,10 @@ public class InsuranceController {
      * Get active policies for user
      */
     @GetMapping("/policies")
-    public ResponseEntity<List<Policy>> getActivePolicies(@RequestParam Long userId) {
-        log.info("GET /api/insurance/policies - userId: {}", userId);
+    public ResponseEntity<List<Policy>> getActivePolicies(@RequestParam String codefId) {
+        log.info("GET /api/insurance/policies - codefId: {}", codefId);
         try {
-            List<Policy> policies = insuranceService.getActivePolicies(userId);
+            List<Policy> policies = insuranceService.getActivePoliciesByCodefId(codefId);
             return ResponseEntity.ok(policies);
         } catch (Exception e) {
             log.error("Error getting policies: {}", e.getMessage(), e);
@@ -44,10 +44,10 @@ public class InsuranceController {
      * Get all policies for user
      */
     @GetMapping("/policies/all")
-    public ResponseEntity<List<Policy>> getAllPolicies(@RequestParam Long userId) {
-        log.info("GET /api/insurance/policies/all - userId: {}", userId);
+    public ResponseEntity<List<Policy>> getAllPolicies(@RequestParam String codefId) {
+        log.info("GET /api/insurance/policies/all - codefId: {}", codefId);
         try {
-            List<Policy> policies = insuranceService.getAllPolicies(userId);
+            List<Policy> policies = insuranceService.getAllPoliciesByCodefId(codefId);
             return ResponseEntity.ok(policies);
         } catch (Exception e) {
             log.error("Error getting all policies: {}", e.getMessage(), e);
@@ -110,10 +110,10 @@ public class InsuranceController {
      * Get insurance summary for user
      */
     @GetMapping("/summary")
-    public ResponseEntity<Map<String, Object>> getInsuranceSummary(@RequestParam Long userId) {
-        log.info("GET /api/insurance/summary - userId: {}", userId);
+    public ResponseEntity<Map<String, Object>> getInsuranceSummary(@RequestParam String codefId) {
+        log.info("GET /api/insurance/summary - codefId: {}", codefId);
         try {
-            Map<String, Object> summary = insuranceService.getInsuranceSummary(userId);
+            Map<String, Object> summary = insuranceService.getInsuranceSummary(codefId);
             return ResponseEntity.ok(summary);
         } catch (Exception e) {
             log.error("Error getting insurance summary: {}", e.getMessage(), e);
@@ -126,14 +126,12 @@ public class InsuranceController {
      */
     @PostMapping("/sync")
     public ResponseEntity<Map<String, Object>> syncInsurance(@RequestBody Map<String, Object> body) {
-        Object userIdObj = body.get("userId");
-        if (userIdObj == null) return ResponseEntity.badRequest().body(Map.of("message", "userId가 필요합니다."));
-        Long userId = Long.parseLong(userIdObj.toString());
-        log.info("POST /api/insurance/sync - userId: {}", userId);
+        String codefId = (String) body.get("codefId");
+        if (codefId == null || codefId.isBlank()) return ResponseEntity.badRequest().body(Map.of("message", "codefId가 필요합니다."));
+        log.info("POST /api/insurance/sync - codefId: {}", codefId);
         try {
             int saved = codefSyncService.syncInsuranceData(
-                    userId,
-                    (String) body.get("codefId"),
+                    codefId,
                     (String) body.get("codefPassword")
             );
             return ResponseEntity.ok(Map.of(

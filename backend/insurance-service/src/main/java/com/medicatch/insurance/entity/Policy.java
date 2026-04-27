@@ -22,8 +22,11 @@ public class Policy {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column
     private Long userId;
+
+    @Column
+    private String codefId;
 
     @Column(nullable = false)
     private String policyNumber;

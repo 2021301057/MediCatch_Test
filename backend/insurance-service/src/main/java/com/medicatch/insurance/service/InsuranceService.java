@@ -45,6 +45,18 @@ public class InsuranceService {
         return policyRepository.findByUserId(userId);
     }
 
+    @Transactional(readOnly = true)
+    public List<Policy> getActivePoliciesByCodefId(String codefId) {
+        log.info("Getting active policies for codefId: {}", codefId);
+        return policyRepository.findByCodefIdAndIsActive(codefId, true);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Policy> getAllPoliciesByCodefId(String codefId) {
+        log.info("Getting all policies for codefId: {}", codefId);
+        return policyRepository.findByCodefId(codefId);
+    }
+
     /**
      * Get policy by ID
      */
@@ -137,16 +149,16 @@ public class InsuranceService {
     }
 
     /**
-     * Get insurance summary for user
+     * Get insurance summary for user by codefId
      */
     @Transactional(readOnly = true)
-    public Map<String, Object> getInsuranceSummary(Long userId) {
-        log.info("Getting insurance summary for userId: {}", userId);
+    public Map<String, Object> getInsuranceSummary(String codefId) {
+        log.info("Getting insurance summary for codefId: {}", codefId);
 
-        List<Policy> activePolicies = getActivePolicies(userId);
+        List<Policy> activePolicies = getActivePoliciesByCodefId(codefId);
 
         Map<String, Object> summary = new HashMap<>();
-        summary.put("userId", userId);
+        summary.put("codefId", codefId);
         summary.put("activePolicyCount", activePolicies.size());
         summary.put("policies", activePolicies);
 

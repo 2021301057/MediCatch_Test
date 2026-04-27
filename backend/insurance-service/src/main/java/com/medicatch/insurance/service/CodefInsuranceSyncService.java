@@ -44,7 +44,7 @@ public class CodefInsuranceSyncService {
     }
 
     @Transactional
-    public int syncInsuranceData(Long userId, String codefId, String codefPassword) {
+    public int syncInsuranceData(String codefId, String codefPassword) {
         try {
             if (publicKey == null || publicKey.isBlank()) {
                 throw new RuntimeException("CODEF 공개키가 설정되지 않았습니다.");
@@ -58,7 +58,7 @@ public class CodefInsuranceSyncService {
             params.put("type",        "0");
 
             EasyCodef codef = createCodef();
-            log.info("CODEF 보험 계약 정보 조회 - userId: {}, codefId: {}", userId, codefId);
+            log.info("CODEF 보험 계약 정보 조회 - codefId: {}", codefId);
             String result = codef.requestProduct(CONTRACT_URL, serviceType(), params);
             log.debug("보험 계약 응답: {}", result);
 
@@ -72,7 +72,7 @@ public class CodefInsuranceSyncService {
             }
 
             Map<String, Object> data = toMap(responseMap.get("data"));
-            return savePolicies(userId, data);
+            return savePolicies(codefId, data);
 
         } catch (RuntimeException e) {
             throw e;
@@ -83,31 +83,30 @@ public class CodefInsuranceSyncService {
     }
 
     @SuppressWarnings("unchecked")
-    private int savePolicies(Long userId, Map<String, Object> data) {
+    private int savePolicies(String codefId, Map<String, Object> data) {
         // 기존 데이터 삭제
-        List<Policy> existing = policyRepository.findByUserId(userId);
-        policyRepository.deleteAll(existing);
+        policyRepository.deleteByCodefId(codefId);
 
         List<Policy> toSave = new ArrayList<>();
 
         // 실손의료비 계약
-        toSave.addAll(parseContracts(userId, data, "resActualLossContractList", "SUPPLEMENTARY"));
+        toSave.addAll(parseContracts(codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
         // 정액형(상해/질병) 계약
-        toSave.addAll(parseContracts(userId, data, "resFlatRateContractList", "ACCIDENT"));
+        toSave.addAll(parseContracts(codefId, data, "resFlatRateContractList", "ACCIDENT"));
         // 저축성 계약
-        toSave.addAll(parseContracts(userId, data, "resSavingsContractList", "NATIONAL_HEALTH"));
+        toSave.addAll(parseContracts(codefId, data, "resSavingsContractList", "NATIONAL_HEALTH"));
         // 자동차 계약
-        toSave.addAll(parseContracts(userId, data, "resCarContractList", "ACCIDENT"));
+        toSave.addAll(parseContracts(codefId, data, "resCarContractList", "ACCIDENT"));
         // 재물 계약
-        toSave.addAll(parseContracts(userId, data, "resPropertyContractList", "ACCIDENT"));
+        toSave.addAll(parseContracts(codefId, data, "resPropertyContractList", "ACCIDENT"));
 
         policyRepository.saveAll(toSave);
-        log.info("보험 데이터 저장 완료 - userId: {}, policies: {}", userId, toSave.size());
+        log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, toSave.size());
         return toSave.size();
     }
 
     @SuppressWarnings("unchecked")
-    private List<Policy> parseContracts(Long userId, Map<String, Object> data,
+    private List<Policy> parseContracts(String codefId, Map<String, Object> data,
                                          String key, String insuranceType) {
         List<Map<String, Object>> list =
                 (List<Map<String, Object>>) data.getOrDefault(key, List.of());
@@ -133,7 +132,7 @@ public class CodefInsuranceSyncService {
             List<CoverageItem> coverageItems = parseCoverageItems(item);
 
             Policy policy = Policy.builder()
-                    .userId(userId)
+                    .codefId(codefId)
                     .policyNumber(policyNumber)
                     .insurerName(strOrDefault(item.get("resCompanyNm"), "미상"))
                     .insuranceType(insuranceType)

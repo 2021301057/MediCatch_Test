@@ -9,10 +9,11 @@ api.interceptors.request.use(config => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
-  // GET 요청에 userId 자동 포함
+  // GET 요청에 userId, codefId 자동 포함
   if (config.method === 'get') {
     const userId = localStorage.getItem('userId');
-    if (userId) config.params = { userId, ...config.params };
+    const codefId = localStorage.getItem('codefId');
+    config.params = { ...(userId ? { userId } : {}), ...(codefId ? { codefId } : {}), ...config.params };
   }
   return config;
 });

@@ -61,7 +61,6 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     try {
       const [, healthResp] = await Promise.all([
         insuranceAPI.sync({
-          userId,
           codefId:       form.codefId,
           codefPassword: form.codefPassword,
         }),
@@ -75,6 +74,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         }),
       ]);
 
+      localStorage.setItem('codefId', form.codefId);
       setSessionKey(healthResp.data.sessionKey);
       setStep(2);
     } catch (err) {
