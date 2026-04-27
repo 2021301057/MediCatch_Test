@@ -41,7 +41,6 @@ export default function App() {
     if (isAuthenticated) {
       authAPI.profile().then(r => setUser(r.data)).catch(() => {});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
