@@ -20,7 +20,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -93,11 +95,25 @@ public class CodefSyncService {
             hiraParams.put("id",             sharedId);
             if ("5".equals(loginTypeLevel)) hiraParams.put("telecom", telecom);
 
-            // 건강검진 1차
-            EasyCodef nhisCodef = createCodef();
-            log.info("NHIS 1차 요청 - userId: {}", userId);
-            String nhisResult = nhisCodef.requestProduct(NHIS_URL, serviceType(), nhisParams);
+            // 건강검진 + 진료정보 1차 동시 요청 (알림이 동시에 전송되도록)
+            EasyCodefServiceType svcType = serviceType();
+            CompletableFuture<String> nhisFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    log.info("NHIS 1차 요청 - userId: {}", userId);
+                    return createCodef().requestProduct(NHIS_URL, svcType, nhisParams);
+                } catch (Exception e) { throw new RuntimeException(e); }
+            });
+            CompletableFuture<String> hiraFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    log.info("HIRA 1차 요청 - userId: {}", userId);
+                    return createCodef().requestProduct(HIRA_URL, svcType, hiraParams);
+                } catch (Exception e) { throw new RuntimeException(e); }
+            });
+
+            String nhisResult = nhisFuture.get(90, TimeUnit.SECONDS);
+            String hiraResult = hiraFuture.get(90, TimeUnit.SECONDS);
             log.info("NHIS 1차 응답: {}", nhisResult);
+            log.info("HIRA 1차 응답: {}", hiraResult);
 
             Map<String, Object> nhisMap    = objectMapper.readValue(nhisResult, Map.class);
             Map<String, Object> nhisResult2 = toMap(nhisMap.get("result"));
@@ -107,14 +123,6 @@ public class CodefSyncService {
                 throw new RuntimeException("건강검진(NHIS) 오류 [" + nhisCode + "]: " + msg);
             }
             Map<String, Object> nhisData = toMap(nhisMap.get("data"));
-
-            Thread.sleep(800);
-
-            // 진료정보 1차
-            EasyCodef hiraCodef = createCodef();
-            log.info("HIRA 1차 요청 - userId: {}", userId);
-            String hiraResult = hiraCodef.requestProduct(HIRA_URL, serviceType(), hiraParams);
-            log.info("HIRA 1차 응답: {}", hiraResult);
 
             Map<String, Object> hiraMap    = objectMapper.readValue(hiraResult, Map.class);
             Map<String, Object> hiraResult2 = toMap(hiraMap.get("result"));
