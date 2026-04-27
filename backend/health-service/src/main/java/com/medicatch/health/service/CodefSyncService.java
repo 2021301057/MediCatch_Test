@@ -97,9 +97,15 @@ public class CodefSyncService {
             EasyCodef nhisCodef = createCodef();
             log.info("NHIS 1차 요청 - userId: {}", userId);
             String nhisResult = nhisCodef.requestProduct(NHIS_URL, serviceType(), nhisParams);
-            log.debug("NHIS 1차 응답: {}", nhisResult);
+            log.info("NHIS 1차 응답: {}", nhisResult);
 
-            Map<String, Object> nhisMap  = objectMapper.readValue(nhisResult, Map.class);
+            Map<String, Object> nhisMap    = objectMapper.readValue(nhisResult, Map.class);
+            Map<String, Object> nhisResult2 = toMap(nhisMap.get("result"));
+            String nhisCode = (String) nhisResult2.get("code");
+            if (!"CF-00000".equals(nhisCode) && !"CF-03002".equals(nhisCode)) {
+                String msg = (String) nhisResult2.getOrDefault("message", "건강검진 정보 조회 실패");
+                throw new RuntimeException("건강검진(NHIS) 오류 [" + nhisCode + "]: " + msg);
+            }
             Map<String, Object> nhisData = toMap(nhisMap.get("data"));
 
             Thread.sleep(800);
@@ -108,9 +114,15 @@ public class CodefSyncService {
             EasyCodef hiraCodef = createCodef();
             log.info("HIRA 1차 요청 - userId: {}", userId);
             String hiraResult = hiraCodef.requestProduct(HIRA_URL, serviceType(), hiraParams);
-            log.debug("HIRA 1차 응답: {}", hiraResult);
+            log.info("HIRA 1차 응답: {}", hiraResult);
 
-            Map<String, Object> hiraMap  = objectMapper.readValue(hiraResult, Map.class);
+            Map<String, Object> hiraMap    = objectMapper.readValue(hiraResult, Map.class);
+            Map<String, Object> hiraResult2 = toMap(hiraMap.get("result"));
+            String hiraCode = (String) hiraResult2.get("code");
+            if (!"CF-00000".equals(hiraCode) && !"CF-03002".equals(hiraCode)) {
+                String msg = (String) hiraResult2.getOrDefault("message", "진료정보 조회 실패");
+                throw new RuntimeException("진료정보(HIRA) 오류 [" + hiraCode + "]: " + msg);
+            }
             Map<String, Object> hiraData = toMap(hiraMap.get("data"));
 
             String sessionKey = UUID.randomUUID().toString();

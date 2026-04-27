@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -140,7 +141,9 @@ public class InsuranceController {
             ));
         } catch (Exception e) {
             log.error("보험 데이터 동기화 실패: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            Map<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류가 발생했습니다.");
+            return ResponseEntity.badRequest().body(err);
         }
     }
 
