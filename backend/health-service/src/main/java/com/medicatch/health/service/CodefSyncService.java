@@ -65,35 +65,33 @@ public class CodefSyncService {
                                        String identity13, String telecom, String authMethod,
                                        String startDate, String endDate) {
         try {
-            String identity8 = deriveIdentity8(identity13);
-            String startYear = startDate.substring(0, 4);
-            String endYear   = endDate.substring(0, 4);
-            String hiraStart = startDate.replace("-", "");
-            String hiraEnd   = endDate.replace("-", "");
-            String sharedId  = "mc_" + userId;
+            String identity8  = deriveIdentity8(identity13);
+            String currentYear = String.valueOf(LocalDate.now().getYear());
+            String today       = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String sharedId    = "mc_" + userId;
 
             HashMap<String, Object> nhisParams = new HashMap<>();
             nhisParams.put("organization",    "0002");
             nhisParams.put("loginType",       "5");
-            nhisParams.put("loginTypeLevel",  "1");
+            nhisParams.put("loginTypeLevel",  "5");
             nhisParams.put("userName",        userName);
             nhisParams.put("phoneNo",         phoneNo);
             nhisParams.put("identity",        identity8);
             nhisParams.put("telecom",         telecom);
-            nhisParams.put("searchStartYear", startYear);
-            nhisParams.put("searchEndYear",   endYear);
+            nhisParams.put("searchStartYear", "2023");
+            nhisParams.put("searchEndYear",   currentYear);
             nhisParams.put("id",              sharedId);
 
             HashMap<String, Object> hiraParams = new HashMap<>();
             hiraParams.put("organization",   "0020");
             hiraParams.put("loginType",      "5");
-            hiraParams.put("loginTypeLevel", "1");
+            hiraParams.put("loginTypeLevel", "5");
             hiraParams.put("userName",       userName);
             hiraParams.put("phoneNo",        phoneNo);
             hiraParams.put("identity",       identity13);
             hiraParams.put("telecom",        telecom);
-            hiraParams.put("startDate",      hiraStart);
-            hiraParams.put("endDate",        hiraEnd);
+            hiraParams.put("startDate",      "20230101");
+            hiraParams.put("endDate",        today);
             hiraParams.put("id",             sharedId);
 
             // 건강검진 1차
