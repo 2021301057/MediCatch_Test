@@ -122,7 +122,9 @@ public class HealthController {
      */
     @PostMapping("/sync/step1")
     public ResponseEntity<Map<String, Object>> syncStep1(@RequestBody Map<String, Object> body) {
-        Long userId = Long.parseLong(body.get("userId").toString());
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) return ResponseEntity.badRequest().body(Map.of("message", "userId가 필요합니다."));
+        Long userId = Long.parseLong(userIdObj.toString());
         log.info("POST /api/health/sync/step1 - userId: {}", userId);
         try {
             CodefSyncService.SyncStep1Response resp = codefSyncService.syncStep1(

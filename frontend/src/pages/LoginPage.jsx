@@ -66,7 +66,7 @@ export default function LoginPage() {
     setError('');
     try {
       const { data } = await authAPI.login({ email: form.email, password: form.password });
-      login(data.user, data.accessToken, data.refreshToken);
+      login(data, data.accessToken, data.refreshToken);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || '이메일 또는 비밀번호가 올바르지 않습니다.');
@@ -218,7 +218,7 @@ export default function LoginPage() {
       const { data } = await authAPI.signupStep4({ sessionKey, emailAuthNo: emailAuthNo.trim() });
       setSuccessMessage('회원가입이 완료되었습니다!');
       setTimeout(() => {
-        login(data.user, data.accessToken, data.refreshToken);
+        login(data, data.accessToken, data.refreshToken);
         navigate('/');
       }, 1000);
     } catch (err) {

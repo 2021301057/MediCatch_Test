@@ -126,7 +126,9 @@ public class InsuranceController {
      */
     @PostMapping("/sync")
     public ResponseEntity<Map<String, Object>> syncInsurance(@RequestBody Map<String, Object> body) {
-        Long userId = Long.parseLong(body.get("userId").toString());
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) return ResponseEntity.badRequest().body(Map.of("message", "userId가 필요합니다."));
+        Long userId = Long.parseLong(userIdObj.toString());
         log.info("POST /api/insurance/sync - userId: {}", userId);
         try {
             int saved = codefSyncService.syncInsuranceData(
