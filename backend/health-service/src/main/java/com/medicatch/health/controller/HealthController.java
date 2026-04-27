@@ -131,13 +131,11 @@ public class HealthController {
                     (String) body.get("phoneNo"),
                     (String) body.get("identity13"),
                     (String) body.get("telecom"),
-                    (String) body.get("authMethod"),
-                    (String) body.get("startDate"),
-                    (String) body.get("endDate")
+                    (String) body.get("loginTypeLevel")
             );
             return ResponseEntity.ok(Map.of(
                     "sessionKey",      resp.getSessionKey(),
-                    "authMethod",      resp.getAuthMethod(),
+                    "loginTypeLevel",  resp.getLoginTypeLevel(),
                     "requiresTwoWay",  resp.isRequiresTwoWay()
             ));
         } catch (Exception e) {
@@ -154,8 +152,7 @@ public class HealthController {
         log.info("POST /api/health/sync/step2");
         try {
             String sessionKey = (String) body.get("sessionKey");
-            String smsAuthNo  = (String) body.getOrDefault("smsAuthNo", "");
-            CodefSyncService.SyncStep2Result result = codefSyncService.syncStep2(sessionKey, smsAuthNo);
+            CodefSyncService.SyncStep2Result result = codefSyncService.syncStep2(sessionKey, "");
             return ResponseEntity.ok(Map.of(
                     "message",          "건강 데이터 동기화가 완료되었습니다.",
                     "savedCheckups",    result.getSavedCheckups(),

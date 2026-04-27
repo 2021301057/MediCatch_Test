@@ -62,10 +62,9 @@ public class CodefSyncService {
     // ── Step1: 1차 요청 (건강검진 + 진료정보 병렬 트리거) ──────────────────
 
     public SyncStep1Response syncStep1(Long userId, String userName, String phoneNo,
-                                       String identity13, String telecom, String authMethod,
-                                       String startDate, String endDate) {
+                                       String identity13, String telecom, String loginTypeLevel) {
         try {
-            String identity8  = deriveIdentity8(identity13);
+            String identity8   = deriveIdentity8(identity13);
             String currentYear = String.valueOf(LocalDate.now().getYear());
             String today       = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             String sharedId    = "mc_" + userId;
@@ -73,26 +72,26 @@ public class CodefSyncService {
             HashMap<String, Object> nhisParams = new HashMap<>();
             nhisParams.put("organization",    "0002");
             nhisParams.put("loginType",       "5");
-            nhisParams.put("loginTypeLevel",  "5");
+            nhisParams.put("loginTypeLevel",  loginTypeLevel);
             nhisParams.put("userName",        userName);
             nhisParams.put("phoneNo",         phoneNo);
             nhisParams.put("identity",        identity8);
-            nhisParams.put("telecom",         telecom);
             nhisParams.put("searchStartYear", "2023");
             nhisParams.put("searchEndYear",   currentYear);
             nhisParams.put("id",              sharedId);
+            if ("5".equals(loginTypeLevel)) nhisParams.put("telecom", telecom);
 
             HashMap<String, Object> hiraParams = new HashMap<>();
             hiraParams.put("organization",   "0020");
             hiraParams.put("loginType",      "5");
-            hiraParams.put("loginTypeLevel", "5");
+            hiraParams.put("loginTypeLevel", loginTypeLevel);
             hiraParams.put("userName",       userName);
             hiraParams.put("phoneNo",        phoneNo);
             hiraParams.put("identity",       identity13);
-            hiraParams.put("telecom",        telecom);
             hiraParams.put("startDate",      "20230101");
             hiraParams.put("endDate",        today);
             hiraParams.put("id",             sharedId);
+            if ("5".equals(loginTypeLevel)) hiraParams.put("telecom", telecom);
 
             // 건강검진 1차
             EasyCodef nhisCodef = createCodef();
@@ -117,11 +116,11 @@ public class CodefSyncService {
             String sessionKey = UUID.randomUUID().toString();
             sessions.put(sessionKey, new SyncSession(
                     userId, nhisParams, nhisData, hiraParams, hiraData,
-                    authMethod, LocalDateTime.now()
+                    loginTypeLevel, LocalDateTime.now()
             ));
 
             log.info("건강 데이터 동기화 1차 완료 - sessionKey: {}", sessionKey);
-            return new SyncStep1Response(sessionKey, authMethod, true);
+            return new SyncStep1Response(sessionKey, loginTypeLevel, true);
 
         } catch (Exception e) {
             log.error("건강 데이터 동기화 1차 실패: {}", e.getMessage(), e);
@@ -349,7 +348,7 @@ public class CodefSyncService {
     @AllArgsConstructor
     public static class SyncStep1Response {
         private String sessionKey;
-        private String authMethod;
+        private String loginTypeLevel;
         private boolean requiresTwoWay;
     }
 

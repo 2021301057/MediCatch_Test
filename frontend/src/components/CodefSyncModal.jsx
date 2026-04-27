@@ -2,35 +2,37 @@ import React, { useState } from 'react';
 import { healthAPI, insuranceAPI } from '../api/services';
 
 const TELECOM_OPTIONS = [
-  { value: '0', label: 'SKT' },
-  { value: '1', label: 'KT' },
-  { value: '2', label: 'LG U+' },
-  { value: '3', label: '알뜰폰(SKT)' },
-  { value: '4', label: '알뜰폰(KT)' },
-  { value: '5', label: '알뜰폰(LG U+)' },
+  { value: '0', label: 'SKT / SKT 알뜰폰' },
+  { value: '1', label: 'KT / KT 알뜰폰' },
+  { value: '2', label: 'LG U+ / LG U+ 알뜰폰' },
 ];
 
-const today      = new Date().toISOString().slice(0, 10);
-const threeYears = new Date(Date.now() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const AUTH_LEVEL_OPTIONS = [
+  { value: '5',  label: '통신사 PASS', icon: '📱' },
+  { value: '1',  label: '카카오톡',    icon: '💬' },
+  { value: '3',  label: '삼성 패스',   icon: '🔐' },
+  { value: '4',  label: 'KB모바일',    icon: '🏦' },
+  { value: '6',  label: '네이버',      icon: '🟢' },
+  { value: '7',  label: '신한인증서',  icon: '🔴' },
+  { value: '8',  label: 'toss',        icon: '💙' },
+  { value: '10', label: 'NH인증서',    icon: '🌾' },
+];
 
 export default function CodefSyncModal({ userId, onClose, onSuccess }) {
-  const [step, setStep] = useState(1); // 1=폼입력, 2=SMS/PASS 인증, 3=완료
+  const [step, setStep] = useState(1); // 1=폼입력, 2=앱 인증, 3=완료
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sessionKey, setSessionKey] = useState('');
-  const [smsAuthNo, setSmsAuthNo] = useState('');
   const [resultStats, setResultStats] = useState(null);
 
   const [form, setForm] = useState({
-    codefId:       '',
-    codefPassword: '',
-    userName:      '',
-    phoneNo:       '',
-    identity13:    '',
-    telecom:       '0',
-    authMethod:    '0',
-    startDate:     threeYears,
-    endDate:       today,
+    codefId:        '',
+    codefPassword:  '',
+    userName:       '',
+    phoneNo:        '',
+    identity13:     '',
+    telecom:        '0',
+    loginTypeLevel: '5',
   });
 
   const handle = (e) => {
@@ -38,7 +40,10 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     setForm(f => ({ ...f, [name]: value }));
   };
 
-  // ── Step1: 정보 입력 후 요청 ────────────────────────────────────
+  const selectedAuth = AUTH_LEVEL_OPTIONS.find(o => o.value === form.loginTypeLevel);
+  const needsTelecom = form.loginTypeLevel === '5';
+
+  // ── Step1: 정보 입력 후 요청 ─────────────────────────────────────────
   const handleStep1 = async (e) => {
     e.preventDefault();
     setError('');
@@ -54,7 +59,6 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
 
     setLoading(true);
     try {
-      // 보험과 건강검진+진료 동시 요청 (보험은 즉시 완료, 건강은 인증 필요)
       const [, healthResp] = await Promise.all([
         insuranceAPI.sync({
           userId,
@@ -63,13 +67,11 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         }),
         healthAPI.syncStep1({
           userId,
-          userName:   form.userName,
-          phoneNo:    form.phoneNo,
-          identity13: cleanId,
-          telecom:    form.telecom,
-          authMethod: form.authMethod,
-          startDate:  form.startDate,
-          endDate:    form.endDate,
+          userName:       form.userName,
+          phoneNo:        form.phoneNo,
+          identity13:     cleanId,
+          telecom:        needsTelecom ? form.telecom : '',
+          loginTypeLevel: form.loginTypeLevel,
         }),
       ]);
 
@@ -82,21 +84,13 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     }
   };
 
-  // ── Step2: 인증 확인 후 건강 데이터 저장 ─────────────────────────
+  // ── Step2: 앱 인증 완료 확인 ─────────────────────────────────────────
   const handleStep2 = async (e) => {
     e.preventDefault();
     setError('');
-    if (form.authMethod === '0' && !smsAuthNo.trim()) {
-      setError('SMS 인증번호를 입력해주세요.');
-      return;
-    }
-
     setLoading(true);
     try {
-      const { data } = await healthAPI.syncStep2({
-        sessionKey,
-        smsAuthNo: smsAuthNo.trim(),
-      });
+      const { data } = await healthAPI.syncStep2({ sessionKey });
       setResultStats(data);
       setStep(3);
     } catch (err) {
@@ -120,7 +114,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
             <h3 style={s.title}>🔄 CODEF 데이터 갱신</h3>
             <p style={s.subtitle}>
               {step === 1 && '보험·건강검진·진료 정보를 한 번에 불러옵니다'}
-              {step === 2 && (form.authMethod === '0' ? 'SMS 인증번호를 입력해주세요' : 'PASS 앱에서 인증을 수락해주세요')}
+              {step === 2 && `${selectedAuth?.icon} ${selectedAuth?.label} 앱에서 인증을 완료해주세요`}
               {step === 3 && '동기화가 완료되었습니다 🎉'}
             </p>
           </div>
@@ -129,7 +123,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
 
         {/* 진행 표시 */}
         <div style={s.progress}>
-          {['정보 입력', '인증 확인', '완료'].map((label, i) => (
+          {['정보 입력', '앱 인증', '완료'].map((label, i) => (
             <div key={i} style={s.progressItem}>
               <div style={{ ...s.progressDot, background: step > i ? '#1d4ed8' : step === i + 1 ? '#1d4ed8' : '#e2e8f0', opacity: step === i + 1 ? 1 : step > i + 1 ? 0.6 : 0.3 }} />
               <span style={{ ...s.progressLabel, color: step >= i + 1 ? '#1d4ed8' : '#94a3b8' }}>{label}</span>
@@ -157,7 +151,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
             </div>
 
             <div style={s.section}>
-              <div style={s.sectionTitle}>🏥 건강검진·진료 정보 (휴대폰 인증 필요)</div>
+              <div style={s.sectionTitle}>🏥 건강검진·진료 정보 (간편 인증 필요)</div>
               <div style={s.row2}>
                 <Field label="이름">
                   <input name="userName" value={form.userName} onChange={handle}
@@ -172,27 +166,27 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
                 <input name="identity13" type="password" value={form.identity13} onChange={handle}
                   placeholder="하이픈 없이 13자리" maxLength={13} style={s.input} required autoComplete="off" />
               </Field>
-              <div style={s.row2}>
+
+              <Field label="인증 방법">
+                <div style={s.authGrid}>
+                  {AUTH_LEVEL_OPTIONS.map(o => (
+                    <label key={o.value} style={{ ...s.authOption, ...(form.loginTypeLevel === o.value ? s.authOptionActive : {}) }}>
+                      <input type="radio" name="loginTypeLevel" value={o.value}
+                        checked={form.loginTypeLevel === o.value} onChange={handle} style={{ display: 'none' }} />
+                      <span style={s.authIcon}>{o.icon}</span>
+                      <span style={s.authLabel}>{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
+
+              {needsTelecom && (
                 <Field label="통신사">
                   <select name="telecom" value={form.telecom} onChange={handle} style={s.input}>
                     {TELECOM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </Field>
-                <Field label="인증 방법">
-                  <select name="authMethod" value={form.authMethod} onChange={handle} style={s.input}>
-                    <option value="0">SMS 인증</option>
-                    <option value="1">PASS 앱 인증</option>
-                  </select>
-                </Field>
-              </div>
-              <div style={s.row2}>
-                <Field label="조회 시작일">
-                  <input name="startDate" type="date" value={form.startDate} onChange={handle} style={s.input} required />
-                </Field>
-                <Field label="조회 종료일">
-                  <input name="endDate" type="date" value={form.endDate} onChange={handle} style={s.input} required />
-                </Field>
-              </div>
+              )}
             </div>
 
             <button type="submit" disabled={loading} style={s.primaryBtn}>
@@ -201,29 +195,20 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
           </form>
         )}
 
-        {/* ── Step2: 인증 ── */}
+        {/* ── Step2: 앱 인증 ── */}
         {step === 2 && (
           <form onSubmit={handleStep2} style={s.form}>
-            {form.authMethod === '0' ? (
-              <Field label="SMS 인증번호">
-                <input
-                  value={smsAuthNo}
-                  onChange={e => setSmsAuthNo(e.target.value)}
-                  placeholder="SMS로 받은 6~8자리 인증번호"
-                  maxLength={8}
-                  style={s.input}
-                  autoFocus
-                />
-              </Field>
-            ) : (
-              <div style={s.passNotice}>
-                <span style={{ fontSize: 36 }}>📲</span>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>PASS 앱을 확인해주세요</div>
-                  <div style={{ fontSize: 13, color: '#64748b' }}>PASS 앱에서 인증 요청을 수락한 후 아래 버튼을 눌러주세요.</div>
+            <div style={s.appNotice}>
+              <span style={{ fontSize: 44 }}>{selectedAuth?.icon}</span>
+              <div>
+                <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4, fontSize: 15 }}>
+                  {selectedAuth?.label} 앱을 확인해주세요
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                  인증 요청을 수락한 후 아래 버튼을 눌러주세요.
                 </div>
               </div>
-            )}
+            </div>
             <button type="submit" disabled={loading} style={s.primaryBtn}>
               {loading ? '⏳ 처리 중...' : '인증 완료 →'}
             </button>
@@ -283,7 +268,7 @@ const s = {
     color: '#94a3b8', padding: '2px 6px', borderRadius: 6, flexShrink: 0,
   },
   progress: {
-    display: 'flex', alignItems: 'center', gap: 0, padding: '16px 24px',
+    display: 'flex', alignItems: 'center', padding: '16px 24px',
     borderBottom: '1px solid #f1f5f9',
   },
   progressItem: { display: 'flex', alignItems: 'center', gap: 6, flex: 1 },
@@ -306,10 +291,23 @@ const s = {
     borderRadius: 10, fontSize: 14, outline: 'none', background: '#f8fafc',
     boxSizing: 'border-box',
   },
-  passNotice: {
-    display: 'flex', gap: 14, alignItems: 'flex-start',
+  authGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
+  },
+  authOption: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+    padding: '10px 6px', border: '1.5px solid #e2e8f0', borderRadius: 10,
+    cursor: 'pointer', background: '#f8fafc', transition: 'all .15s',
+  },
+  authOptionActive: {
+    border: '1.5px solid #2563eb', background: '#eff6ff',
+  },
+  authIcon: { fontSize: 20 },
+  authLabel: { fontSize: 11, fontWeight: 600, color: '#334155', textAlign: 'center' },
+  appNotice: {
+    display: 'flex', gap: 16, alignItems: 'center',
     background: '#eff6ff', border: '1px solid #bfdbfe',
-    borderRadius: 14, padding: '18px 16px',
+    borderRadius: 14, padding: '20px 18px',
   },
   successBox: {
     textAlign: 'center', padding: '24px 16px',
