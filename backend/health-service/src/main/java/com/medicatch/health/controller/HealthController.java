@@ -171,6 +171,98 @@ public class HealthController {
         }
     }
 
+    // ── 건강검진(NHIS) 단독 ──────────────────────────────────────────────
+
+    @PostMapping("/sync/checkup/step1")
+    public ResponseEntity<Map<String, Object>> syncCheckupStep1(@RequestBody Map<String, Object> body) {
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) {
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", "userId가 필요합니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+        Long userId = Long.parseLong(userIdObj.toString());
+        log.info("POST /api/health/sync/checkup/step1 - userId: {}", userId);
+        try {
+            String sessionKey = codefSyncService.syncCheckupStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.get("telecom"),
+                    (String) body.get("loginTypeLevel")
+            );
+            return ResponseEntity.ok(Map.of("sessionKey", sessionKey));
+        } catch (Exception e) {
+            log.error("건강검진 1차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    @PostMapping("/sync/checkup/step2")
+    public ResponseEntity<Map<String, Object>> syncCheckupStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/checkup/step2");
+        try {
+            int saved = codefSyncService.syncCheckupStep2((String) body.get("sessionKey"));
+            return ResponseEntity.ok(Map.of("message", "건강검진 동기화 완료", "savedCheckups", saved));
+        } catch (Exception e) {
+            log.error("건강검진 2차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    // ── 진료정보(HIRA) 단독 ──────────────────────────────────────────────
+
+    @PostMapping("/sync/medical/step1")
+    public ResponseEntity<Map<String, Object>> syncMedicalStep1(@RequestBody Map<String, Object> body) {
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) {
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", "userId가 필요합니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+        Long userId = Long.parseLong(userIdObj.toString());
+        log.info("POST /api/health/sync/medical/step1 - userId: {}", userId);
+        try {
+            String sessionKey = codefSyncService.syncMedicalStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.get("telecom"),
+                    (String) body.get("loginTypeLevel")
+            );
+            return ResponseEntity.ok(Map.of("sessionKey", sessionKey));
+        } catch (Exception e) {
+            log.error("진료정보 1차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    @PostMapping("/sync/medical/step2")
+    public ResponseEntity<Map<String, Object>> syncMedicalStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/medical/step2");
+        try {
+            int[] counts = codefSyncService.syncMedicalStep2((String) body.get("sessionKey"));
+            return ResponseEntity.ok(Map.of(
+                    "message",          "진료 기록 동기화 완료",
+                    "savedMedicals",    counts[0],
+                    "savedMedications", counts[1]
+            ));
+        } catch (Exception e) {
+            log.error("진료정보 2차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
     /**
      * Health check endpoint
      */

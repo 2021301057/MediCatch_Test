@@ -362,6 +362,183 @@ public class CodefSyncService {
         }
     }
 
+    // ── 개별 API 세션 ────────────────────────────────────────────────────
+
+    private final ConcurrentHashMap<String, SingleSession> singleSessions = new ConcurrentHashMap<>();
+
+    @Data
+    @AllArgsConstructor
+    private static class SingleSession {
+        private Long userId;
+        private HashMap<String, Object> params;
+        private Map<String, Object> twoWayData;
+        private LocalDateTime createdAt;
+    }
+
+    private SingleSession getValidSingleSession(String sessionKey) {
+        SingleSession s = singleSessions.get(sessionKey);
+        if (s == null) throw new RuntimeException("세션이 없거나 만료되었습니다. 처음부터 다시 시도해주세요.");
+        if (s.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(SESSION_TIMEOUT_MINUTES))) {
+            singleSessions.remove(sessionKey);
+            throw new RuntimeException("인증 시간이 초과되었습니다. 처음부터 다시 시도해주세요.");
+        }
+        return s;
+    }
+
+    // ── 건강검진(NHIS) 단독 ──────────────────────────────────────────────
+
+    public String syncCheckupStep1(Long userId, String userName, String phoneNo,
+                                   String identity13, String telecom, String loginTypeLevel) {
+        try {
+            String identity8   = deriveIdentity8(identity13);
+            String currentYear = String.valueOf(LocalDate.now().getYear());
+
+            HashMap<String, Object> params = new HashMap<>();
+            params.put("organization",    "0002");
+            params.put("loginType",       "5");
+            params.put("loginTypeLevel",  loginTypeLevel);
+            params.put("userName",        userName);
+            params.put("phoneNo",         phoneNo);
+            params.put("identity",        identity8);
+            params.put("searchStartYear", "2023");
+            params.put("searchEndYear",   currentYear);
+            params.put("id",              "mc_nhis_" + userId);
+            if ("5".equals(loginTypeLevel)) params.put("telecom", telecom);
+
+            log.info("NHIS 건강검진 1차 요청 - userId: {}", userId);
+            String result = createCodef().requestProduct(NHIS_URL, serviceType(), params);
+            log.info("NHIS 건강검진 1차 응답: {}", result);
+
+            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
+            if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "건강검진 조회 실패");
+                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: " + msg);
+            }
+
+            String sessionKey = UUID.randomUUID().toString();
+            singleSessions.put(sessionKey, new SingleSession(userId, params, toMap(respMap.get("data")), LocalDateTime.now()));
+            log.info("NHIS 건강검진 1차 완료 - sessionKey: {}", sessionKey);
+            return sessionKey;
+
+        } catch (RuntimeException e) { throw e;
+        } catch (Exception e) {
+            log.error("NHIS 건강검진 1차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("건강검진 요청 중 오류: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
+    public int syncCheckupStep2(String sessionKey) {
+        SingleSession session = getValidSingleSession(sessionKey);
+        try {
+            HashMap<String, Object> certMap = new HashMap<>(session.getParams());
+            certMap.put("twoWayInfo", new HashMap<>(session.getTwoWayData()));
+            certMap.put("is2Way",    true);
+            certMap.put("simpleAuth","1");
+
+            log.info("NHIS 건강검진 2차 요청 - sessionKey: {}", sessionKey);
+            String result = createCodef().requestCertification(NHIS_URL, serviceType(), certMap);
+            log.info("NHIS 건강검진 2차 응답: {}", result);
+
+            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
+            if (!"CF-00000".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "건강검진 인증 실패");
+                throw new RuntimeException("건강검진(NHIS) 인증 오류 [" + code + "]: " + msg);
+            }
+
+            int count = saveCheckupResults(session.getUserId(), result);
+            singleSessions.remove(sessionKey);
+            log.info("NHIS 건강검진 동기화 완료 - userId: {}, count: {}", session.getUserId(), count);
+            return count;
+
+        } catch (RuntimeException e) { throw e;
+        } catch (Exception e) {
+            log.error("NHIS 건강검진 2차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("건강검진 인증 중 오류: " + e.getMessage(), e);
+        }
+    }
+
+    // ── 진료정보(HIRA) 단독 ──────────────────────────────────────────────
+
+    public String syncMedicalStep1(Long userId, String userName, String phoneNo,
+                                   String identity13, String telecom, String loginTypeLevel) {
+        try {
+            String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+            HashMap<String, Object> params = new HashMap<>();
+            params.put("organization",   "0020");
+            params.put("loginType",      "5");
+            params.put("loginTypeLevel", loginTypeLevel);
+            params.put("userName",       userName);
+            params.put("phoneNo",        phoneNo);
+            params.put("identity",       identity13);
+            params.put("startDate",      "20230101");
+            params.put("endDate",        today);
+            params.put("id",             "mc_hira_" + userId);
+            if ("5".equals(loginTypeLevel)) params.put("telecom", telecom);
+
+            log.info("HIRA 진료정보 1차 요청 - userId: {}", userId);
+            String result = createCodef().requestProduct(HIRA_URL, serviceType(), params);
+            log.info("HIRA 진료정보 1차 응답: {}", result);
+
+            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
+            if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "진료정보 조회 실패");
+                throw new RuntimeException("진료정보(HIRA) 오류 [" + code + "]: " + msg);
+            }
+
+            String sessionKey = UUID.randomUUID().toString();
+            singleSessions.put(sessionKey, new SingleSession(userId, params, toMap(respMap.get("data")), LocalDateTime.now()));
+            log.info("HIRA 진료정보 1차 완료 - sessionKey: {}", sessionKey);
+            return sessionKey;
+
+        } catch (RuntimeException e) { throw e;
+        } catch (Exception e) {
+            log.error("HIRA 진료정보 1차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("진료정보 요청 중 오류: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
+    public int[] syncMedicalStep2(String sessionKey) {
+        SingleSession session = getValidSingleSession(sessionKey);
+        try {
+            HashMap<String, Object> certMap = new HashMap<>(session.getParams());
+            certMap.put("twoWayInfo", new HashMap<>(session.getTwoWayData()));
+            certMap.put("is2Way",    true);
+            certMap.put("simpleAuth","1");
+
+            log.info("HIRA 진료정보 2차 요청 - sessionKey: {}", sessionKey);
+            String result = createCodef().requestCertification(HIRA_URL, serviceType(), certMap);
+            log.info("HIRA 진료정보 2차 응답: {}", result);
+
+            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
+            if (!"CF-00000".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "진료정보 인증 실패");
+                throw new RuntimeException("진료정보(HIRA) 인증 오류 [" + code + "]: " + msg);
+            }
+
+            int[] counts = saveMedicalData(session.getUserId(), result);
+            singleSessions.remove(sessionKey);
+            log.info("HIRA 진료정보 동기화 완료 - userId: {}, medicals: {}, medications: {}",
+                    session.getUserId(), counts[0], counts[1]);
+            return counts;
+
+        } catch (RuntimeException e) { throw e;
+        } catch (Exception e) {
+            log.error("HIRA 진료정보 2차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("진료정보 인증 중 오류: " + e.getMessage(), e);
+        }
+    }
+
     // ── 세션/응답 DTO ────────────────────────────────────────────────────
 
     @Data
