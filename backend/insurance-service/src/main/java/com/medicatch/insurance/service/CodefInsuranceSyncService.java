@@ -138,7 +138,7 @@ public class CodefInsuranceSyncService {
             LocalDate endDate   = parseDateOrNull(endStr);
 
             String contractStatus = str(item.get("resContractStatus"));
-            boolean isActive = "정상".equals(contractStatus)
+            boolean isActive = "정상".equals(contractStatus) || "정".equals(contractStatus)
                     || (contractStatus == null && endDate != null && endDate.isAfter(LocalDate.now()));
 
             String premiumStr = str(item.get("resPremium"));
@@ -184,11 +184,15 @@ public class CodefInsuranceSyncService {
             String name = str(cov.get("resCoverageName"));
             if (name == null || name.isBlank()) continue;
 
+            // 해지된 보장 항목은 저장하지 않음
+            String covStatus = str(cov.get("resCoverageStatus"));
+            if ("해지".equals(covStatus)) continue;
+
             items.add(CoverageItem.builder()
                     .itemName(name)
                     .category(resolveCoverageCategory(name))
                     .maxBenefitAmount(parseDouble(cov.get("resCoverageAmount")))
-                    .isCovered("정상".equals(str(cov.get("resCoverageStatus"))))
+                    .isCovered(!"해지".equals(covStatus))
                     .conditions(str(cov.get("resAgreementType")))
                     .priority(priority++)
                     .build());

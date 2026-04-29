@@ -329,11 +329,11 @@ const InsuranceList = () => {
           <div style={policyInfoStyle}>
             <div style={policyInfoItemStyle}>
               <span>월 보험료:</span>
-              <strong>{formatCurrency(policy.monthlyPremium)}</strong>
+              <strong>{policy.monthlyPremium ? formatCurrency(policy.monthlyPremium) : '-'}</strong>
             </div>
             <div style={policyInfoItemStyle}>
               <span>만료일:</span>
-              <strong>{policy.endDate}</strong>
+              <strong>{policy.endDate || '-'}</strong>
             </div>
           </div>
 
