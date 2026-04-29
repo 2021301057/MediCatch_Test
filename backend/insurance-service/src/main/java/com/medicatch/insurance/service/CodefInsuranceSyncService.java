@@ -89,16 +89,16 @@ public class CodefInsuranceSyncService {
 
         List<Policy> toSave = new ArrayList<>();
 
-        // 실손의료비 계약
+        // 실손보장형 → 실손
         toSave.addAll(parseContracts(userId, codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
-        // 정액형(상해/질병) 계약
-        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "ACCIDENT"));
-        // 저축성 계약
-        toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "NATIONAL_HEALTH"));
-        // 자동차 계약
-        toSave.addAll(parseContracts(userId, codefId, data, "resCarContractList", "ACCIDENT"));
-        // 재물 계약
-        toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "ACCIDENT"));
+        // 정액형보장(암/사망/CI) → 생명
+        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "LIFE"));
+        // 저축성보험 → 생명
+        toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "LIFE"));
+        // 자동차보험 → 손해
+        toSave.addAll(parseContracts(userId, codefId, data, "resCarContractList", "NON_LIFE"));
+        // 화재특종보장 → 손해
+        toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
 
         policyRepository.saveAll(toSave);
         log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, toSave.size());

@@ -58,7 +58,7 @@ const InsuranceList = () => {
   const filteredPolicies = filterType === '전체'
     ? policies
     : policies.filter(p => {
-      const typeMap = { SUPPLEMENTARY: '실손', NATIONAL_HEALTH: '생명', ACCIDENT: '손해' };
+      const typeMap = { SUPPLEMENTARY: '실손', LIFE: '생명', NON_LIFE: '손해' };
       return typeMap[p.policyType] === filterType;
     });
 
