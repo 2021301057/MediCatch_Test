@@ -31,10 +31,15 @@ public class InsuranceController {
      * Get active policies for user
      */
     @GetMapping("/policies")
-    public ResponseEntity<List<PolicyDto>> getActivePolicies(@RequestParam String codefId) {
-        log.info("GET /api/insurance/policies - codefId: {}", codefId);
+    public ResponseEntity<List<PolicyDto>> getActivePolicies(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+        if (userIdHeader == null || userIdHeader.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Long userId = Long.parseLong(userIdHeader);
+        log.info("GET /api/insurance/policies - userId: {}", userId);
         try {
-            List<PolicyDto> policies = insuranceService.getActivePoliciesByCodefId(codefId)
+            List<PolicyDto> policies = insuranceService.getActivePolicies(userId)
                     .stream().map(PolicyDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(policies);
         } catch (Exception e) {
@@ -47,10 +52,15 @@ public class InsuranceController {
      * Get all policies for user
      */
     @GetMapping("/policies/all")
-    public ResponseEntity<List<PolicyDto>> getAllPolicies(@RequestParam String codefId) {
-        log.info("GET /api/insurance/policies/all - codefId: {}", codefId);
+    public ResponseEntity<List<PolicyDto>> getAllPolicies(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+        if (userIdHeader == null || userIdHeader.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Long userId = Long.parseLong(userIdHeader);
+        log.info("GET /api/insurance/policies/all - userId: {}", userId);
         try {
-            List<PolicyDto> policies = insuranceService.getAllPoliciesByCodefId(codefId)
+            List<PolicyDto> policies = insuranceService.getAllPolicies(userId)
                     .stream().map(PolicyDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(policies);
         } catch (Exception e) {
