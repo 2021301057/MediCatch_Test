@@ -24,6 +24,7 @@ public class PolicyDto {
     private Double monthlyPremium;
     private Double annualPremium;
     private List<CoverageItemDto> coverageItems;
+    private boolean hasSupplementaryCoverage;
 
     @Data
     @Builder
@@ -57,6 +58,7 @@ public class PolicyDto {
                 .monthlyPremium(p.getMonthlyPremium())
                 .annualPremium(p.getAnnualPremium())
                 .coverageItems(items)
+                .hasSupplementaryCoverage(p.isHasSupplementaryCoverage())
                 .build();
     }
 }

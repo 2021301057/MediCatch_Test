@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS policies (
     start_date DATE,
     end_date DATE,
     is_active BOOLEAN DEFAULT TRUE,
+    has_supplementary_coverage BOOLEAN DEFAULT FALSE,
     monthly_premium DECIMAL(10,2),
     annual_premium DECIMAL(10,2),
     policy_details LONGTEXT,

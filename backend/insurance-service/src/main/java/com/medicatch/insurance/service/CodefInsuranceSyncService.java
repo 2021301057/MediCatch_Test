@@ -84,33 +84,31 @@ public class CodefInsuranceSyncService {
 
     @SuppressWarnings("unchecked")
     private int savePolicies(Long userId, String codefId, Map<String, Object> data) {
-        // 기존 데이터 삭제
         policyRepository.deleteByCodefId(codefId);
 
         List<Policy> toSave = new ArrayList<>();
 
-        // 실손보장형 → 실손 (우선순위 높음: 먼저 추가)
+        // 실손보장형 → SUPPLEMENTARY
         toSave.addAll(parseContracts(userId, codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
-        // 정액형보장(암/사망/CI) → 생명
-        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "LIFE"));
-        // 저축성보험 → 생명
+        // 정액형: 회사명으로 손보(NON_LIFE) / 생보(LIFE) 구분
+        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList",
+                item -> isNonLifeCompany(strOrDefault(item.get("resCompanyNm"), "")) ? "NON_LIFE" : "LIFE"));
+        // 저축성 → 생보
         toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "LIFE"));
-        // 자동차보험 → 손해
+        // 자동차 → 손해
         toSave.addAll(parseContracts(userId, codefId, data, "resCarContractList", "NON_LIFE"));
-        // 화재특종보장 → 손해
+        // 화재특종 → 손해
         toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
 
-        // policyNumber 기준 중복 병합
-        // 같은 보험이 여러 리스트에 포함된 경우(복합 상품):
-        //   - 실손 리스트에 있었던 번호는 최종적으로 SUPPLEMENTARY 타입으로 표시
-        //   - 보험료가 있는(더 완전한) 버전을 데이터 기준으로 사용
+        // 어떤 리스트에 속했는지 기록
         Set<String> supplementaryNumbers = new java.util.HashSet<>();
+        Set<String> otherTypeNumbers = new java.util.HashSet<>();
         for (Policy p : toSave) {
-            if ("SUPPLEMENTARY".equals(p.getInsuranceType())) {
-                supplementaryNumbers.add(p.getPolicyNumber());
-            }
+            if ("SUPPLEMENTARY".equals(p.getInsuranceType())) supplementaryNumbers.add(p.getPolicyNumber());
+            else otherTypeNumbers.add(p.getPolicyNumber());
         }
 
+        // policyNumber 기준 중복 병합 (보험료 있는 버전 우선)
         Map<String, Policy> deduped = new java.util.LinkedHashMap<>();
         for (Policy p : toSave) {
             Policy existing = deduped.get(p.getPolicyNumber());
@@ -119,12 +117,9 @@ public class CodefInsuranceSyncService {
             } else {
                 boolean newHasPremium = p.getMonthlyPremium() != null;
                 boolean existingHasPremium = existing.getMonthlyPremium() != null;
-
                 if (newHasPremium && !existingHasPremium) {
-                    // 새 항목이 더 완전: 교체하고 타입 재설정
                     deduped.put(p.getPolicyNumber(), p);
                 } else {
-                    // 기존 유지: 비어있는 필드만 보완
                     if (existing.getStartDate() == null && p.getStartDate() != null)
                         existing.setStartDate(p.getStartDate());
                     if (existing.getEndDate() == null && p.getEndDate() != null)
@@ -139,23 +134,38 @@ public class CodefInsuranceSyncService {
             }
         }
 
-        // 실손 리스트에 포함됐던 항목은 최종 타입을 SUPPLEMENTARY로 고정
+        // 최종 타입 및 실손보장 포함 플래그 결정
+        // - 실손 리스트에만 있는 경우: SUPPLEMENTARY
+        // - 실손 + 다른 리스트 동시 존재(복합 상품): 다른 리스트 타입 유지 + hasSupplementaryCoverage = true
         deduped.values().forEach(p -> {
-            if (supplementaryNumbers.contains(p.getPolicyNumber())) {
+            boolean inSupplementary = supplementaryNumbers.contains(p.getPolicyNumber());
+            boolean inOther = otherTypeNumbers.contains(p.getPolicyNumber());
+            if (inSupplementary && !inOther) {
                 p.setInsuranceType("SUPPLEMENTARY");
             }
+            p.setHasSupplementaryCoverage(inSupplementary);
         });
 
         List<Policy> unique = new ArrayList<>(deduped.values());
-
         policyRepository.saveAll(unique);
         log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, unique.size());
         return unique.size();
     }
 
-    @SuppressWarnings("unchecked")
+    private boolean isNonLifeCompany(String companyName) {
+        if (companyName == null) return false;
+        String lower = companyName.toLowerCase();
+        return lower.contains("화재") || lower.contains("손보") || lower.contains("해상") || lower.contains("손해");
+    }
+
     private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
                                          String key, String insuranceType) {
+        return parseContracts(userId, codefId, data, key, item -> insuranceType);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
+                                         String key, java.util.function.Function<Map<String, Object>, String> typeResolver) {
         List<Map<String, Object>> list =
                 (List<Map<String, Object>>) data.getOrDefault(key, List.of());
         List<Policy> policies = new ArrayList<>();
@@ -195,7 +205,7 @@ public class CodefInsuranceSyncService {
                     .codefId(codefId)
                     .policyNumber(policyNumber)
                     .insurerName(strOrDefault(item.get("resCompanyNm"), "미상"))
-                    .insuranceType(insuranceType)
+                    .insuranceType(typeResolver.apply(item))
                     .startDate(startDate)
                     .endDate(endDate)
                     .isActive(isActive)

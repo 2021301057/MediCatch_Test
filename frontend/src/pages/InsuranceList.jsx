@@ -58,8 +58,10 @@ const InsuranceList = () => {
   const filteredPolicies = filterType === '전체'
     ? policies
     : policies.filter(p => {
-      const typeMap = { SUPPLEMENTARY: '실손', LIFE: '생명', NON_LIFE: '손해' };
-      return typeMap[p.policyType] === filterType;
+      if (filterType === '실손') return p.policyType === 'SUPPLEMENTARY' || p.hasSupplementaryCoverage;
+      if (filterType === '생명') return p.policyType === 'LIFE';
+      if (filterType === '손해') return p.policyType === 'NON_LIFE';
+      return false;
     });
 
   const totalPremium = policies.reduce((sum, p) => sum + (p.monthlyPremium || 0), 0);
@@ -174,6 +176,17 @@ const InsuranceList = () => {
     fontSize: '11px',
     fontWeight: '600',
   });
+
+  const supplementaryBadgeStyle = {
+    display: 'inline-block',
+    padding: '3px 7px',
+    backgroundColor: '#ecfdf5',
+    color: '#059669',
+    borderRadius: '4px',
+    fontSize: '11px',
+    fontWeight: '600',
+    marginLeft: '6px',
+  };
 
   const policyInfoStyle = {
     display: 'grid',
@@ -321,9 +334,14 @@ const InsuranceList = () => {
                 </p>
               </div>
             </div>
-            <span style={statusBadgeStyle(policy.contractStatus)}>
-              {policy.contractStatus === 'ACTIVE' ? '활성' : '만료'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {policy.hasSupplementaryCoverage && policy.policyType !== 'SUPPLEMENTARY' && (
+                <span style={supplementaryBadgeStyle}>실손보장 포함</span>
+              )}
+              <span style={statusBadgeStyle(policy.contractStatus)}>
+                {policy.contractStatus === 'ACTIVE' ? '활성' : '만료'}
+              </span>
+            </div>
           </div>
 
           <div style={policyInfoStyle}>
