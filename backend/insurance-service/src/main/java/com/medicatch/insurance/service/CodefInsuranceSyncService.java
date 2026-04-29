@@ -100,10 +100,36 @@ public class CodefInsuranceSyncService {
         // 화재특종보장 → 손해
         toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
 
-        // policyNumber 기준 중복 제거 (먼저 추가된 항목 우선 유지)
+        // policyNumber 기준 중복 병합
+        // 같은 보험이 여러 리스트에 포함된 경우(복합상품):
+        //   - 타입은 먼저 추가된 항목 유지 (실손 우선)
+        //   - 보험료·날짜·보장항목은 데이터가 있는 쪽으로 보완
         Map<String, Policy> deduped = new java.util.LinkedHashMap<>();
         for (Policy p : toSave) {
-            deduped.putIfAbsent(p.getPolicyNumber(), p);
+            Policy existing = deduped.get(p.getPolicyNumber());
+            if (existing == null) {
+                deduped.put(p.getPolicyNumber(), p);
+            } else {
+                // 보험료 보완
+                if (existing.getMonthlyPremium() == null && p.getMonthlyPremium() != null) {
+                    existing.setMonthlyPremium(p.getMonthlyPremium());
+                    existing.setAnnualPremium(p.getAnnualPremium());
+                }
+                // 날짜 보완
+                if (existing.getStartDate() == null && p.getStartDate() != null) {
+                    existing.setStartDate(p.getStartDate());
+                }
+                if (existing.getEndDate() == null && p.getEndDate() != null) {
+                    existing.setEndDate(p.getEndDate());
+                }
+                // 보장 항목 보완 (기존에 없을 때만)
+                if ((existing.getCoverageItems() == null || existing.getCoverageItems().isEmpty())
+                        && p.getCoverageItems() != null && !p.getCoverageItems().isEmpty()) {
+                    List<CoverageItem> items = new ArrayList<>(p.getCoverageItems());
+                    items.forEach(ci -> ci.setPolicy(existing));
+                    existing.setCoverageItems(items);
+                }
+            }
         }
         List<Policy> unique = new ArrayList<>(deduped.values());
 
