@@ -13,10 +13,9 @@ export const authAPI = {
 
 // ── Health ────────────────────────────────────────
 export const healthAPI = {
-  getMedicalRecords: (params) => api.get('/health/medical-records', { params }),
-  getMedications:    (recordId) => api.get(`/health/medical-records/${recordId}/medications`),
+  getMedicalRecords: () => api.get('/health/medical-records'),
+  getMedications:    () => api.get('/health/medications'),
   getCheckupResults: () => api.get('/health/checkup-results'),
-  getCheckupByYear:  (year) => api.get(`/health/checkup-results/${year}`),
   getDiseasePredictions: () => api.get('/health/disease-predictions'),
   getCheckupTargets: () => api.get('/health/checkup-targets'),
   syncCheckupStep1: (data) => api.post('/health/sync/checkup/step1', data, { timeout: 120000 }),

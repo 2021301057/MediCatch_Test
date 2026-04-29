@@ -48,8 +48,8 @@ const CheckupRecords = () => {
     const fetchCheckups = async () => {
       setLoading(true);
       try {
-        const data = await healthAPI.getCheckupRecords();
-        setCheckups(data);
+        const data = await healthAPI.getCheckupResults();
+        if (Array.isArray(data) && data.length > 0) setCheckups(data);
       } catch (error) {
         console.error('Failed to fetch checkups:', error);
       } finally {
@@ -60,7 +60,16 @@ const CheckupRecords = () => {
     fetchCheckups();
   }, []);
 
+  const years = checkups.map(c => c.year).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => b - a);
   const currentCheckup = checkups.find(c => c.year === selectedYear) || checkups[0];
+  const chartData = [...checkups]
+    .sort((a, b) => a.year - b.year)
+    .map(c => ({
+      year: c.year,
+      bloodPressure: c.bloodPressure ? parseInt(c.bloodPressure.split('/')[0]) : null,
+      bloodSugar: c.bloodSugar,
+      cholesterol: c.cholesterol,
+    }));
 
   const pageStyle = {
     padding: '20px',
@@ -85,13 +94,13 @@ const CheckupRecords = () => {
 
   const healthAgeCardStyle = {
     ...cardStyle,
-    background: currentCheckup.healthAge < currentCheckup.actualAge ? '#dcfce7' : '#fee2e2',
+    background: '#f0f9ff',
   };
 
   const healthAgeTextStyle = {
     fontSize: '24px',
     fontWeight: '700',
-    color: currentCheckup.healthAge < currentCheckup.actualAge ? '#16a34a' : '#dc2626',
+    color: '#1d4ed8',
     marginBottom: '8px',
   };
 
@@ -213,25 +222,25 @@ const CheckupRecords = () => {
       <h1 style={titleStyle}>건강검진 기록</h1>
 
       <div style={healthAgeCardStyle}>
-        <p style={{ fontSize: '12px', color: '#475569', margin: '0 0 8px 0' }}>건강나이</p>
+        <p style={{ fontSize: '12px', color: '#475569', margin: '0 0 8px 0' }}>최근 검진일</p>
         <div style={healthAgeTextStyle}>
-          {currentCheckup.healthAge}세
+          {currentCheckup?.checkupDate || '-'}
         </div>
         <p style={{ fontSize: '13px', color: '#475569', margin: '0' }}>
-          실제나이: {currentCheckup.actualAge}세 ({currentCheckup.healthAge - currentCheckup.actualAge > 0 ? '+' : ''}{currentCheckup.healthAge - currentCheckup.actualAge}세)
+          {currentCheckup?.judgement || currentCheckup?.opinion || '판정 정보 없음'}
         </p>
       </div>
 
       <div style={{ marginBottom: '20px' }}>
         <h3 style={sectionTitleStyle}>검사 연도 선택</h3>
         <div style={tabContainerStyle}>
-          {checkups.map(c => (
+          {years.map(y => (
             <button
-              key={c.year}
-              style={tabButtonStyle(selectedYear === c.year)}
-              onClick={() => setSelectedYear(c.year)}
+              key={y}
+              style={tabButtonStyle(selectedYear === y)}
+              onClick={() => setSelectedYear(y)}
             >
-              {c.year}년
+              {y}년
             </button>
           ))}
         </div>
@@ -270,7 +279,7 @@ const CheckupRecords = () => {
       <div style={cardStyle}>
         <h3 style={sectionTitleStyle}>3년 추이 분석</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={CHART_DATA}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="year" />
             <YAxis />

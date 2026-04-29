@@ -1,7 +1,7 @@
 package com.medicatch.insurance.controller;
 
+import com.medicatch.insurance.dto.PolicyDto;
 import com.medicatch.insurance.entity.CoverageItem;
-import com.medicatch.insurance.entity.Policy;
 import com.medicatch.insurance.service.CodefInsuranceSyncService;
 import com.medicatch.insurance.service.InsuranceService;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -30,10 +31,11 @@ public class InsuranceController {
      * Get active policies for user
      */
     @GetMapping("/policies")
-    public ResponseEntity<List<Policy>> getActivePolicies(@RequestParam String codefId) {
+    public ResponseEntity<List<PolicyDto>> getActivePolicies(@RequestParam String codefId) {
         log.info("GET /api/insurance/policies - codefId: {}", codefId);
         try {
-            List<Policy> policies = insuranceService.getActivePoliciesByCodefId(codefId);
+            List<PolicyDto> policies = insuranceService.getActivePoliciesByCodefId(codefId)
+                    .stream().map(PolicyDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(policies);
         } catch (Exception e) {
             log.error("Error getting policies: {}", e.getMessage(), e);
@@ -45,10 +47,11 @@ public class InsuranceController {
      * Get all policies for user
      */
     @GetMapping("/policies/all")
-    public ResponseEntity<List<Policy>> getAllPolicies(@RequestParam String codefId) {
+    public ResponseEntity<List<PolicyDto>> getAllPolicies(@RequestParam String codefId) {
         log.info("GET /api/insurance/policies/all - codefId: {}", codefId);
         try {
-            List<Policy> policies = insuranceService.getAllPoliciesByCodefId(codefId);
+            List<PolicyDto> policies = insuranceService.getAllPoliciesByCodefId(codefId)
+                    .stream().map(PolicyDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(policies);
         } catch (Exception e) {
             log.error("Error getting all policies: {}", e.getMessage(), e);

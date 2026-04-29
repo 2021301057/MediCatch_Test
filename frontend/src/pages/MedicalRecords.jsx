@@ -28,7 +28,7 @@ const MedicalRecords = () => {
       setLoading(true);
       try {
         const data = await healthAPI.getMedicalRecords();
-        setRecords(data);
+        if (Array.isArray(data) && data.length > 0) setRecords(data);
       } catch (error) {
         console.error('Failed to fetch records:', error);
       } finally {

@@ -1,7 +1,7 @@
 package com.medicatch.health.controller;
 
-import com.medicatch.health.entity.CheckupResult;
-import com.medicatch.health.entity.MedicalRecord;
+import com.medicatch.health.dto.CheckupResultDto;
+import com.medicatch.health.dto.MedicalRecordDto;
 import com.medicatch.health.entity.MedicationDetail;
 import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -46,7 +47,7 @@ public class HealthController {
      * Get medical records
      */
     @GetMapping("/medical-records")
-    public ResponseEntity<List<MedicalRecord>> getMedicalRecords(
+    public ResponseEntity<List<MedicalRecordDto>> getMedicalRecords(
             @RequestParam Long userId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
@@ -55,7 +56,8 @@ public class HealthController {
             LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(1);
             LocalDate end = endDate != null ? endDate : LocalDate.now();
 
-            List<MedicalRecord> records = healthService.getMedicalRecords(userId, start, end);
+            List<MedicalRecordDto> records = healthService.getMedicalRecords(userId, start, end)
+                    .stream().map(MedicalRecordDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(records);
         } catch (Exception e) {
             log.error("Error getting medical records: {}", e.getMessage(), e);
@@ -67,16 +69,17 @@ public class HealthController {
      * Get checkup results
      */
     @GetMapping("/checkup-results")
-    public ResponseEntity<List<CheckupResult>> getCheckupResults(
+    public ResponseEntity<List<CheckupResultDto>> getCheckupResults(
             @RequestParam Long userId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/checkup-results - userId: {}", userId);
         try {
-            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(2);
+            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(3);
             LocalDate end = endDate != null ? endDate : LocalDate.now();
 
-            List<CheckupResult> results = healthService.getCheckupResults(userId, start, end);
+            List<CheckupResultDto> results = healthService.getCheckupResults(userId, start, end)
+                    .stream().map(CheckupResultDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(results);
         } catch (Exception e) {
             log.error("Error getting checkup results: {}", e.getMessage(), e);

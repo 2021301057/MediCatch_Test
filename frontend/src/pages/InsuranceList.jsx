@@ -44,7 +44,7 @@ const InsuranceList = () => {
       setLoading(true);
       try {
         const data = await insuranceAPI.getPolicies();
-        setPolicies(data);
+        if (Array.isArray(data) && data.length > 0) setPolicies(data);
       } catch (error) {
         console.error('Failed to fetch policies:', error);
       } finally {
@@ -58,13 +58,13 @@ const InsuranceList = () => {
   const filteredPolicies = filterType === '전체'
     ? policies
     : policies.filter(p => {
-      const typeMap = { HEALTH: '실손', LIFE: '생명', ACCIDENT: '손해' };
+      const typeMap = { SUPPLEMENTARY: '실손', NATIONAL_HEALTH: '생명', ACCIDENT: '손해' };
       return typeMap[p.policyType] === filterType;
     });
 
-  const totalPremium = policies.reduce((sum, p) => sum + p.monthlyPremium, 0);
+  const totalPremium = policies.reduce((sum, p) => sum + (p.monthlyPremium || 0), 0);
   const totalCoverage = policies.reduce((sum, p) =>
-    sum + p.coverageItems.reduce((itemSum, item) => itemSum + item.amount, 0), 0
+    sum + (p.coverageItems || []).reduce((itemSum, item) => itemSum + (item.amount || 0), 0), 0
   );
 
   const formatCurrency = (amount) => {
@@ -310,11 +310,11 @@ const InsuranceList = () => {
           <div style={policyHeaderStyle}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={logoStyle}>
-                {policy.companyName.charAt(0)}
+                {(policy.companyName || '?').charAt(0)}
               </div>
               <div style={policyNameStyle}>
                 <p style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', margin: '0 0 4px 0' }}>
-                  {policy.productName}
+                  {policy.productName || policy.policyNumber}
                 </p>
                 <p style={{ fontSize: '11px', color: '#64748b', margin: '0' }}>
                   {policy.companyName}
@@ -344,13 +344,15 @@ const InsuranceList = () => {
                   <tr>
                     <th style={thStyle}>보장 항목</th>
                     <th style={thStyle}>보장금</th>
+                    <th style={thStyle}>상태</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {policy.coverageItems.map((item, idx) => (
+                  {(policy.coverageItems || []).map((item, idx) => (
                     <tr key={idx}>
                       <td style={tdStyle}>{item.name}</td>
-                      <td style={tdStyle}>{formatCurrency(item.amount)}</td>
+                      <td style={tdStyle}>{item.amount ? formatCurrency(item.amount) : '-'}</td>
+                      <td style={tdStyle}>{item.isCovered ? '정상' : '해지'}</td>
                     </tr>
                   ))}
                 </tbody>
