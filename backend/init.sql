@@ -116,7 +116,8 @@ USE medicatch_insurance;
 CREATE TABLE IF NOT EXISTS policies (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    policy_number VARCHAR(100) NOT NULL UNIQUE,
+    codef_id VARCHAR(255),
+    policy_number VARCHAR(100) NOT NULL,
     insurer_name VARCHAR(200) NOT NULL,
     insurance_type VARCHAR(50) NOT NULL,
     start_date DATE NOT NULL,
@@ -129,7 +130,7 @@ CREATE TABLE IF NOT EXISTS policies (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
-    INDEX idx_policy_number (policy_number)
+    INDEX idx_codef_id (codef_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Coverage Items table

@@ -126,12 +126,17 @@ public class InsuranceController {
      * CODEF 보험 계약 정보 동기화 (단일 호출)
      */
     @PostMapping("/sync")
-    public ResponseEntity<Map<String, Object>> syncInsurance(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<Map<String, Object>> syncInsurance(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
         String codefId = (String) body.get("codefId");
         if (codefId == null || codefId.isBlank()) return ResponseEntity.badRequest().body(Map.of("message", "codefId가 필요합니다."));
-        log.info("POST /api/insurance/sync - codefId: {}", codefId);
+        if (userIdHeader == null || userIdHeader.isBlank()) return ResponseEntity.badRequest().body(Map.of("message", "인증 정보가 필요합니다."));
+        Long userId = Long.parseLong(userIdHeader);
+        log.info("POST /api/insurance/sync - codefId: {}, userId: {}", codefId, userId);
         try {
             int saved = codefSyncService.syncInsuranceData(
+                    userId,
                     codefId,
                     (String) body.get("codefPassword")
             );
