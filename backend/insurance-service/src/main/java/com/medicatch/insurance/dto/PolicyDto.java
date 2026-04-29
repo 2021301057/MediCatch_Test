@@ -1,5 +1,6 @@
 package com.medicatch.insurance.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.medicatch.insurance.entity.CoverageItem;
 import com.medicatch.insurance.entity.Policy;
 import lombok.Builder;
@@ -32,6 +33,7 @@ public class PolicyDto {
         private String name;
         private String category;
         private Double amount;
+        @JsonProperty("isCovered")
         private boolean isCovered;
     }
 
