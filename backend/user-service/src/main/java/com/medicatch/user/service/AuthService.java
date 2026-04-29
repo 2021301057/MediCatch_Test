@@ -161,20 +161,21 @@ public class AuthService {
      * 로그인
      */
     public AuthResponse login(LoginRequest request) {
-        log.info("로그인 시작 - email: {}", request.getEmail());
+        String loginId = request.getLoginId();
+        log.info("로그인 시작 - loginId: {}", loginId);
 
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByCodefId(loginId)
                 .orElseThrow(() -> {
-                    log.warn("로그인 실패: 사용자 없음 - email: {}", request.getEmail());
-                    return new IllegalArgumentException("Invalid email or password");
+                    log.warn("로그인 실패: 사용자 없음 - loginId: {}", loginId);
+                    return new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.warn("로그인 실패: 비밀번호 불일치 - email: {}", request.getEmail());
-            throw new IllegalArgumentException("Invalid email or password");
+            log.warn("로그인 실패: 비밀번호 불일치 - loginId: {}", loginId);
+            throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        log.info("로그인 성공 - userId: {}", user.getId());
+        log.info("로그인 성공 - userId: {}, loginId: {}", user.getId(), loginId);
 
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
