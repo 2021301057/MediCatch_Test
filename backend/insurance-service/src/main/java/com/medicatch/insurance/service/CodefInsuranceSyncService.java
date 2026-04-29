@@ -101,36 +101,51 @@ public class CodefInsuranceSyncService {
         toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
 
         // policyNumber 기준 중복 병합
-        // 같은 보험이 여러 리스트에 포함된 경우(복합상품):
-        //   - 타입은 먼저 추가된 항목 유지 (실손 우선)
-        //   - 보험료·날짜·보장항목은 데이터가 있는 쪽으로 보완
+        // 같은 보험이 여러 리스트에 포함된 경우(복합 상품):
+        //   - 실손 리스트에 있었던 번호는 최종적으로 SUPPLEMENTARY 타입으로 표시
+        //   - 보험료가 있는(더 완전한) 버전을 데이터 기준으로 사용
+        Set<String> supplementaryNumbers = new java.util.HashSet<>();
+        for (Policy p : toSave) {
+            if ("SUPPLEMENTARY".equals(p.getInsuranceType())) {
+                supplementaryNumbers.add(p.getPolicyNumber());
+            }
+        }
+
         Map<String, Policy> deduped = new java.util.LinkedHashMap<>();
         for (Policy p : toSave) {
             Policy existing = deduped.get(p.getPolicyNumber());
             if (existing == null) {
                 deduped.put(p.getPolicyNumber(), p);
             } else {
-                // 보험료 보완
-                if (existing.getMonthlyPremium() == null && p.getMonthlyPremium() != null) {
-                    existing.setMonthlyPremium(p.getMonthlyPremium());
-                    existing.setAnnualPremium(p.getAnnualPremium());
-                }
-                // 날짜 보완
-                if (existing.getStartDate() == null && p.getStartDate() != null) {
-                    existing.setStartDate(p.getStartDate());
-                }
-                if (existing.getEndDate() == null && p.getEndDate() != null) {
-                    existing.setEndDate(p.getEndDate());
-                }
-                // 보장 항목 보완 (기존에 없을 때만)
-                if ((existing.getCoverageItems() == null || existing.getCoverageItems().isEmpty())
-                        && p.getCoverageItems() != null && !p.getCoverageItems().isEmpty()) {
-                    List<CoverageItem> items = new ArrayList<>(p.getCoverageItems());
-                    items.forEach(ci -> ci.setPolicy(existing));
-                    existing.setCoverageItems(items);
+                boolean newHasPremium = p.getMonthlyPremium() != null;
+                boolean existingHasPremium = existing.getMonthlyPremium() != null;
+
+                if (newHasPremium && !existingHasPremium) {
+                    // 새 항목이 더 완전: 교체하고 타입 재설정
+                    deduped.put(p.getPolicyNumber(), p);
+                } else {
+                    // 기존 유지: 비어있는 필드만 보완
+                    if (existing.getStartDate() == null && p.getStartDate() != null)
+                        existing.setStartDate(p.getStartDate());
+                    if (existing.getEndDate() == null && p.getEndDate() != null)
+                        existing.setEndDate(p.getEndDate());
+                    if ((existing.getCoverageItems() == null || existing.getCoverageItems().isEmpty())
+                            && p.getCoverageItems() != null && !p.getCoverageItems().isEmpty()) {
+                        List<CoverageItem> items = new ArrayList<>(p.getCoverageItems());
+                        items.forEach(ci -> ci.setPolicy(existing));
+                        existing.setCoverageItems(items);
+                    }
                 }
             }
         }
+
+        // 실손 리스트에 포함됐던 항목은 최종 타입을 SUPPLEMENTARY로 고정
+        deduped.values().forEach(p -> {
+            if (supplementaryNumbers.contains(p.getPolicyNumber())) {
+                p.setInsuranceType("SUPPLEMENTARY");
+            }
+        });
+
         List<Policy> unique = new ArrayList<>(deduped.values());
 
         policyRepository.saveAll(unique);
