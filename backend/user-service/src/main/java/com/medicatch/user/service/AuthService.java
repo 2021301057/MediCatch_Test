@@ -149,6 +149,7 @@ public class AuthService {
                 savedUser.getId(),
                 savedUser.getEmail(),
                 savedUser.getName(),
+                savedUser.getCodefId(),
                 accessToken,
                 refreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -159,17 +160,17 @@ public class AuthService {
      * 로그인
      */
     public AuthResponse login(LoginRequest request) {
-        log.info("로그인 시작 - email: {}", request.getEmail());
+        log.info("로그인 시작 - codefId: {}", request.getCodefId());
 
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByCodefId(request.getCodefId())
                 .orElseThrow(() -> {
-                    log.warn("로그인 실패: 사용자 없음 - email: {}", request.getEmail());
-                    return new IllegalArgumentException("Invalid email or password");
+                    log.warn("로그인 실패: 사용자 없음 - codefId: {}", request.getCodefId());
+                    return new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.warn("로그인 실패: 비밀번호 불일치 - email: {}", request.getEmail());
-            throw new IllegalArgumentException("Invalid email or password");
+            log.warn("로그인 실패: 비밀번호 불일치 - codefId: {}", request.getCodefId());
+            throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
         log.info("로그인 성공 - userId: {}", user.getId());
@@ -181,6 +182,7 @@ public class AuthService {
                 user.getId(),
                 user.getEmail(),
                 user.getName(),
+                user.getCodefId(),
                 accessToken,
                 refreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -215,6 +217,7 @@ public class AuthService {
                 user.getId(),
                 user.getEmail(),
                 user.getName(),
+                user.getCodefId(),
                 newAccessToken,
                 newRefreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()

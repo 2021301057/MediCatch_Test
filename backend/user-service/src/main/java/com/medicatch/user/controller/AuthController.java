@@ -79,7 +79,7 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        log.info("POST /api/auth/login - email: {}", request.getEmail());
+        log.info("POST /api/auth/login - codefId: {}", request.getCodefId());
         try {
             AuthResponse response = authService.login(request);
             return ResponseEntity.ok(response);

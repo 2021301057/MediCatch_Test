@@ -65,11 +65,11 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await authAPI.login({ email: form.email, password: form.password });
+      const data = await authAPI.login({ codefId: form.id, password: form.password });
       login(data, data.accessToken, data.refreshToken);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || '이메일 또는 비밀번호가 올바르지 않습니다.');
+      setError(err.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
     } finally {
       setLoading(false);
     }
@@ -294,7 +294,7 @@ export default function LoginPage() {
               </h2>
               <p style={s.formSub}>
                 {isLogin
-                  ? '이메일로 로그인하고 내 건강·보험 현황을 확인하세요.'
+                  ? '내보험다보여 아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
                   : signupStep === 1
                   ? '몇 가지 정보만 입력하면 시작할 수 있어요.'
                   : signupStep === 2
@@ -329,8 +329,8 @@ export default function LoginPage() {
             {/* ── 로그인 폼 ── */}
             {isLogin && (
               <form onSubmit={handleLogin} style={s.form}>
-                <Field label="이메일" icon="✉">
-                  <input name="email" type="email" value={form.email} onChange={handle} placeholder="you@example.com" style={s.input} required autoComplete="email" />
+                <Field label="로그인 아이디" icon="🪪">
+                  <input name="id" type="text" value={form.id} onChange={handle} placeholder="내보험다보여 아이디" style={s.input} required autoComplete="username" />
                 </Field>
                 <Field label="비밀번호" icon="🔒">
                   <input name="password" type="password" value={form.password} onChange={handle} placeholder="비밀번호" style={s.input} required autoComplete="current-password" />

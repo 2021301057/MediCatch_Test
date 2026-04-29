@@ -10,6 +10,7 @@ const useAuthStore = create((set) => ({
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     if (user?.userId) localStorage.setItem('userId', String(user.userId));
+    if (user?.codefId) localStorage.setItem('codefId', user.codefId);
     set({ user, isAuthenticated: true });
   },
 
