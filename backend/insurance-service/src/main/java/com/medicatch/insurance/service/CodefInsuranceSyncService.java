@@ -89,7 +89,7 @@ public class CodefInsuranceSyncService {
 
         List<Policy> toSave = new ArrayList<>();
 
-        // 실손보장형 → 실손
+        // 실손보장형 → 실손 (우선순위 높음: 먼저 추가)
         toSave.addAll(parseContracts(userId, codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
         // 정액형보장(암/사망/CI) → 생명
         toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "LIFE"));
@@ -100,9 +100,16 @@ public class CodefInsuranceSyncService {
         // 화재특종보장 → 손해
         toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
 
-        policyRepository.saveAll(toSave);
-        log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, toSave.size());
-        return toSave.size();
+        // policyNumber 기준 중복 제거 (먼저 추가된 항목 우선 유지)
+        Map<String, Policy> deduped = new java.util.LinkedHashMap<>();
+        for (Policy p : toSave) {
+            deduped.putIfAbsent(p.getPolicyNumber(), p);
+        }
+        List<Policy> unique = new ArrayList<>(deduped.values());
+
+        policyRepository.saveAll(unique);
+        log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, unique.size());
+        return unique.size();
     }
 
     @SuppressWarnings("unchecked")
@@ -116,12 +123,23 @@ public class CodefInsuranceSyncService {
             String policyNumber = str(item.get("resPolicyNumber"));
             if (policyNumber == null || policyNumber.isBlank()) continue;
 
+            // 날짜: 최상위 → 없으면 resCoverageLists[0]에서 추출
             String startStr = str(item.get("commStartDate"));
             String endStr   = str(item.get("commEndDate"));
-            LocalDate startDate = parseDate8(startStr);
-            LocalDate endDate   = parseDate8(endStr);
-            boolean isActive    = "정상".equals(str(item.get("resContractStatus")))
-                                  || endDate.isAfter(LocalDate.now());
+            if ((startStr == null || endStr == null)) {
+                List<Map<String, Object>> covList =
+                        (List<Map<String, Object>>) item.getOrDefault("resCoverageLists", List.of());
+                if (!covList.isEmpty()) {
+                    if (startStr == null) startStr = str(covList.get(0).get("commStartDate"));
+                    if (endStr   == null) endStr   = str(covList.get(0).get("commEndDate"));
+                }
+            }
+            LocalDate startDate = parseDateOrNull(startStr);
+            LocalDate endDate   = parseDateOrNull(endStr);
+
+            String contractStatus = str(item.get("resContractStatus"));
+            boolean isActive = "정상".equals(contractStatus)
+                    || (contractStatus == null && endDate != null && endDate.isAfter(LocalDate.now()));
 
             String premiumStr = str(item.get("resPremium"));
             Double monthly    = parseDouble(premiumStr);
@@ -229,6 +247,15 @@ public class CodefInsuranceSyncService {
             return LocalDate.parse(s.substring(0, 8), DateTimeFormatter.ofPattern("yyyyMMdd"));
         } catch (Exception e) {
             return LocalDate.now();
+        }
+    }
+
+    private LocalDate parseDateOrNull(String s) {
+        if (s == null || s.length() < 8) return null;
+        try {
+            return LocalDate.parse(s.substring(0, 8), DateTimeFormatter.ofPattern("yyyyMMdd"));
+        } catch (Exception e) {
+            return null;
         }
     }
 }

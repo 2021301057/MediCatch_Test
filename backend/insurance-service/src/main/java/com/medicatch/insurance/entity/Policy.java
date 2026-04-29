@@ -37,10 +37,10 @@ public class Policy {
     @Column(nullable = false)
     private String insuranceType;  // "NATIONAL_HEALTH", "SUPPLEMENTARY", "ACCIDENT"
 
-    @Column(nullable = false)
+    @Column
     private LocalDate startDate;
 
-    @Column(nullable = false)
+    @Column
     private LocalDate endDate;
 
     @Column(nullable = false)
