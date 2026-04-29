@@ -20,7 +20,7 @@ api.interceptors.request.use(config => {
 
 // 401 → 자동 토큰 갱신
 api.interceptors.response.use(
-  res => res,
+  res => res.data,
   async err => {
     if (err.response?.status === 401) {
       try {

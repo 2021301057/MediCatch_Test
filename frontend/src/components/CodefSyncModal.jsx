@@ -58,7 +58,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
 
     setLoading(true);
     try {
-      const [, { data }] = await Promise.all([
+      const [, data] = await Promise.all([
         insuranceAPI.sync({ codefId: form.codefId, codefPassword: form.codefPassword }),
         healthAPI.syncCheckupStep1({
           userId,
@@ -82,7 +82,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const { data } = await healthAPI.syncCheckupStep2({ sessionKey: checkupSessionKey });
+      const data = await healthAPI.syncCheckupStep2({ sessionKey: checkupSessionKey });
       setCheckupResult(data);
       setScreen('medical-ready');
     } catch (err) {
@@ -97,7 +97,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const { data } = await healthAPI.syncMedicalStep1({
+      const data = await healthAPI.syncMedicalStep1({
         userId,
         userName: form.userName, phoneNo: form.phoneNo, identity13: cleanId,
         telecom: form.loginTypeLevel === '5' ? form.telecom : '',
@@ -117,7 +117,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const { data } = await healthAPI.syncMedicalStep2({ sessionKey: medicalSessionKey });
+      const data = await healthAPI.syncMedicalStep2({ sessionKey: medicalSessionKey });
       setMedicalResult(data);
       setScreen('done');
     } catch (err) {

@@ -96,7 +96,7 @@ export default function HealthChat() {
     try {
       let responseText = '';
       if (useMode === 'backend') {
-        const { data } = await chatAPI.sendMessage(msg);
+        const data = await chatAPI.sendMessage(msg);
         responseText = data.message;
       } else if (useMode === 'openai') {
         const history = messages.map(m => ({ role: m.role, content: m.content }));
