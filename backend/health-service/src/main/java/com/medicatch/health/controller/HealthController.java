@@ -53,7 +53,7 @@ public class HealthController {
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/medical-records - userId: {}", userId);
         try {
-            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(1);
+            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(3);
             LocalDate end = endDate != null ? endDate : LocalDate.now();
 
             List<MedicalRecordDto> records = healthService.getMedicalRecords(userId, start, end)
