@@ -21,15 +21,19 @@ const P = {
 
 const MOCK_RECORDS = [
   { id: 1, visitDate: '2026-03-15', hospitalName: '서울성모병원', treatmentType: '외래',
+    department: '내과', diagnosis: '급성 상기도 감염 (감기)',
     patientPayment: 45000, insurancePayment: 180000, totalCost: 225000,
     hasClaimOpportunity: true, claimAmount: 45000, claimInsurance: '삼성생명 실손' },
   { id: 2, visitDate: '2026-02-28', hospitalName: '연세세브란스병원', treatmentType: '입원',
+    department: '외과', diagnosis: '충수염 (맹장 수술)',
     patientPayment: 320000, insurancePayment: 1280000, totalCost: 1600000,
     hasClaimOpportunity: true, claimAmount: 320000, claimInsurance: '한화생명 암보험' },
   { id: 3, visitDate: '2026-01-10', hospitalName: '강남구 우리약국', treatmentType: '약국',
+    department: null, diagnosis: '처방약 조제',
     patientPayment: 8500, insurancePayment: 0, totalCost: 8500,
     hasClaimOpportunity: false, claimAmount: 0, claimInsurance: null },
   { id: 4, visitDate: '2025-12-05', hospitalName: '분당서울대병원', treatmentType: '외래',
+    department: '정형외과', diagnosis: '요추부 염좌',
     patientPayment: 28000, insurancePayment: 112000, totalCost: 140000,
     hasClaimOpportunity: false, claimAmount: 0, claimInsurance: null },
 ];
@@ -171,8 +175,17 @@ const MedicalRecords = () => {
                 </div>
                 <div>
                   <div className="mc-card-title">{r.hospitalName}</div>
+                  {r.diagnosis && (
+                    <div style={{
+                      fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
+                      marginTop: 2, marginBottom: 2,
+                    }}>
+                      {r.diagnosis}
+                    </div>
+                  )}
                   <div className="mc-card-sub">
                     <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
+                    {r.department && <> · {r.department}</>}
                     {r.claimInsurance && <> · {r.claimInsurance}</>}
                   </div>
                 </div>
@@ -185,6 +198,23 @@ const MedicalRecords = () => {
             </div>
 
             <div className="mc-card-body">
+              {(r.diagnosis || r.department) && (
+                <div className="mc-kv" style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+                  {r.diagnosis && (
+                    <div>
+                      <div className="mc-field-label">진단명</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginTop: 2 }}>
+                        {r.diagnosis}
+                      </div>
+                    </div>
+                  )}
+                  {r.department && (
+                    <span className="mc-tag mc-tag-neutral" style={{ alignSelf: 'flex-start' }}>
+                      {r.department}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                 <div>
                   <div className="mc-field-label">환자 부담</div>
@@ -252,6 +282,7 @@ const MedicalRecords = () => {
                 <div className="mc-card-title" style={{ fontSize: 16 }}>청구 절차 안내</div>
                 <div className="mc-card-sub" style={{ marginTop: 2 }}>
                   {selectedRecord.hospitalName} · {selectedRecord.visitDate}
+                  {selectedRecord.diagnosis && <> · {selectedRecord.diagnosis}</>}
                 </div>
               </div>
               <button className="mc-modal-close" onClick={() => setShowClaimModal(false)}>
