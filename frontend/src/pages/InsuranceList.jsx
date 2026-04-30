@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { insuranceAPI } from '../api/services';
+import useAuthStore from '../store/authStore';
+import CodefSyncModal from '../components/CodefSyncModal';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -58,11 +60,12 @@ const supplementaryBadgeStyle = {
 };
 
 const InsuranceList = () => {
+  const { user } = useAuthStore();
   const [policies, setPolicies] = useState(MOCK_POLICIES);
   const [expandedPolicy, setExpandedPolicy] = useState(null);
   const [filterType, setFilterType] = useState('전체');
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   useEffect(() => {
     const fetchPolicies = async () => {
@@ -93,15 +96,10 @@ const InsuranceList = () => {
     (sum, p) => sum + (p.coverageItems || []).reduce((s, item) => s + (item.amount || 0), 0), 0,
   );
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await insuranceAPI.sync({});
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setTimeout(() => setSyncing(false), 900);
-    }
+  const handleSyncSuccess = () => {
+    insuranceAPI.getPolicies()
+      .then((data) => { if (Array.isArray(data) && data.length) setPolicies(data); })
+      .catch(() => {});
   };
 
   return (
@@ -112,13 +110,8 @@ const InsuranceList = () => {
           <div className="mc-page-subtitle">가입된 보험 상품과 보장 내역을 한 곳에서 관리하세요.</div>
         </div>
         <div className="mc-page-top-right">
-          <button className="mc-btn" onClick={handleSync} disabled={syncing}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              animation: syncing ? 'spin 0.9s linear infinite' : 'none',
-            }}>
-              <Ic d={P.sync} size={12}/>
-            </span>
+          <button className="mc-btn" onClick={() => setShowSyncModal(true)}>
+            <Ic d={P.sync} size={12}/>
             {' '}CODEF 동기화
           </button>
         </div>
@@ -334,6 +327,14 @@ const InsuranceList = () => {
             <div className="mc-alert-body">잠시만 기다려주세요.</div>
           </div>
         </div>
+      )}
+
+      {showSyncModal && (
+        <CodefSyncModal
+          userId={user?.userId}
+          onClose={() => setShowSyncModal(false)}
+          onSuccess={handleSyncSuccess}
+        />
       )}
     </div>
   );

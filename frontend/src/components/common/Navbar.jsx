@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
+import CodefSyncModal from '../CodefSyncModal';
 
 const NAV_ITEMS = [
   { path: '/',                 label: '대시보드',      end: true },
@@ -24,18 +25,7 @@ const Icon = ({ children, size = 13 }) => (
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  const [spin, setSpin] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-
-  const handleSync = () => {
-    if (syncing) return;
-    setSpin(true);
-    setSyncing(true);
-    setTimeout(() => {
-      setSpin(false);
-      setSyncing(false);
-    }, 900);
-  };
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -43,6 +33,7 @@ export default function Navbar() {
   };
 
   return (
+    <>
     <nav className="mc-navbar">
       <div className="mc-navbar-inner">
         {/* 로고 */}
@@ -73,22 +64,14 @@ export default function Navbar() {
 
         {/* 우측 액션 */}
         <div className="mc-nav-right">
-          <span className="mc-sync-note">
-            <span className="mc-sync-dot" />
-            {syncing ? '동기화 중…' : '동기화 완료'}
-          </span>
-          <button className="mc-btn" onClick={handleSync} disabled={syncing} title="데이터 갱신">
+          <button className="mc-btn" onClick={() => setShowSyncModal(true)} title="CODEF 데이터 갱신">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
               strokeLinecap="round" strokeLinejoin="round"
-              style={{
-                width: 12, height: 12, flexShrink: 0,
-                transition: 'transform .8s',
-                transform: spin ? 'rotate(360deg)' : 'none',
-              }}>
+              style={{ width: 12, height: 12, flexShrink: 0 }}>
               <path d="M2 8a6 6 0 1 1 1.5 4" />
               <path d="M2 12V8h4" />
             </svg>
-            갱신
+            CODEF 갱신
           </button>
           <button className="mc-btn mc-btn-icon-only" title="알림">
             <Icon size={13}>
@@ -102,5 +85,13 @@ export default function Navbar() {
         </div>
       </div>
     </nav>
+
+    {showSyncModal && (
+      <CodefSyncModal
+        userId={user?.userId}
+        onClose={() => setShowSyncModal(false)}
+      />
+    )}
+    </>
   );
 }
