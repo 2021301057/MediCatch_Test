@@ -87,12 +87,6 @@ const MedicalRecords = () => {
           <div className="mc-page-title">의료 기록 & 청구</div>
           <div className="mc-page-subtitle">진료 내역을 확인하고 놓친 보험 청구 기회를 확인하세요.</div>
         </div>
-        <div className="mc-page-top-right">
-          <button className="mc-btn" onClick={() => setShowSyncModal(true)}>
-            <Ic d={P.sync} size={12}/>
-            {' '}CODEF 동기화
-          </button>
-        </div>
       </div>
 
       {/* 청구 가능 알림 */}

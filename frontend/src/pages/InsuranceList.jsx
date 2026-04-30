@@ -52,6 +52,12 @@ const FILTERS = ['전체', '실손', '생명', '손해'];
 const TYPE_MAP = { SUPPLEMENTARY: '실손', LIFE: '생명', NON_LIFE: '손해' };
 
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+const formatAmt = (n) => {
+  if (!n) return '0원';
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억원`;
+  if (n >= 10000000)  return `${(n / 10000000).toFixed(0)}천만원`;
+  return new Intl.NumberFormat('ko-KR').format(n) + '원';
+};
 
 const supplementaryBadgeStyle = {
   fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
@@ -109,12 +115,6 @@ const InsuranceList = () => {
           <div className="mc-page-title">내 보험 조회</div>
           <div className="mc-page-subtitle">가입된 보험 상품과 보장 내역을 한 곳에서 관리하세요.</div>
         </div>
-        <div className="mc-page-top-right">
-          <button className="mc-btn" onClick={() => setShowSyncModal(true)}>
-            <Ic d={P.sync} size={12}/>
-            {' '}CODEF 동기화
-          </button>
-        </div>
       </div>
 
       {/* 요약 통계 */}
@@ -131,93 +131,88 @@ const InsuranceList = () => {
         </div>
         <div className="mc-stat mc-stat-pill mc-stat-pill-blue">
           <div className="mc-stat-label">총 보장금액</div>
-          <div className="mc-stat-value">{formatKRW(totalCoverage)}</div>
+          <div className="mc-stat-value">{formatAmt(totalCoverage)}</div>
           <div className="mc-stat-sub">보장 한도 합계</div>
         </div>
       </div>
 
-      {/* 보장 구성 + 필터 2열 */}
-      <div className="mc-two-col" style={{ gridTemplateColumns: '1fr 1fr' }}>
+      {/* 보장 범주 구성 */}
+      <div className="mc-two-col" style={{ gridTemplateColumns: '300px 1fr' }}>
         <div>
           <div className="mc-sec-head">
             <span className="mc-sec-title">보장 범주 구성</span>
           </div>
           <div className="mc-card mc-card-body">
-            <div className="mc-chart-wrap">
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={COVERAGE_PIE_DATA}
-                    cx="50%" cy="50%"
-                    innerRadius={45} outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {PIE_COLORS.map((c, i) => (
-                      <Cell key={i} fill={c} stroke="#fff" strokeWidth={2}/>
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v) => `${v}%`}
-                    contentStyle={{
-                      background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
-                      fontSize: 12,
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mc-stack-xs" style={{ marginTop: 8 }}>
-              {COVERAGE_PIE_DATA.map((item, i) => (
-                <div key={item.name} className="mc-kv">
-                  <span className="mc-kv-key" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{
-                      display: 'inline-block', width: 10, height: 10, borderRadius: 2,
-                      background: PIE_COLORS[i],
-                    }}/>
-                    {item.name}
-                  </span>
-                  <span className="mc-kv-val">{item.value}%</span>
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ flexShrink: 0 }}>
+                <ResponsiveContainer width={120} height={120}>
+                  <PieChart>
+                    <Pie
+                      data={COVERAGE_PIE_DATA}
+                      cx="50%" cy="50%"
+                      innerRadius={32} outerRadius={55}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {PIE_COLORS.map((c, i) => (
+                        <Cell key={i} fill={c} stroke="#fff" strokeWidth={2}/>
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v) => `${v}%`}
+                      contentStyle={{
+                        background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
+                        fontSize: 12,
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mc-stack-xs" style={{ flex: 1 }}>
+                {COVERAGE_PIE_DATA.map((item, i) => (
+                  <div key={item.name} className="mc-kv">
+                    <span className="mc-kv-key" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        display: 'inline-block', width: 8, height: 8, borderRadius: 2,
+                        background: PIE_COLORS[i], flexShrink: 0,
+                      }}/>
+                      {item.name}
+                    </span>
+                    <span className="mc-kv-val">{item.value}%</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-
-        <div>
-          <div className="mc-sec-head">
-            <span className="mc-sec-title">유형 필터</span>
-          </div>
-          <div className="mc-card mc-card-body">
-            <div className="mc-row-wrap">
-              {FILTERS.map((type) => (
-                <button
-                  key={type}
-                  className={`mc-chip ${filterType === type ? 'active' : ''}`}
-                  onClick={() => setFilterType(type)}
-                >
-                  {type}
-                </button>
-              ))}
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+          <div className="mc-alert mc-alert-blue" style={{ marginBottom: 0 }}>
+            <div>
+              <div className="mc-alert-title">총 {filteredPolicies.length}건 · 월 {formatKRW(filteredPolicies.reduce((s, p) => s + (p.monthlyPremium || 0), 0))}</div>
+              <div className="mc-alert-body">현재 필터 기준 금액</div>
             </div>
-            <div className="mc-alert mc-alert-blue" style={{ marginTop: 16 }}>
-              <div>
-                <div className="mc-alert-title">총 {filteredPolicies.length}건 · 월 {formatKRW(
-                  filteredPolicies.reduce((s, p) => s + (p.monthlyPremium || 0), 0),
-                )}</div>
-                <div className="mc-alert-body">현재 필터 기준 금액</div>
-              </div>
-              <span className="mc-tag mc-tag-blue">
-                <Ic d={P.shield} size={10}/> {filterType}
-              </span>
-            </div>
+            <span className="mc-tag mc-tag-blue"><Ic d={P.shield} size={10}/> {filterType}</span>
           </div>
         </div>
       </div>
 
       {/* 보험 상품 리스트 */}
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
-        <span className="mc-sec-title">가입 보험 · {filteredPolicies.length}건</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="mc-sec-title">가입 보험 · {filteredPolicies.length}건</span>
+          <div className="mc-row-wrap" style={{ margin: 0 }}>
+            {FILTERS.map((type) => (
+              <button
+                key={type}
+                className={`mc-chip ${filterType === type ? 'active' : ''}`}
+                onClick={() => setFilterType(type)}
+                style={{ padding: '3px 10px', fontSize: 12 }}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
         <button className="mc-sec-link">
           <Ic d={P.plus} size={10}/> 새 보험 추가
         </button>
