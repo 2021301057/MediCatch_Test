@@ -58,6 +58,9 @@ public class MedicalRecord {
     @Column(length = 20)
     private String diseaseCode;
 
+    @Column
+    private Double nonCoveredAmount;
+
     @Column(columnDefinition = "LONGTEXT")
     private String notes;
 

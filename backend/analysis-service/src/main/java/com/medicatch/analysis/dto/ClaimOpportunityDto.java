@@ -43,4 +43,7 @@ public class ClaimOpportunityDto {
 
     /** 지급 보험사 이름 (CLAIMED 시) */
     private String paidByCompany;
+
+    /** 비급여 금액 (연말정산 resAmount - HIRA resDeductibleAmt). null = 미조회 */
+    private Double nonCoveredAmount;
 }

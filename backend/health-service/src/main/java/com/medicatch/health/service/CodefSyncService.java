@@ -29,7 +29,8 @@ import java.util.concurrent.TimeUnit;
 public class CodefSyncService {
 
     private static final String NHIS_URL = "/v1/kr/public/pp/nhis-health-checkup/result";
-    private static final String HIRA_URL  = "/v1/kr/public/hw/hira-list/my-medical-information";
+    private static final String HIRA_URL = "/v1/kr/public/hw/hira-list/my-medical-information";
+    private static final String NTS_URL  = "/v1/kr/public/nt/etc-yearend-tax/income-tax-credit";
     private static final int SESSION_TIMEOUT_MINUTES = 10;
 
     @Value("${codef.api-client-id:YOUR_API_CLIENT_ID}")
@@ -95,7 +96,10 @@ public class CodefSyncService {
             hiraParams.put("id",             sharedId);
             if ("5".equals(loginTypeLevel)) hiraParams.put("telecom", telecom);
 
-            // 건강검진 + 진료정보 1차 동시 요청 (알림이 동시에 전송되도록)
+            HashMap<String, Object> ntsParams = buildNtsParams(userName, phoneNo, identity13, currentYear);
+            ntsParams.put("id", sharedId);
+
+            // NHIS + HIRA + NTS 1차 동시 요청
             EasyCodefServiceType svcType = serviceType();
             CompletableFuture<String> nhisFuture = CompletableFuture.supplyAsync(() -> {
                 try {
@@ -109,13 +113,19 @@ public class CodefSyncService {
                     return createCodef().requestProduct(HIRA_URL, svcType, hiraParams);
                 } catch (Exception e) { throw new RuntimeException(e); }
             });
+            CompletableFuture<String> ntsFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    log.info("NTS 연말정산 1차 요청 - userId: {}", userId);
+                    return createCodef().requestProduct(NTS_URL, svcType, ntsParams);
+                } catch (Exception e) { throw new RuntimeException(e); }
+            });
 
             String nhisResult = nhisFuture.get(90, TimeUnit.SECONDS);
             String hiraResult = hiraFuture.get(90, TimeUnit.SECONDS);
             log.info("NHIS 1차 응답: {}", nhisResult);
             log.info("HIRA 1차 응답: {}", hiraResult);
 
-            Map<String, Object> nhisMap    = objectMapper.readValue(nhisResult, Map.class);
+            Map<String, Object> nhisMap     = objectMapper.readValue(nhisResult, Map.class);
             Map<String, Object> nhisResult2 = toMap(nhisMap.get("result"));
             String nhisCode = (String) nhisResult2.get("code");
             if (!"CF-00000".equals(nhisCode) && !"CF-03002".equals(nhisCode)) {
@@ -124,7 +134,7 @@ public class CodefSyncService {
             }
             Map<String, Object> nhisData = toMap(nhisMap.get("data"));
 
-            Map<String, Object> hiraMap    = objectMapper.readValue(hiraResult, Map.class);
+            Map<String, Object> hiraMap     = objectMapper.readValue(hiraResult, Map.class);
             Map<String, Object> hiraResult2 = toMap(hiraMap.get("result"));
             String hiraCode = (String) hiraResult2.get("code");
             if (!"CF-00000".equals(hiraCode) && !"CF-03002".equals(hiraCode)) {
@@ -133,13 +143,33 @@ public class CodefSyncService {
             }
             Map<String, Object> hiraData = toMap(hiraMap.get("data"));
 
+            // NTS는 실패해도 전체 sync 중단하지 않음
+            HashMap<String, Object> savedNtsParams = null;
+            Map<String, Object> ntsData = null;
+            try {
+                String ntsResult = ntsFuture.get(90, TimeUnit.SECONDS);
+                log.info("NTS 연말정산 1차 응답: {}", ntsResult);
+                Map<String, Object> ntsMap     = objectMapper.readValue(ntsResult, Map.class);
+                Map<String, Object> ntsResult2 = toMap(ntsMap.get("result"));
+                String ntsCode = (String) ntsResult2.get("code");
+                if ("CF-00000".equals(ntsCode) || "CF-03002".equals(ntsCode)) {
+                    savedNtsParams = ntsParams;
+                    ntsData        = toMap(ntsMap.get("data"));
+                } else {
+                    log.warn("NTS 연말정산 1차 오류 [{}] - 비급여 동기화 건너뜀", ntsCode);
+                }
+            } catch (Exception e) {
+                log.warn("NTS 연말정산 1차 요청 실패 - 비급여 동기화 건너뜀: {}", e.getMessage());
+            }
+
             String sessionKey = UUID.randomUUID().toString();
             sessions.put(sessionKey, new SyncSession(
                     userId, nhisParams, nhisData, hiraParams, hiraData,
+                    savedNtsParams, ntsData,
                     loginTypeLevel, LocalDateTime.now()
             ));
 
-            log.info("건강 데이터 동기화 1차 완료 - sessionKey: {}", sessionKey);
+            log.info("건강 데이터 동기화 1차 완료 - sessionKey: {}, nts: {}", sessionKey, savedNtsParams != null);
             return new SyncStep1Response(sessionKey, loginTypeLevel, true);
 
         } catch (Exception e) {
@@ -154,7 +184,7 @@ public class CodefSyncService {
     public SyncStep2Result syncStep2(String sessionKey, String smsAuthNo) {
         SyncSession session = getValidSession(sessionKey);
         try {
-            int checkupCount = 0, medicalCount = 0, medicationCount = 0;
+            int checkupCount = 0, medicalCount = 0, medicationCount = 0, nonCoveredCount = 0;
 
             // 건강검진 2차
             EasyCodef nhisCodef = createCodef();
@@ -186,11 +216,30 @@ public class CodefSyncService {
             medicalCount    = hiraCounts[0];
             medicationCount = hiraCounts[1];
 
-            sessions.remove(sessionKey);
-            log.info("건강 데이터 동기화 완료 - userId: {}, checkups: {}, medicals: {}, medications: {}",
-                    session.getUserId(), checkupCount, medicalCount, medicationCount);
+            // 연말정산 2차 (NTS가 1차에 포함된 경우만)
+            if (session.getNtsParams() != null && session.getNtsTwoWayData() != null) {
+                try {
+                    Thread.sleep(300);
+                    EasyCodef ntsCodef = createCodef();
+                    HashMap<String, Object> ntsCertMap = new HashMap<>(session.getNtsParams());
+                    ntsCertMap.put("twoWayInfo", buildTwoWayInfo(session.getNtsTwoWayData()));
+                    ntsCertMap.put("is2Way",    true);
+                    ntsCertMap.put("simpleAuth","1");
 
-            return new SyncStep2Result(checkupCount, medicalCount, medicationCount);
+                    log.info("NTS 연말정산 2차 요청 - sessionKey: {}", sessionKey);
+                    String ntsResult = ntsCodef.requestCertification(NTS_URL, serviceType(), ntsCertMap);
+                    log.debug("NTS 연말정산 2차 응답: {}", ntsResult);
+                    nonCoveredCount = updateNonCoveredAmounts(session.getUserId(), ntsResult);
+                } catch (Exception e) {
+                    log.warn("NTS 연말정산 2차 실패 - 비급여 업데이트 건너뜀: {}", e.getMessage());
+                }
+            }
+
+            sessions.remove(sessionKey);
+            log.info("건강 데이터 동기화 완료 - userId: {}, checkups: {}, medicals: {}, medications: {}, nonCovered: {}",
+                    session.getUserId(), checkupCount, medicalCount, medicationCount, nonCoveredCount);
+
+            return new SyncStep2Result(checkupCount, medicalCount, medicationCount, nonCoveredCount);
 
         } catch (Exception e) {
             log.error("건강 데이터 동기화 2차 실패: {}", e.getMessage(), e);
@@ -541,6 +590,158 @@ public class CodefSyncService {
         }
     }
 
+    // ── 연말정산(NTS) 단독 ───────────────────────────────────────────────
+
+    public String syncYeartaxStep1(Long userId, String userName, String phoneNo,
+                                   String identity13, String searchYear) {
+        try {
+            String year = (searchYear != null && !searchYear.isBlank())
+                    ? searchYear : String.valueOf(LocalDate.now().getYear());
+
+            HashMap<String, Object> params = buildNtsParams(userName, phoneNo, identity13, year);
+            params.put("id", "mc_nts_" + userId);
+
+            log.info("NTS 연말정산 1차 요청 - userId: {}, year: {}", userId, year);
+            String result = createCodef().requestProduct(NTS_URL, serviceType(), params);
+            log.info("NTS 연말정산 1차 응답: {}", result);
+
+            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
+            if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "연말정산 조회 실패");
+                throw new RuntimeException("연말정산(NTS) 오류 [" + code + "]: " + msg);
+            }
+
+            String sessionKey = UUID.randomUUID().toString();
+            singleSessions.put(sessionKey, new SingleSession(userId, params,
+                    toMap(respMap.get("data")), LocalDateTime.now()));
+            log.info("NTS 연말정산 1차 완료 - sessionKey: {}", sessionKey);
+            return sessionKey;
+
+        } catch (RuntimeException e) { throw e;
+        } catch (Exception e) {
+            log.error("NTS 연말정산 1차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("연말정산 요청 중 오류: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
+    public int syncYeartaxStep2(String sessionKey) {
+        SingleSession session = getValidSingleSession(sessionKey);
+        try {
+            HashMap<String, Object> certMap = new HashMap<>(session.getParams());
+            certMap.put("twoWayInfo", new HashMap<>(session.getTwoWayData()));
+            certMap.put("is2Way",    true);
+            certMap.put("simpleAuth","1");
+
+            log.info("NTS 연말정산 2차 요청 - sessionKey: {}", sessionKey);
+            String result = createCodef().requestCertification(NTS_URL, serviceType(), certMap);
+            log.info("NTS 연말정산 2차 응답: {}", result);
+
+            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
+            if (!"CF-00000".equals(code)) {
+                String msg = (String) resultField.getOrDefault("message", "연말정산 인증 실패");
+                throw new RuntimeException("연말정산(NTS) 인증 오류 [" + code + "]: " + msg);
+            }
+
+            int count = updateNonCoveredAmounts(session.getUserId(), result);
+            singleSessions.remove(sessionKey);
+            log.info("NTS 연말정산 동기화 완료 - userId: {}, updated: {}", session.getUserId(), count);
+            return count;
+
+        } catch (RuntimeException e) { throw e;
+        } catch (Exception e) {
+            log.error("NTS 연말정산 2차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("연말정산 인증 중 오류: " + e.getMessage(), e);
+        }
+    }
+
+    /** NTS 공통 파라미터 생성 (organization=0004, loginType=6) */
+    private HashMap<String, Object> buildNtsParams(String userName, String phoneNo,
+                                                    String identity13, String searchYear) {
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("organization",   "0004");
+        params.put("loginType",      "6");
+        params.put("loginTypeLevel", "1");
+        params.put("userName",       userName);
+        params.put("phoneNo",        phoneNo);
+        params.put("identity",       identity13);
+        params.put("searchStartYear", searchYear);
+        return params;
+    }
+
+    /**
+     * 연말정산 응답의 resBasicList → resDetailList를 파싱하여
+     * 날짜+병원명 기준으로 MedicalRecord.nonCoveredAmount를 업데이트한다.
+     * 비급여 = 연말정산 resAmount - HIRA outOfPocket (resDeductibleAmt)
+     */
+    @SuppressWarnings("unchecked")
+    private int updateNonCoveredAmounts(Long userId, String ntsResult) throws Exception {
+        Map<String, Object> responseMap = objectMapper.readValue(ntsResult, Map.class);
+        Map<String, Object> resultField = toMap(responseMap.get("result"));
+        String code = (String) resultField.get("code");
+        if (!"CF-00000".equals(code)) {
+            log.warn("연말정산 응답 오류 [{}] - 비급여 업데이트 건너뜀", code);
+            return 0;
+        }
+
+        Map<String, Object> data = toMap(responseMap.get("data"));
+        List<Map<String, Object>> basicList =
+                (List<Map<String, Object>>) data.getOrDefault("resBasicList", List.of());
+
+        // 날짜+병원명(정규화) → 연말정산 환자 납부액 매핑
+        Map<String, Double> ytByDateHospital = new HashMap<>();
+        // 날짜만으로도 집계 (병원명 불일치 대비 fallback)
+        Map<String, List<Double>> ytByDate = new HashMap<>();
+
+        for (Map<String, Object> basic : basicList) {
+            String companyNm = str(basic.get("resCompanyNm"));
+            List<Map<String, Object>> detailList =
+                    (List<Map<String, Object>>) basic.getOrDefault("resDetailList", List.of());
+            for (Map<String, Object> detail : detailList) {
+                String dateStr = str(detail.get("resDatePayment"));
+                Double amt     = parseDouble(detail.get("resAmount"));
+                if (dateStr == null || dateStr.length() < 8 || amt == null || amt <= 0) continue;
+                String date8 = dateStr.substring(0, 8);
+
+                String key = date8 + "::" + normalizeHospital(companyNm);
+                ytByDateHospital.merge(key, amt, Double::sum);
+                ytByDate.computeIfAbsent(date8, k -> new ArrayList<>()).add(amt);
+            }
+        }
+
+        List<MedicalRecord> records = medicalRecordRepo.findByUserIdOrderByVisitDateDesc(userId);
+        int updated = 0;
+        for (MedicalRecord rec : records) {
+            if (rec.getVisitDate() == null || rec.getOutOfPocket() == null) continue;
+            String date8 = rec.getVisitDate().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+            Double ytAmount = ytByDateHospital.get(date8 + "::" + normalizeHospital(rec.getHospital()));
+
+            // fallback: 해당 날짜에 단 하나의 병원 항목만 있을 때
+            if (ytAmount == null) {
+                List<Double> dayAmounts = ytByDate.get(date8);
+                if (dayAmounts != null && dayAmounts.size() == 1) ytAmount = dayAmounts.get(0);
+            }
+
+            if (ytAmount != null) {
+                double nonCovered = Math.max(0.0, ytAmount - rec.getOutOfPocket());
+                rec.setNonCoveredAmount(nonCovered);
+                updated++;
+            }
+        }
+        medicalRecordRepo.saveAll(records);
+        return updated;
+    }
+
+    private String normalizeHospital(String name) {
+        if (name == null) return "";
+        return name.replaceAll("\\s+", "").toLowerCase();
+    }
+
     // ── 세션/응답 DTO ────────────────────────────────────────────────────
 
     @Data
@@ -557,6 +758,7 @@ public class CodefSyncService {
         private int savedCheckups;
         private int savedMedicals;
         private int savedMedications;
+        private int updatedNonCovered;
     }
 
     @Data
@@ -567,6 +769,8 @@ public class CodefSyncService {
         private Map<String, Object> nhisTwoWayData;
         private HashMap<String, Object> hiraParams;
         private Map<String, Object> hiraTwoWayData;
+        private HashMap<String, Object> ntsParams;
+        private Map<String, Object> ntsTwoWayData;
         private String authMethod;
         private LocalDateTime createdAt;
     }

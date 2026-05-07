@@ -117,6 +117,7 @@ public class ClaimMatchingService {
         TreatClass tc             = classify(diseaseCode, record.getDepartment());
         String     treatType      = record.getTreatmentType();   // "외래" / "입원" / "약국"
         Double     outOfPocket    = record.getPatientPayment();
+        Double     nonCovered     = record.getNonCoveredAmount();
         boolean    hasPublicCharge= record.getInsurancePayment() != null
                                     && record.getInsurancePayment() > 0;
         LocalDate  visitDate      = record.getVisitDate();
@@ -142,6 +143,7 @@ public class ClaimMatchingService {
                 .patientPayment(outOfPocket)
                 .insurancePayment(record.getInsurancePayment())
                 .totalCost(record.getTotalCost())
+                .nonCoveredAmount(nonCovered)
                 .alreadyPaidAmount(alreadyPaid)
                 .paidByCompany(paidCompany)
                 .claimStatus(isClaimed ? "CLAIMED" : record.getClaimStatus());
@@ -172,15 +174,52 @@ public class ClaimMatchingService {
         }
 
         boolean claimable = CONFIRMED.equals(best.confidence) || LIKELY.equals(best.confidence);
+        // 급여 자기부담 + 세대별 비급여 보장 가능 금액
+        double claimAmt = 0.0;
+        if (claimable) {
+            claimAmt = (outOfPocket != null ? outOfPocket : 0.0)
+                     + eligibleNonCovered(nonCovered, best.gen, tc);
+        }
         return builder
                 .hasClaimOpportunity(claimable)
-                .claimAmount(claimable ? outOfPocket : 0.0)
+                .claimAmount(claimAmt)
                 .claimInsurance(best.company)
                 .matchedCoverage(best.coverageName)
                 .confidenceLevel(best.confidence)
                 .supplementaryGeneration(best.gen)
-                .coverageNote(best.note)
+                .coverageNote(buildCoverageNote(best.note, nonCovered, best.gen, tc))
                 .build();
+    }
+
+    /**
+     * 세대별 비급여 보장 가능 금액.
+     * 1세대: 100%, 2~3세대: 80%, 4세대: 70% (일부 제외), 5세대: 0% (급여전환 특약 한정)
+     * 치과 비급여: 모든 세대 0% (이미 matchDental에서 EXCLUDED 처리됨)
+     */
+    private double eligibleNonCovered(Double nonCovered, int gen, TreatClass tc) {
+        if (nonCovered == null || nonCovered <= 0) return 0.0;
+        if (tc == TreatClass.DENTAL || tc == TreatClass.PHARMACY) return 0.0;
+        return switch (gen) {
+            case 1       -> nonCovered;
+            case 2, 3    -> nonCovered * 0.8;
+            case 4       -> nonCovered * 0.7;
+            case 5       -> 0.0;
+            default      -> nonCovered * 0.8;
+        };
+    }
+
+    /** coverageNote에 비급여 정보 보충 */
+    private String buildCoverageNote(String baseNote, Double nonCovered, int gen, TreatClass tc) {
+        if (nonCovered == null || nonCovered <= 0 || tc == TreatClass.DENTAL || tc == TreatClass.PHARMACY)
+            return baseNote;
+        String ncInfo = switch (gen) {
+            case 1    -> " · 비급여 전액 포함";
+            case 2, 3 -> " · 비급여 20% 자기부담";
+            case 4    -> " · 비급여 30% 자기부담";
+            case 5    -> " · 비급여 미보장";
+            default   -> "";
+        };
+        return baseNote != null ? baseNote + ncInfo : ncInfo.trim();
     }
 
     // ── 보험 정책 → 보장 항목 순회 ───────────────────────────────────────────
@@ -275,10 +314,7 @@ public class ClaimMatchingService {
 
     // ── 분류별 보장 규칙 ─────────────────────────────────────────────────────
 
-    /**
-     * 상해 (AS*/AT*): 모든 세대에서 비급여 포함 보장.
-     * 5세대는 비급여 할증이 있지만 기본 보장은 유지.
-     */
+    // 상해 (AS코드/AT코드): 모든 세대에서 비급여 포함 보장. 5세대는 비급여 할증 적용.
     private MatchResult matchInjury(String company, String itemName, int gen, boolean inpatient) {
         String place = inpatient ? "입원" : "통원";
         return switch (gen) {

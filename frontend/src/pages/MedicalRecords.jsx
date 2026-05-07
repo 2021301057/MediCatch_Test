@@ -77,6 +77,9 @@ const buildGroups = (records) => {
       // 보장 메모 목록 (중복 제거, null 제외)
       const coverageNotes = [...new Set(recs.map(r => r.coverageNote).filter(Boolean))];
 
+      const totalNonCovered = recs.reduce((s, r) => s + (r.nonCoveredAmount || 0), 0);
+      const hasNonCovered   = totalNonCovered > 0;
+
       return {
         visitDate:           date,
         records:             recs,
@@ -86,6 +89,8 @@ const buildGroups = (records) => {
         totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment  || 0), 0),
         totalCost:           recs.reduce((s, r) => s + (r.totalCost         || 0), 0),
         totalClaimAmount:    claimable.reduce((s, r) => s + (r.claimAmount  || 0), 0),
+        totalNonCovered,
+        hasNonCovered,
         alreadyPaid,
         paidCompany,
         isFullyClaimed:  recs.length > 0 && recs.every(r => r.claimStatus === 'CLAIMED'),
@@ -271,7 +276,7 @@ const MedicalRecords = () => {
                 {/* 비용 요약 */}
                 <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div>
-                    <div className="mc-field-label">환자 부담</div>
+                    <div className="mc-field-label">급여 자기부담</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
                       {fmt(g.totalPatientPayment)}
                     </div>
@@ -289,6 +294,25 @@ const MedicalRecords = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* 비급여 금액 (연말정산 데이터 있을 때만) */}
+                {g.hasNonCovered && (
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                    background: 'var(--bg-2)', border: '1px solid var(--border)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        급여 자기부담 <strong style={{ color: 'var(--text-2)' }}>{fmt(g.totalPatientPayment)}</strong>
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        비급여 <strong style={{ color: '#E65100' }}>{fmt(g.totalNonCovered)}</strong>
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>연말정산 기준</span>
+                  </div>
+                )}
 
                 {/* 이미 지급된 내역 */}
                 {g.alreadyPaid > 0 && (

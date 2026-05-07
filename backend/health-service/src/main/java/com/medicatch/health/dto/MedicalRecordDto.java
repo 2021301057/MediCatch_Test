@@ -23,6 +23,7 @@ public class MedicalRecordDto {
     private String claimStatus;
     private boolean hasClaimOpportunity;
     private Double claimAmount;
+    private Double nonCoveredAmount;
     private String notes;
 
     public static MedicalRecordDto from(MedicalRecord e) {
@@ -43,6 +44,7 @@ public class MedicalRecordDto {
                 .claimStatus(e.getClaimStatus())
                 .hasClaimOpportunity(hasClaim)
                 .claimAmount(hasClaim ? outOfPocket : 0.0)
+                .nonCoveredAmount(e.getNonCoveredAmount())
                 .notes(e.getNotes())
                 .build();
     }
