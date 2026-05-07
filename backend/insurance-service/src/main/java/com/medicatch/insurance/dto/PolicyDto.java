@@ -35,6 +35,7 @@ public class PolicyDto {
         private Double amount;
         @JsonProperty("isCovered")
         private boolean isCovered;
+        private String agreementType;
     }
 
     public static PolicyDto from(Policy p) {
@@ -45,6 +46,7 @@ public class PolicyDto {
                                 .category(ci.getCategory())
                                 .amount(ci.getMaxBenefitAmount())
                                 .isCovered(ci.isCovered())
+                                .agreementType(ci.getConditions())
                                 .build())
                         .collect(Collectors.toList());
 

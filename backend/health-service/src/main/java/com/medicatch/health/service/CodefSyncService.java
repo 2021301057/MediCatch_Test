@@ -263,7 +263,8 @@ public class CodefSyncService {
                     .medicalCost(parseDouble(item.get("resTotalAmount")))
                     .insuranceCoverage(parseDouble(item.get("resPublicCharge")))
                     .outOfPocket(parseDouble(item.get("resDeductibleAmt")))
-                    .notes("진단코드: " + strOrDefault(item.get("resDiseaseCode"), "-"))
+                    .diseaseCode(str(item.get("resDiseaseCode")))
+                    .notes(str(item.get("resTreatType")))
                     .build());
         }
         medicalRecordRepo.saveAll(records);

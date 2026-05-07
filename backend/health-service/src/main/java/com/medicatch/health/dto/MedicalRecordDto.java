@@ -19,6 +19,7 @@ public class MedicalRecordDto {
     private Double patientPayment;
     private Double insurancePayment;
     private Double totalCost;
+    private String diseaseCode;
     private boolean hasClaimOpportunity;
     private Double claimAmount;
 
@@ -33,6 +34,7 @@ public class MedicalRecordDto {
                 .department(e.getDepartment())
                 .diagnosis(e.getDiagnosis())
                 .treatmentType(e.getTreatmentDetails())
+                .diseaseCode(e.getDiseaseCode())
                 .patientPayment(outOfPocket)
                 .insurancePayment(e.getInsuranceCoverage())
                 .totalCost(e.getMedicalCost())

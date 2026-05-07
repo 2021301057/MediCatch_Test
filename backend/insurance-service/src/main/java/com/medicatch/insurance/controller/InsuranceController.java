@@ -32,11 +32,15 @@ public class InsuranceController {
      */
     @GetMapping("/policies")
     public ResponseEntity<List<PolicyDto>> getActivePolicies(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
-        if (userIdHeader == null || userIdHeader.isBlank()) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(required = false) Long userIdParam) {
+        Long userId = userIdParam;
+        if (userId == null && userIdHeader != null && !userIdHeader.isBlank()) {
+            userId = Long.parseLong(userIdHeader);
+        }
+        if (userId == null) {
             return ResponseEntity.badRequest().build();
         }
-        Long userId = Long.parseLong(userIdHeader);
         log.info("GET /api/insurance/policies - userId: {}", userId);
         try {
             List<PolicyDto> policies = insuranceService.getActivePolicies(userId)

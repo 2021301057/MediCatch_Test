@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { healthAPI } from '../api/services';
+import { healthAPI, analysisAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import CodefSyncModal from '../components/CodefSyncModal';
 
@@ -54,10 +54,15 @@ const MedicalRecords = () => {
     const fetchRecords = async () => {
       setLoading(true);
       try {
-        const data = await healthAPI.getMedicalRecords();
+        const data = await analysisAPI.getClaimOpportunities();
         if (Array.isArray(data) && data.length) setRecords(data);
-      } catch (error) {
-        console.error('Failed to fetch records:', error);
+      } catch {
+        try {
+          const fallback = await healthAPI.getMedicalRecords();
+          if (Array.isArray(fallback) && fallback.length) setRecords(fallback);
+        } catch (err) {
+          console.error('Failed to fetch records:', err);
+        }
       } finally {
         setLoading(false);
       }
@@ -71,7 +76,7 @@ const MedicalRecords = () => {
   const filteredRecords =
     filterStatus === '전체' ? records :
     filterStatus === '청구가능' ? records.filter((r) => r.hasClaimOpportunity) :
-    records.filter((r) => !r.hasClaimOpportunity);
+    records.filter((r) => r.claimStatus === 'CLAIMED' || !r.hasClaimOpportunity);
 
   const handleClaimClick = (record) => {
     setSelectedRecord(record);
@@ -79,9 +84,11 @@ const MedicalRecords = () => {
   };
 
   const handleSyncSuccess = () => {
-    healthAPI.getMedicalRecords()
+    analysisAPI.getClaimOpportunities()
       .then((data) => { if (Array.isArray(data) && data.length) setRecords(data); })
-      .catch(() => {});
+      .catch(() => healthAPI.getMedicalRecords()
+        .then((data) => { if (Array.isArray(data) && data.length) setRecords(data); })
+        .catch(() => {}));
   };
 
   return (

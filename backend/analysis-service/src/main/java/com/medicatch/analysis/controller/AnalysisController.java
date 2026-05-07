@@ -1,5 +1,7 @@
 package com.medicatch.analysis.controller;
 
+import com.medicatch.analysis.dto.ClaimOpportunityDto;
+import com.medicatch.analysis.service.ClaimMatchingService;
 import com.medicatch.analysis.service.CoverageGapService;
 import com.medicatch.analysis.service.PreTreatmentSearchService;
 import lombok.extern.slf4j.Slf4j;
@@ -16,11 +18,14 @@ public class AnalysisController {
 
     private final PreTreatmentSearchService preTreatmentSearchService;
     private final CoverageGapService coverageGapService;
+    private final ClaimMatchingService claimMatchingService;
 
     public AnalysisController(PreTreatmentSearchService preTreatmentSearchService,
-                              CoverageGapService coverageGapService) {
+                              CoverageGapService coverageGapService,
+                              ClaimMatchingService claimMatchingService) {
         this.preTreatmentSearchService = preTreatmentSearchService;
         this.coverageGapService = coverageGapService;
+        this.claimMatchingService = claimMatchingService;
     }
 
     /**
@@ -104,16 +109,22 @@ public class AnalysisController {
     }
 
     /**
-     * Find claim opportunities
+     * Find claim opportunities by matching medical records with insurance policies
      */
     @GetMapping("/claim-opportunities")
-    public ResponseEntity<List<Map<String, Object>>> findClaimOpportunities(
-            @RequestParam Long userId,
-            @RequestParam(required = false) String medicalEvents) {
-        log.info("GET /api/analysis/claim-opportunities - userId: {}", userId);
+    public ResponseEntity<List<ClaimOpportunityDto>> findClaimOpportunities(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(required = false) Long userId) {
+        Long resolvedUserId = userId;
+        if (resolvedUserId == null && userIdHeader != null && !userIdHeader.isBlank()) {
+            resolvedUserId = Long.parseLong(userIdHeader);
+        }
+        if (resolvedUserId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        log.info("GET /api/analysis/claim-opportunities - userId: {}", resolvedUserId);
         try {
-            List<String> events = medicalEvents != null ? List.of(medicalEvents.split(",")) : List.of();
-            List<Map<String, Object>> opportunities = coverageGapService.findClaimOpportunities(userId, events);
+            List<ClaimOpportunityDto> opportunities = claimMatchingService.findClaimOpportunities(resolvedUserId);
             return ResponseEntity.ok(opportunities);
         } catch (Exception e) {
             log.error("Error finding claim opportunities: {}", e.getMessage(), e);
