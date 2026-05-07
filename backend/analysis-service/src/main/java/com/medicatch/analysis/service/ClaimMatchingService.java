@@ -42,7 +42,10 @@ public class ClaimMatchingService {
             policies = List.of();
         }
 
-        List<PolicyInfo> activePolicies = policies;
+        List<PolicyInfo> activePolicies = policies.stream()
+                .filter(p -> "ACTIVE".equals(p.getContractStatus()))
+                .collect(Collectors.toList());
+
         return records.stream()
                 .map(r -> buildOpportunity(r, activePolicies))
                 .sorted(Comparator.comparing(ClaimOpportunityDto::getVisitDate,
@@ -51,14 +54,13 @@ public class ClaimMatchingService {
     }
 
     private ClaimOpportunityDto buildOpportunity(MedicalRecordInfo record, List<PolicyInfo> policies) {
+        // 본인부담금이 있어야 청구 검토 대상
         boolean hasCost = record.getPatientPayment() != null && record.getPatientPayment() > 0;
-        List<MatchedPolicyDto> matched = hasCost ? matchPolicies(record, policies) : List.of();
+        List<MatchedPolicyDto> matched = hasCost ? matchAgainstCoverageItems(record, policies) : List.of();
 
-        boolean hasOpportunity = !matched.isEmpty();
-        double claimAmount = matched.stream()
+        double totalClaimable = matched.stream()
                 .mapToDouble(m -> m.getEstimatedAmount() != null ? m.getEstimatedAmount() : 0)
                 .sum();
-        if (claimAmount == 0 && hasCost) claimAmount = record.getPatientPayment();
 
         String claimInsurance = matched.isEmpty() ? null :
                 matched.stream()
@@ -78,82 +80,130 @@ public class ClaimMatchingService {
                 .insurancePayment(record.getInsurancePayment())
                 .totalCost(record.getTotalCost())
                 .claimStatus("UNCLAIMED")
-                .hasClaimOpportunity(hasOpportunity)
-                .claimAmount(hasOpportunity ? claimAmount : 0.0)
+                .hasClaimOpportunity(!matched.isEmpty())
+                .claimAmount(totalClaimable)
                 .claimInsurance(claimInsurance)
                 .matchedPolicies(matched)
                 .build();
     }
 
-    private List<MatchedPolicyDto> matchPolicies(MedicalRecordInfo record, List<PolicyInfo> policies) {
+    /**
+     * 보험 계약의 보장 항목(agreementType) 하나하나와 진료 기록을 비교한다.
+     *
+     * agreementType 예시:
+     *   실손계열: "질병통원의료비", "상해통원의료비", "질병입원의료비", "상해입원의료비", "질병처방조제비"
+     *   정액계열: "암진단", "골절진단", "화상진단", "뇌혈관질환진단", "허혈성심장질환진단",
+     *             "질병입원일당", "상해입원일당", "질병수술급여", "상해수술급여"
+     */
+    private List<MatchedPolicyDto> matchAgainstCoverageItems(MedicalRecordInfo record, List<PolicyInfo> policies) {
         List<MatchedPolicyDto> result = new ArrayList<>();
         for (PolicyInfo policy : policies) {
-            if (!"ACTIVE".equals(policy.getContractStatus())) continue;
-
-            // 실손(supplementary) matching
-            if (policy.isHasSupplementaryCoverage()) {
-                String matchedItem = findSupplementaryMatch(record, policy);
-                if (matchedItem != null) {
-                    result.add(MatchedPolicyDto.builder()
-                            .policyId(policy.getId())
-                            .policyName(policy.getProductName())
-                            .companyName(policy.getCompanyName())
-                            .coverageType("실손")
-                            .estimatedAmount(record.getPatientPayment())
-                            .coverageItemName(matchedItem)
-                            .build());
-                }
-            }
-
-            // 정액(lump-sum) matching via disease code
             if (policy.getCoverageItems() == null) continue;
             for (CoverageItemInfo item : policy.getCoverageItems()) {
-                if (!item.isCovered() || item.getAgreementType() == null) continue;
-                if (matchesDiagnosisCondition(record.getDiseaseCode(), item.getAgreementType())) {
-                    result.add(MatchedPolicyDto.builder()
-                            .policyId(policy.getId())
-                            .policyName(policy.getProductName())
-                            .companyName(policy.getCompanyName())
-                            .coverageType("정액")
-                            .estimatedAmount(item.getAmount())
-                            .coverageItemName(item.getName())
-                            .build());
-                }
+                if (!item.isCovered()) continue;
+
+                Double claimable = estimateClaimable(record, item);
+                if (claimable == null || claimable <= 0) continue;
+
+                String agreementType = item.getAgreementType();
+                String coverageType = isSupplementaryItem(agreementType) ? "실손" : "정액";
+
+                result.add(MatchedPolicyDto.builder()
+                        .policyId(policy.getId())
+                        .policyName(policy.getProductName())
+                        .companyName(policy.getCompanyName())
+                        .coverageType(coverageType)
+                        .estimatedAmount(claimable)
+                        .coverageItemName(item.getName())
+                        .build());
             }
         }
         return result;
     }
 
-    private String findSupplementaryMatch(MedicalRecordInfo record, PolicyInfo policy) {
-        String treatType = record.getTreatmentType();
-        if (treatType == null || policy.getCoverageItems() == null) return null;
+    /**
+     * 보장 항목 하나에 대해 청구 가능 금액을 계산한다.
+     * 매칭 안 되면 null 반환.
+     *
+     * 실손: 본인부담금(patientPayment) 전액이 청구 대상
+     * 정액: 보장 항목의 약정 금액(item.amount)이 청구 대상
+     */
+    private Double estimateClaimable(MedicalRecordInfo record, CoverageItemInfo item) {
+        String agreementType = item.getAgreementType();
 
-        for (CoverageItemInfo item : policy.getCoverageItems()) {
-            if (!item.isCovered() || item.getCategory() == null) continue;
-            String cat = item.getCategory();
-            if (isOutpatient(treatType) && "OUTPATIENT".equals(cat)) return item.getName();
-            if (isInpatient(treatType) && "INPATIENT".equals(cat)) return item.getName();
-            if (isPharmacy(treatType) && "MEDICATION".equals(cat)) return item.getName();
+        // agreementType이 없으면 category로 폴백
+        if (agreementType == null || agreementType.isBlank()) {
+            return matchByCategory(record, item) ? record.getPatientPayment() : null;
         }
-        // fallback: any covered item if treatType unmapped
-        return policy.getCoverageItems().stream()
-                .filter(CoverageItemInfo::isCovered)
-                .map(CoverageItemInfo::getName)
-                .findFirst()
-                .orElse("실손의료비");
+
+        // ── 실손 ──
+        if (isOutpatientItem(agreementType) && isOutpatient(record.getTreatmentType())) {
+            return record.getPatientPayment();
+        }
+        if (isInpatientItem(agreementType) && isInpatient(record.getTreatmentType())) {
+            return record.getPatientPayment();
+        }
+        if (isPharmacyItem(agreementType) && isPharmacy(record.getTreatmentType())) {
+            return record.getPatientPayment();
+        }
+
+        // ── 정액 ──
+        if (matchesDiagnosisCondition(record.getDiseaseCode(), agreementType)) {
+            return item.getAmount() != null ? item.getAmount() : record.getPatientPayment();
+        }
+
+        return null;
     }
 
+    // ── agreementType 분류 ────────────────────────────────────────
+
+    private boolean isSupplementaryItem(String agreementType) {
+        if (agreementType == null) return false;
+        return agreementType.contains("통원의료비")
+                || agreementType.contains("입원의료비")
+                || agreementType.contains("처방조제비");
+    }
+
+    private boolean isOutpatientItem(String t) {
+        return t.contains("통원의료비");
+    }
+
+    private boolean isInpatientItem(String t) {
+        return t.contains("입원의료비");
+    }
+
+    private boolean isPharmacyItem(String t) {
+        return t.contains("처방조제비");
+    }
+
+    // ── 치료 유형 판별 (resTreatType 값) ─────────────────────────────
+
     private boolean isOutpatient(String t) {
+        if (t == null) return false;
         return t.contains("외래") || t.contains("통원") || t.equals("2");
     }
 
     private boolean isInpatient(String t) {
+        if (t == null) return false;
         return t.contains("입원") || t.equals("1");
     }
 
     private boolean isPharmacy(String t) {
+        if (t == null) return false;
         return t.contains("약국") || t.equals("3");
     }
+
+    // ── category 폴백 (agreementType 없을 때) ─────────────────────────
+
+    private boolean matchByCategory(MedicalRecordInfo record, CoverageItemInfo item) {
+        String cat = item.getCategory();
+        if (cat == null) return false;
+        return ("OUTPATIENT".equals(cat) && isOutpatient(record.getTreatmentType()))
+                || ("INPATIENT".equals(cat) && isInpatient(record.getTreatmentType()))
+                || ("MEDICATION".equals(cat) && isPharmacy(record.getTreatmentType()));
+    }
+
+    // ── KCD 진단코드 → 정액 보장 조건 매핑 ──────────────────────────────
 
     private boolean matchesDiagnosisCondition(String diseaseCode, String agreementType) {
         if (diseaseCode == null || diseaseCode.isBlank()) return false;
@@ -169,21 +219,13 @@ public class ClaimMatchingService {
     }
 
     private boolean isFractureCode(String dc) {
-        // S40–S99: fractures/injuries; AT* used in CODEF demo
         if (dc.startsWith("AT")) return true;
-        if (dc.length() >= 2 && dc.charAt(0) == 'S') {
-            char second = dc.charAt(1);
-            return second >= '4' && second <= '9';
-        }
-        return false;
+        return dc.length() >= 2 && dc.charAt(0) == 'S'
+                && dc.charAt(1) >= '4' && dc.charAt(1) <= '9';
     }
 
     private boolean isBurnCode(String dc) {
-        // T20–T32: burns
-        if (dc.length() >= 2 && dc.charAt(0) == 'T') {
-            char second = dc.charAt(1);
-            return second == '2' || second == '3';
-        }
-        return false;
+        return dc.length() >= 2 && dc.charAt(0) == 'T'
+                && (dc.charAt(1) == '2' || dc.charAt(1) == '3');
     }
 }
