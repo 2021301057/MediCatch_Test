@@ -15,12 +15,15 @@ public class MedicalRecordDto {
     private String hospitalName;
     private String department;
     private String diagnosis;
+    private String diseaseCode;
     private String treatmentType;
     private Double patientPayment;
     private Double insurancePayment;
     private Double totalCost;
+    private String claimStatus;
     private boolean hasClaimOpportunity;
     private Double claimAmount;
+    private String notes;
 
     public static MedicalRecordDto from(MedicalRecord e) {
         Double outOfPocket = e.getOutOfPocket();
@@ -32,12 +35,15 @@ public class MedicalRecordDto {
                 .hospitalName(e.getHospital())
                 .department(e.getDepartment())
                 .diagnosis(e.getDiagnosis())
+                .diseaseCode(e.getDiseaseCode())
                 .treatmentType(e.getTreatmentDetails())
                 .patientPayment(outOfPocket)
                 .insurancePayment(e.getInsuranceCoverage())
                 .totalCost(e.getMedicalCost())
+                .claimStatus(e.getClaimStatus())
                 .hasClaimOpportunity(hasClaim)
                 .claimAmount(hasClaim ? outOfPocket : 0.0)
+                .notes(e.getNotes())
                 .build();
     }
 }

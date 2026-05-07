@@ -1,7 +1,9 @@
 package com.medicatch.insurance.controller;
 
 import com.medicatch.insurance.dto.PolicyDto;
+import com.medicatch.insurance.entity.ClaimPayment;
 import com.medicatch.insurance.entity.CoverageItem;
+import com.medicatch.insurance.repository.ClaimPaymentRepository;
 import com.medicatch.insurance.service.CodefInsuranceSyncService;
 import com.medicatch.insurance.service.InsuranceService;
 import lombok.extern.slf4j.Slf4j;
@@ -20,11 +22,14 @@ public class InsuranceController {
 
     private final InsuranceService insuranceService;
     private final CodefInsuranceSyncService codefSyncService;
+    private final ClaimPaymentRepository claimPaymentRepository;
 
     public InsuranceController(InsuranceService insuranceService,
-                                CodefInsuranceSyncService codefSyncService) {
+                                CodefInsuranceSyncService codefSyncService,
+                                ClaimPaymentRepository claimPaymentRepository) {
         this.insuranceService = insuranceService;
         this.codefSyncService = codefSyncService;
+        this.claimPaymentRepository = claimPaymentRepository;
     }
 
     /**
@@ -32,11 +37,13 @@ public class InsuranceController {
      */
     @GetMapping("/policies")
     public ResponseEntity<List<PolicyDto>> getActivePolicies(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
-        if (userIdHeader == null || userIdHeader.isBlank()) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam) {
+        String raw = userIdHeader != null ? userIdHeader : userIdParam;
+        if (raw == null || raw.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        Long userId = Long.parseLong(userIdHeader);
+        Long userId = Long.parseLong(raw);
         log.info("GET /api/insurance/policies - userId: {}", userId);
         try {
             List<PolicyDto> policies = insuranceService.getActivePolicies(userId)
@@ -162,6 +169,25 @@ public class InsuranceController {
             Map<String, Object> err = new HashMap<>();
             err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류가 발생했습니다.");
             return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    /**
+     * Get claim payment history for user (used by analysis-service)
+     */
+    @GetMapping("/claim-payments")
+    public ResponseEntity<List<ClaimPayment>> getClaimPayments(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam) {
+        String raw = userIdHeader != null ? userIdHeader : userIdParam;
+        if (raw == null || raw.isBlank()) return ResponseEntity.badRequest().build();
+        Long userId = Long.parseLong(raw);
+        log.info("GET /api/insurance/claim-payments - userId: {}", userId);
+        try {
+            return ResponseEntity.ok(claimPaymentRepository.findByUserId(userId));
+        } catch (Exception e) {
+            log.error("Error getting claim payments: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
         }
     }
 

@@ -253,17 +253,19 @@ public class CodefSyncService {
             String hospital = str(item.get("resHospitalName"));
             if (dateStr == null || dateStr.isBlank() || hospital == null || hospital.isBlank()) continue;
 
+            String diseaseCode = str(item.get("resDiseaseCode"));
             records.add(MedicalRecord.builder()
                     .userId(userId)
                     .visitDate(parseDate8(dateStr))
                     .hospital(hospital)
                     .department(strOrDefault(item.get("resDepartment"), "미상"))
                     .diagnosis(strOrDefault(item.get("resDiseaseName"), "기타"))
+                    .diseaseCode(diseaseCode)
                     .treatmentDetails(str(item.get("resTreatType")))
                     .medicalCost(parseDouble(item.get("resTotalAmount")))
                     .insuranceCoverage(parseDouble(item.get("resPublicCharge")))
                     .outOfPocket(parseDouble(item.get("resDeductibleAmt")))
-                    .notes("진단코드: " + strOrDefault(item.get("resDiseaseCode"), "-"))
+                    .notes("진단코드: " + strOrDefault(diseaseCode, "-"))
                     .build());
         }
         medicalRecordRepo.saveAll(records);

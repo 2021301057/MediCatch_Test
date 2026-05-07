@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { healthAPI } from '../api/services';
+import { analysisAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import CodefSyncModal from '../components/CodefSyncModal';
 
@@ -17,29 +17,32 @@ const P = {
   cal:     (<><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></>),
   check:   (<path d="M3 8l3 3 7-7"/>),
   arrow:   (<path d="M3 8h10M9 4l4 4-4 4"/>),
+  info:    (<><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5.5v.01"/></>),
 };
 
-const MOCK_RECORDS = [
-  { id: 1, visitDate: '2026-03-15', hospitalName: '서울성모병원', treatmentType: '외래',
-    patientPayment: 45000, insurancePayment: 180000, totalCost: 225000,
-    hasClaimOpportunity: true, claimAmount: 45000, claimInsurance: '삼성생명 실손' },
-  { id: 2, visitDate: '2026-02-28', hospitalName: '연세세브란스병원', treatmentType: '입원',
-    patientPayment: 320000, insurancePayment: 1280000, totalCost: 1600000,
-    hasClaimOpportunity: true, claimAmount: 320000, claimInsurance: '한화생명 암보험' },
-  { id: 3, visitDate: '2026-01-10', hospitalName: '강남구 우리약국', treatmentType: '약국',
-    patientPayment: 8500, insurancePayment: 0, totalCost: 8500,
-    hasClaimOpportunity: false, claimAmount: 0, claimInsurance: null },
-  { id: 4, visitDate: '2025-12-05', hospitalName: '분당서울대병원', treatmentType: '외래',
-    patientPayment: 28000, insurancePayment: 112000, totalCost: 140000,
-    hasClaimOpportunity: false, claimAmount: 0, claimInsurance: null },
-];
-
-const FILTERS = ['전체', '청구가능', '청구완료'];
+const FILTERS = ['전체', '청구가능', '확인필요', '청구완료'];
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+
+const confidenceLabel = (level) => {
+  switch (level) {
+    case 'CONFIRMED':    return { text: '청구 가능', cls: 'mc-tag-warning' };
+    case 'LIKELY':       return { text: '청구 가능', cls: 'mc-tag-warning' };
+    case 'CHECK_NEEDED': return { text: '확인 필요', cls: 'mc-tag-blue' };
+    case 'CLAIMED':      return { text: '청구 완료', cls: 'mc-tag-success' };
+    default:             return { text: '처리 완료', cls: 'mc-tag-success' };
+  }
+};
+
+const isClaimable = (r) => r.hasClaimOpportunity &&
+  (r.confidenceLevel === 'CONFIRMED' || r.confidenceLevel === 'LIKELY');
+
+const isCheckNeeded = (r) => r.confidenceLevel === 'CHECK_NEEDED';
+
+const isClaimed = (r) => r.claimStatus === 'CLAIMED';
 
 const MedicalRecords = () => {
   const { user } = useAuthStore();
-  const [records, setRecords] = useState(MOCK_RECORDS);
+  const [records, setRecords] = useState([]);
   const [filterStatus, setFilterStatus] = useState('전체');
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -50,10 +53,10 @@ const MedicalRecords = () => {
     const fetchRecords = async () => {
       setLoading(true);
       try {
-        const data = await healthAPI.getMedicalRecords();
-        if (Array.isArray(data) && data.length) setRecords(data);
+        const data = await analysisAPI.getClaimOpportunities();
+        if (Array.isArray(data)) setRecords(data);
       } catch (error) {
-        console.error('Failed to fetch records:', error);
+        console.error('Failed to fetch claim opportunities:', error);
       } finally {
         setLoading(false);
       }
@@ -61,23 +64,32 @@ const MedicalRecords = () => {
     fetchRecords();
   }, []);
 
-  const claimOpportunities = records.filter((r) => r.hasClaimOpportunity);
-  const totalUnclaimedAmount = claimOpportunities.reduce((sum, r) => sum + r.claimAmount, 0);
+  const claimOpportunities = records.filter(isClaimable);
+  const checkNeededItems = records.filter(isCheckNeeded);
+  const totalUnclaimedAmount = claimOpportunities.reduce((sum, r) => sum + (r.claimAmount || 0), 0);
 
   const filteredRecords =
-    filterStatus === '전체' ? records :
-    filterStatus === '청구가능' ? records.filter((r) => r.hasClaimOpportunity) :
-    records.filter((r) => !r.hasClaimOpportunity);
+    filterStatus === '전체'   ? records :
+    filterStatus === '청구가능' ? records.filter(isClaimable) :
+    filterStatus === '확인필요' ? records.filter(isCheckNeeded) :
+    records.filter(isClaimed);
 
   const handleClaimClick = (record) => {
     setSelectedRecord(record);
     setShowClaimModal(true);
   };
 
-  const handleSyncSuccess = () => {
-    healthAPI.getMedicalRecords()
-      .then((data) => { if (Array.isArray(data) && data.length) setRecords(data); })
-      .catch(() => {});
+  const handleSyncSuccess = async () => {
+    try {
+      const data = await analysisAPI.getClaimOpportunities();
+      if (Array.isArray(data)) setRecords(data);
+    } catch {}
+  };
+
+  const getCardAccent = (r) => {
+    if (isClaimable(r)) return 'mc-card-accent-warning';
+    if (isCheckNeeded(r)) return 'mc-card-accent-blue';
+    return '';
   };
 
   return (
@@ -107,6 +119,19 @@ const MedicalRecords = () => {
         </div>
       )}
 
+      {/* 확인 필요 알림 */}
+      {checkNeededItems.length > 0 && (
+        <div className="mc-alert mc-alert-blue" style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Ic d={P.info} size={18}/>
+            <div>
+              <div className="mc-alert-title">보험사 확인이 필요한 항목이 있어요</div>
+              <div className="mc-alert-body">치과 급여 진료 등 보장 여부를 직접 확인하세요. {checkNeededItems.length}건</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 요약 통계 */}
       <div className="mc-stats-strip">
         <div className="mc-stat">
@@ -122,16 +147,16 @@ const MedicalRecords = () => {
           <div className="mc-stat-sub">{formatKRW(totalUnclaimedAmount)}</div>
         </div>
         <div className="mc-stat">
-          <div className="mc-stat-label">청구 완료</div>
-          <div className="mc-stat-value" style={{ color: '#3A7A62' }}>
-            {records.length - claimOpportunities.length}건
+          <div className="mc-stat-label">확인 필요</div>
+          <div className="mc-stat-value" style={{ color: 'var(--blue)' }}>
+            {checkNeededItems.length}건
           </div>
-          <div className="mc-stat-sub">처리 완료</div>
+          <div className="mc-stat-sub">보험사 문의</div>
         </div>
         <div className="mc-stat">
           <div className="mc-stat-label">총 의료비</div>
           <div className="mc-stat-value">
-            {formatKRW(records.reduce((s, r) => s + r.totalCost, 0))}
+            {formatKRW(records.reduce((s, r) => s + (r.totalCost || 0), 0))}
           </div>
           <div className="mc-stat-sub">기간 누적</div>
         </div>
@@ -158,68 +183,81 @@ const MedicalRecords = () => {
         <span className="mc-sec-title">진료 기록 · {filteredRecords.length}건</span>
       </div>
       <div className="mc-stack-sm">
-        {filteredRecords.map((r) => (
-          <div key={r.id} className={`mc-card ${r.hasClaimOpportunity ? 'mc-card-accent-warning' : ''}`}>
-            <div className="mc-card-head">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 6,
-                  background: 'var(--blue-soft)', color: 'var(--blue)',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Ic d={P.hosp} size={16}/>
-                </div>
-                <div>
-                  <div className="mc-card-title">{r.hospitalName}</div>
-                  <div className="mc-card-sub">
-                    <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
-                    {r.claimInsurance && <> · {r.claimInsurance}</>}
-                  </div>
-                </div>
-              </div>
-              {r.hasClaimOpportunity ? (
-                <span className="mc-tag mc-tag-warning">청구 가능</span>
-              ) : (
-                <span className="mc-tag mc-tag-success">처리 완료</span>
-              )}
-            </div>
+        {filteredRecords.map((r) => {
+          const tag = isClaimed(r)
+            ? { text: '청구 완료', cls: 'mc-tag-success' }
+            : confidenceLabel(r.confidenceLevel);
 
-            <div className="mc-card-body">
-              <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                <div>
-                  <div className="mc-field-label">환자 부담</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                    {formatKRW(r.patientPayment)}
+          return (
+            <div key={r.id} className={`mc-card ${getCardAccent(r)}`}>
+              <div className="mc-card-head">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 6,
+                    background: 'var(--blue-soft)', color: 'var(--blue)',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Ic d={P.hosp} size={16}/>
+                  </div>
+                  <div>
+                    <div className="mc-card-title">{r.hospitalName}</div>
+                    <div className="mc-card-sub">
+                      <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
+                      {r.claimInsurance && <> · {r.claimInsurance}</>}
+                      {r.matchedCoverage && <> · {r.matchedCoverage}</>}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="mc-field-label">보험 부담</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                    {formatKRW(r.insurancePayment)}
-                  </div>
-                </div>
-                <div>
-                  <div className="mc-field-label">총 비용</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
-                    {formatKRW(r.totalCost)}
-                  </div>
-                </div>
+                <span className={`mc-tag ${tag.cls}`}>{tag.text}</span>
               </div>
 
-              {r.hasClaimOpportunity && (
-                <button
-                  className="mc-btn mc-btn-primary"
-                  style={{ marginTop: 14 }}
-                  onClick={() => handleClaimClick(r)}
-                >
-                  <Ic d={P.arrow} size={12}/> 청구하기 ({formatKRW(r.claimAmount)})
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+              <div className="mc-card-body">
+                <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                  <div>
+                    <div className="mc-field-label">환자 부담</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                      {formatKRW(r.patientPayment)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mc-field-label">보험 부담</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                      {formatKRW(r.insurancePayment)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mc-field-label">총 비용</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
+                      {formatKRW(r.totalCost)}
+                    </div>
+                  </div>
+                </div>
 
-        {filteredRecords.length === 0 && (
+                {isClaimable(r) && (
+                  <button
+                    className="mc-btn mc-btn-primary"
+                    style={{ marginTop: 14 }}
+                    onClick={() => handleClaimClick(r)}
+                  >
+                    <Ic d={P.arrow} size={12}/> 청구하기 ({formatKRW(r.claimAmount)})
+                  </button>
+                )}
+
+                {isCheckNeeded(r) && (
+                  <button
+                    className="mc-btn"
+                    style={{ marginTop: 14, borderColor: 'var(--blue)', color: 'var(--blue)' }}
+                    onClick={() => handleClaimClick(r)}
+                  >
+                    <Ic d={P.info} size={12}/> 보험사 확인 필요
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {filteredRecords.length === 0 && !loading && (
           <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: 'var(--text-3)' }}>
             조건에 맞는 진료 기록이 없어요.
           </div>
@@ -249,7 +287,9 @@ const MedicalRecords = () => {
           <div className="mc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="mc-modal-head">
               <div>
-                <div className="mc-card-title" style={{ fontSize: 16 }}>청구 절차 안내</div>
+                <div className="mc-card-title" style={{ fontSize: 16 }}>
+                  {isCheckNeeded(selectedRecord) ? '보험사 확인 안내' : '청구 절차 안내'}
+                </div>
                 <div className="mc-card-sub" style={{ marginTop: 2 }}>
                   {selectedRecord.hospitalName} · {selectedRecord.visitDate}
                 </div>
@@ -260,33 +300,44 @@ const MedicalRecords = () => {
             </div>
 
             <div className="mc-modal-body">
-              {[
-                { n: 1, title: '서류 준비',
-                  desc: '영수증, 진료비 명세서, 처방전 등을 준비합니다.' },
-                { n: 2, title: '보험사 접수',
-                  desc: `${selectedRecord.claimInsurance || '보험사'}에 서류를 제출합니다.` },
-                { n: 3, title: '심사 및 승인',
-                  desc: '보험사에서 청구 내용을 심사합니다 (약 7~10일).' },
-                { n: 4, title: '보험금 지급',
-                  desc: `승인 후 ${formatKRW(selectedRecord.claimAmount)}이 지급됩니다.` },
-              ].map((s) => (
-                <div key={s.n} className="mc-step">
-                  <div className="mc-step-num">{s.n}</div>
-                  <div>
-                    <div className="mc-step-title">{s.title}</div>
-                    <div className="mc-step-desc">{s.desc}</div>
-                  </div>
+              {isCheckNeeded(selectedRecord) ? (
+                <div style={{ color: 'var(--text-2)', lineHeight: 1.7, fontSize: 14 }}>
+                  <p style={{ marginBottom: 12 }}>
+                    이 항목은 <strong>치과 급여 진료</strong>로, 실손 보험 보장 여부가 가입한 상품의 세대(1~4세대) 및 약관에 따라 달라질 수 있습니다.
+                  </p>
+                  <p>가입하신 보험사({selectedRecord.claimInsurance || '해당 보험사'})에 직접 문의하여 보장 여부를 확인하세요.</p>
                 </div>
-              ))}
+              ) : (
+                [
+                  { n: 1, title: '서류 준비',
+                    desc: '영수증, 진료비 명세서, 처방전 등을 준비합니다.' },
+                  { n: 2, title: '보험사 접수',
+                    desc: `${selectedRecord.claimInsurance || '보험사'}에 서류를 제출합니다.` },
+                  { n: 3, title: '심사 및 승인',
+                    desc: '보험사에서 청구 내용을 심사합니다 (약 7~10일).' },
+                  { n: 4, title: '보험금 지급',
+                    desc: `승인 후 ${formatKRW(selectedRecord.claimAmount)}이 지급됩니다.` },
+                ].map((s) => (
+                  <div key={s.n} className="mc-step">
+                    <div className="mc-step-num">{s.n}</div>
+                    <div>
+                      <div className="mc-step-title">{s.title}</div>
+                      <div className="mc-step-desc">{s.desc}</div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="mc-modal-foot">
               <button className="mc-btn" onClick={() => setShowClaimModal(false)}>
                 닫기
               </button>
-              <button className="mc-btn mc-btn-primary">
-                <Ic d={P.check} size={12}/> 청구 접수
-              </button>
+              {!isCheckNeeded(selectedRecord) && (
+                <button className="mc-btn mc-btn-primary">
+                  <Ic d={P.check} size={12}/> 청구 접수
+                </button>
+              )}
             </div>
           </div>
         </div>

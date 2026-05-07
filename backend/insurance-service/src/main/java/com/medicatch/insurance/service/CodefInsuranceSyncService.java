@@ -1,8 +1,10 @@
 package com.medicatch.insurance.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medicatch.insurance.entity.ClaimPayment;
 import com.medicatch.insurance.entity.CoverageItem;
 import com.medicatch.insurance.entity.Policy;
+import com.medicatch.insurance.repository.ClaimPaymentRepository;
 import com.medicatch.insurance.repository.PolicyRepository;
 import io.codef.api.EasyCodef;
 import io.codef.api.EasyCodefServiceType;
@@ -37,10 +39,14 @@ public class CodefInsuranceSyncService {
 
     private final ObjectMapper objectMapper;
     private final PolicyRepository policyRepository;
+    private final ClaimPaymentRepository claimPaymentRepository;
 
-    public CodefInsuranceSyncService(ObjectMapper objectMapper, PolicyRepository policyRepository) {
+    public CodefInsuranceSyncService(ObjectMapper objectMapper,
+                                     PolicyRepository policyRepository,
+                                     ClaimPaymentRepository claimPaymentRepository) {
         this.objectMapper = objectMapper;
         this.policyRepository = policyRepository;
+        this.claimPaymentRepository = claimPaymentRepository;
     }
 
     @Transactional
@@ -149,7 +155,58 @@ public class CodefInsuranceSyncService {
         List<Policy> unique = new ArrayList<>(deduped.values());
         policyRepository.saveAll(unique);
         log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, unique.size());
+
+        saveClaimPayments(userId, codefId, data);
+
         return unique.size();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void saveClaimPayments(Long userId, String codefId, Map<String, Object> data) {
+        claimPaymentRepository.deleteByCodefId(codefId);
+
+        List<Map<String, Object>> paymentList =
+                (List<Map<String, Object>>) data.getOrDefault("resActualLossPaymentList", List.of());
+
+        List<ClaimPayment> payments = new ArrayList<>();
+        for (Map<String, Object> payment : paymentList) {
+            String occurStr = str(payment.get("resOccurDateTime"));
+            LocalDate occurrenceDate = parseDateOrNull(occurStr);
+            if (occurrenceDate == null) continue;
+
+            String companyName = str(payment.get("resCompanyNm"));
+
+            List<Map<String, Object>> details =
+                    (List<Map<String, Object>>) payment.getOrDefault("resDetailList", List.of());
+
+            if (details.isEmpty()) {
+                payments.add(ClaimPayment.builder()
+                        .userId(userId)
+                        .codefId(codefId)
+                        .occurrenceDate(occurrenceDate)
+                        .companyName(companyName)
+                        .paidAmount(parseDouble(payment.get("resTotalAmount")))
+                        .judgeResult("지급")
+                        .build());
+            } else {
+                for (Map<String, Object> detail : details) {
+                    String payDateStr = str(detail.get("resPaymentDate"));
+                    payments.add(ClaimPayment.builder()
+                            .userId(userId)
+                            .codefId(codefId)
+                            .occurrenceDate(occurrenceDate)
+                            .paymentDate(parseDateOrNull(payDateStr))
+                            .companyName(companyName)
+                            .reasonForPayment(str(detail.get("resReasonForPayment")))
+                            .judgeResult(str(detail.get("resJudgeResult")))
+                            .paidAmount(parseDouble(detail.get("resPaidAmount")))
+                            .build());
+                }
+            }
+        }
+
+        claimPaymentRepository.saveAll(payments);
+        log.info("보험금 지급 내역 저장 완료 - codefId: {}, payments: {}", codefId, payments.size());
     }
 
     private boolean isNonLifeCompany(String companyName) {
