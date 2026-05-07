@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -16,6 +17,8 @@ public class PolicyInfo {
     private String policyNumber;
     private String policyType;
     private String contractStatus;
+    private LocalDate startDate;
+    private LocalDate endDate;
     private boolean hasSupplementaryCoverage;
     private List<CoverageItemInfo> coverageItems;
 

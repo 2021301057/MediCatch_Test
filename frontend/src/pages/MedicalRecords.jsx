@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { analysisAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import CodefSyncModal from '../components/CodefSyncModal';
@@ -10,86 +10,154 @@ const Ic = ({ d, size = 13 }) => (
 );
 
 const P = {
-  alert:   (<><path d="M8 3l6 10H2z"/><path d="M8 7v3M8 12v.01"/></>),
-  close:   (<path d="M4 4l8 8M12 4l-8 8"/>),
-  sync:    (<><path d="M3 8a5 5 0 0 1 8.5-3.5L13 6"/><path d="M13 2v4h-4"/><path d="M13 8a5 5 0 0 1-8.5 3.5L3 10"/><path d="M3 14v-4h4"/></>),
-  hosp:    (<><path d="M2 14V6l6-3 6 3v8"/><path d="M6 14V9h4v5"/></>),
-  cal:     (<><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></>),
-  check:   (<path d="M3 8l3 3 7-7"/>),
-  arrow:   (<path d="M3 8h10M9 4l4 4-4 4"/>),
-  info:    (<><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5.5v.01"/></>),
+  alert:  (<><path d="M8 3l6 10H2z"/><path d="M8 7v3M8 12v.01"/></>),
+  close:  (<path d="M4 4l8 8M12 4l-8 8"/>),
+  hosp:   (<><path d="M2 14V6l6-3 6 3v8"/><path d="M6 14V9h4v5"/></>),
+  cal:    (<><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></>),
+  check:  (<path d="M3 8l3 3 7-7"/>),
+  arrow:  (<path d="M3 8h10M9 4l4 4-4 4"/>),
+  info:   (<><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5.5v.01"/></>),
+  paid:   (<><circle cx="8" cy="8" r="6"/><path d="M5.5 8l2 2 3-3"/></>),
 };
 
 const FILTERS = ['전체', '청구가능', '확인필요', '청구완료'];
-const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
 
-const confidenceLabel = (level) => {
-  switch (level) {
-    case 'CONFIRMED':    return { text: '청구 가능', cls: 'mc-tag-warning' };
-    case 'LIKELY':       return { text: '청구 가능', cls: 'mc-tag-warning' };
-    case 'CHECK_NEEDED': return { text: '확인 필요', cls: 'mc-tag-blue' };
-    case 'CLAIMED':      return { text: '청구 완료', cls: 'mc-tag-success' };
-    default:             return { text: '처리 완료', cls: 'mc-tag-success' };
-  }
+// ── 세대 뱃지 ──────────────────────────────────────────────────────────────
+const GenBadge = ({ gen }) => {
+  if (!gen || gen === 0) return null;
+  const colors = {
+    1: { bg: '#E8F5E9', color: '#2E7D32' },
+    2: { bg: '#E3F2FD', color: '#1565C0' },
+    3: { bg: '#FFF3E0', color: '#E65100' },
+    4: { bg: '#FCE4EC', color: '#AD1457' },
+    5: { bg: '#F3E5F5', color: '#6A1B9A' },
+  };
+  const s = colors[gen] || { bg: '#F5F5F5', color: '#616161' };
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+      background: s.bg, color: s.color, flexShrink: 0,
+    }}>
+      {gen}세대 실손
+    </span>
+  );
 };
 
-const isClaimable = (r) => r.hasClaimOpportunity &&
-  (r.confidenceLevel === 'CONFIRMED' || r.confidenceLevel === 'LIKELY');
+// ── 진료 기록 → 날짜별 그룹 변환 ────────────────────────────────────────────
+const buildGroups = (records) => {
+  const map = new Map();
+  for (const r of records) {
+    const key = r.visitDate || 'unknown';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
 
-const isCheckNeeded = (r) => r.confidenceLevel === 'CHECK_NEEDED';
+  return [...map.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, recs]) => {
+      const claimable    = recs.filter(r => r.hasClaimOpportunity &&
+                             (r.confidenceLevel === 'CONFIRMED' || r.confidenceLevel === 'LIKELY'));
+      const checkNeeded  = recs.filter(r => r.confidenceLevel === 'CHECK_NEEDED');
+      const claimed      = recs.filter(r => r.claimStatus === 'CLAIMED');
 
-const isClaimed = (r) => r.claimStatus === 'CLAIMED';
+      // 대표 레코드: 청구가능 → 확인필요 → 기타
+      const primary = claimable[0] || checkNeeded[0] || recs[0];
 
+      // 이미 지급된 금액: 같은 날짜면 동일하므로 recs[0]에서 가져옴
+      const alreadyPaid   = recs[0]?.alreadyPaidAmount || 0;
+      const paidCompany   = recs[0]?.paidByCompany;
+
+      // 병원명 목록 (중복 제거)
+      const hospitals = [...new Set(recs.map(r => r.hospitalName).filter(Boolean))];
+
+      // 진료 유형 목록 (중복 제거)
+      const treatTypes = [...new Set(recs.map(r => r.treatmentType).filter(Boolean))];
+
+      // 보장 메모 목록 (중복 제거, null 제외)
+      const coverageNotes = [...new Set(recs.map(r => r.coverageNote).filter(Boolean))];
+
+      return {
+        visitDate:           date,
+        records:             recs,
+        hospitals,
+        treatTypes,
+        totalPatientPayment: recs.reduce((s, r) => s + (r.patientPayment    || 0), 0),
+        totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment  || 0), 0),
+        totalCost:           recs.reduce((s, r) => s + (r.totalCost         || 0), 0),
+        totalClaimAmount:    claimable.reduce((s, r) => s + (r.claimAmount  || 0), 0),
+        alreadyPaid,
+        paidCompany,
+        isFullyClaimed:  recs.length > 0 && recs.every(r => r.claimStatus === 'CLAIMED'),
+        isAnyClaimed:    claimed.length > 0,
+        hasClaimable:    claimable.length > 0,
+        hasCheckNeeded:  checkNeeded.length > 0,
+        claimableRecs:   claimable,
+        checkNeededRecs: checkNeeded,
+        gen:             primary?.supplementaryGeneration || 0,
+        claimInsurance:  primary?.claimInsurance,
+        coverageNotes,
+      };
+    });
+};
+
+// ── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 const MedicalRecords = () => {
   const { user } = useAuthStore();
-  const [records, setRecords] = useState([]);
-  const [filterStatus, setFilterStatus] = useState('전체');
+  const [records,       setRecords]       = useState([]);
+  const [filterStatus,  setFilterStatus]  = useState('전체');
   const [showClaimModal, setShowClaimModal] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [showSyncModal,  setShowSyncModal]  = useState(false);
+  const [selectedGroup,  setSelectedGroup]  = useState(null);
+  const [loading,        setLoading]        = useState(false);
 
   useEffect(() => {
-    const fetchRecords = async () => {
+    const fetch = async () => {
       setLoading(true);
       try {
         const data = await analysisAPI.getClaimOpportunities();
         if (Array.isArray(data)) setRecords(data);
-      } catch (error) {
-        console.error('Failed to fetch claim opportunities:', error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (e) { console.error('claim-opportunities 실패:', e); }
+      finally { setLoading(false); }
     };
-    fetchRecords();
+    fetch();
   }, []);
 
-  const claimOpportunities = records.filter(isClaimable);
-  const checkNeededItems = records.filter(isCheckNeeded);
-  const totalUnclaimedAmount = claimOpportunities.reduce((sum, r) => sum + (r.claimAmount || 0), 0);
+  const groups = useMemo(() => buildGroups(records), [records]);
 
-  const filteredRecords =
-    filterStatus === '전체'   ? records :
-    filterStatus === '청구가능' ? records.filter(isClaimable) :
-    filterStatus === '확인필요' ? records.filter(isCheckNeeded) :
-    records.filter(isClaimed);
+  const claimGroups     = groups.filter(g => g.hasClaimable);
+  const checkGroups     = groups.filter(g => !g.hasClaimable && g.hasCheckNeeded);
+  const totalUnclaimed  = claimGroups.reduce((s, g) => s + g.totalClaimAmount, 0);
+  const totalPaid       = groups.reduce((s, g) => s + (g.alreadyPaid || 0), 0);
 
-  const handleClaimClick = (record) => {
-    setSelectedRecord(record);
-    setShowClaimModal(true);
-  };
+  const filtered =
+    filterStatus === '청구가능' ? groups.filter(g => g.hasClaimable) :
+    filterStatus === '확인필요' ? groups.filter(g => !g.hasClaimable && g.hasCheckNeeded) :
+    filterStatus === '청구완료' ? groups.filter(g => g.isFullyClaimed) :
+    groups;
+
+  const openModal = (group) => { setSelectedGroup(group); setShowClaimModal(true); };
 
   const handleSyncSuccess = async () => {
-    try {
-      const data = await analysisAPI.getClaimOpportunities();
-      if (Array.isArray(data)) setRecords(data);
-    } catch {}
+    try { const d = await analysisAPI.getClaimOpportunities(); if (Array.isArray(d)) setRecords(d); }
+    catch {}
   };
 
-  const getCardAccent = (r) => {
-    if (isClaimable(r)) return 'mc-card-accent-warning';
-    if (isCheckNeeded(r)) return 'mc-card-accent-blue';
+  // 카드 accent 결정
+  const cardAccent = (g) => {
+    if (g.isFullyClaimed || g.isAnyClaimed) return 'mc-card-accent-success';
+    if (g.hasClaimable)   return 'mc-card-accent-warning';
+    if (g.hasCheckNeeded) return 'mc-card-accent-blue';
     return '';
+  };
+
+  // 카드 우상단 태그
+  const cardTag = (g) => {
+    if (g.isFullyClaimed) return { text: '청구 완료', cls: 'mc-tag-success' };
+    if (g.isAnyClaimed)   return { text: '일부 완료', cls: 'mc-tag-success' };
+    if (g.hasClaimable)   return { text: '청구 가능', cls: 'mc-tag-warning' };
+    if (g.hasCheckNeeded) return { text: '확인 필요', cls: 'mc-tag-blue' };
+    return { text: '처리 완료', cls: 'mc-tag-success' };
   };
 
   return (
@@ -102,31 +170,31 @@ const MedicalRecords = () => {
       </div>
 
       {/* 청구 가능 알림 */}
-      {claimOpportunities.length > 0 && (
+      {claimGroups.length > 0 && (
         <div className="mc-alert mc-alert-warning" style={{ marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Ic d={P.alert} size={18}/>
             <div>
               <div className="mc-alert-title">청구 가능한 의료비가 있어요</div>
-              <div className="mc-alert-body">놓친 청구를 지금 확인하세요. {claimOpportunities.length}건 대기 중</div>
+              <div className="mc-alert-body">{claimGroups.length}건의 진료일 · 지금 바로 청구하세요</div>
             </div>
           </div>
-          <div style={{
-            fontSize: 20, fontWeight: 800, color: '#8A7040', letterSpacing: '-0.4px',
-          }}>
-            +{formatKRW(totalUnclaimedAmount)}
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#8A7040', letterSpacing: '-0.4px' }}>
+            +{fmt(totalUnclaimed)}
           </div>
         </div>
       )}
 
       {/* 확인 필요 알림 */}
-      {checkNeededItems.length > 0 && (
+      {checkGroups.length > 0 && (
         <div className="mc-alert mc-alert-blue" style={{ marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Ic d={P.info} size={18}/>
             <div>
-              <div className="mc-alert-title">보험사 확인이 필요한 항목이 있어요</div>
-              <div className="mc-alert-body">치과 급여 진료 등 보장 여부를 직접 확인하세요. {checkNeededItems.length}건</div>
+              <div className="mc-alert-title">보험사 확인이 필요한 진료가 있어요</div>
+              <div className="mc-alert-body">
+                세대별 약관 차이로 보장 여부가 불확실합니다 · {checkGroups.length}건
+              </div>
             </div>
           </div>
         </div>
@@ -135,76 +203,64 @@ const MedicalRecords = () => {
       {/* 요약 통계 */}
       <div className="mc-stats-strip">
         <div className="mc-stat">
-          <div className="mc-stat-label">전체 진료</div>
-          <div className="mc-stat-value">{records.length}건</div>
-          <div className="mc-stat-sub">최근 기록</div>
+          <div className="mc-stat-label">전체 진료일</div>
+          <div className="mc-stat-value">{groups.length}건</div>
+          <div className="mc-stat-sub">기간 내 방문</div>
         </div>
         <div className="mc-stat">
           <div className="mc-stat-label">청구 가능</div>
-          <div className="mc-stat-value" style={{ color: '#8A7040' }}>
-            {claimOpportunities.length}건
-          </div>
-          <div className="mc-stat-sub">{formatKRW(totalUnclaimedAmount)}</div>
+          <div className="mc-stat-value" style={{ color: '#8A7040' }}>{claimGroups.length}건</div>
+          <div className="mc-stat-sub">{fmt(totalUnclaimed)}</div>
         </div>
         <div className="mc-stat">
           <div className="mc-stat-label">확인 필요</div>
-          <div className="mc-stat-value" style={{ color: 'var(--blue)' }}>
-            {checkNeededItems.length}건
-          </div>
+          <div className="mc-stat-value" style={{ color: 'var(--blue)' }}>{checkGroups.length}건</div>
           <div className="mc-stat-sub">보험사 문의</div>
         </div>
         <div className="mc-stat">
-          <div className="mc-stat-label">총 의료비</div>
-          <div className="mc-stat-value">
-            {formatKRW(records.reduce((s, r) => s + (r.totalCost || 0), 0))}
-          </div>
-          <div className="mc-stat-sub">기간 누적</div>
+          <div className="mc-stat-label">이미 수령</div>
+          <div className="mc-stat-value" style={{ color: '#3A7A62' }}>{fmt(totalPaid)}</div>
+          <div className="mc-stat-sub">지급 확인</div>
         </div>
       </div>
 
       {/* 필터 */}
-      <div className="mc-sec-head">
-        <span className="mc-sec-title">필터</span>
-      </div>
+      <div className="mc-sec-head"><span className="mc-sec-title">필터</span></div>
       <div className="mc-row-wrap" style={{ marginBottom: 18 }}>
-        {FILTERS.map((status) => (
-          <button
-            key={status}
-            className={`mc-chip ${filterStatus === status ? 'active' : ''}`}
-            onClick={() => setFilterStatus(status)}
-          >
-            {status}
-          </button>
+        {FILTERS.map((s) => (
+          <button key={s}
+            className={`mc-chip ${filterStatus === s ? 'active' : ''}`}
+            onClick={() => setFilterStatus(s)}>{s}</button>
         ))}
       </div>
 
-      {/* 진료 기록 리스트 */}
+      {/* 진료 그룹 리스트 */}
       <div className="mc-sec-head">
-        <span className="mc-sec-title">진료 기록 · {filteredRecords.length}건</span>
+        <span className="mc-sec-title">진료 기록 · {filtered.length}건</span>
       </div>
       <div className="mc-stack-sm">
-        {filteredRecords.map((r) => {
-          const tag = isClaimed(r)
-            ? { text: '청구 완료', cls: 'mc-tag-success' }
-            : confidenceLabel(r.confidenceLevel);
-
+        {filtered.map((g) => {
+          const tag = cardTag(g);
           return (
-            <div key={r.id} className={`mc-card ${getCardAccent(r)}`}>
+            <div key={g.visitDate} className={`mc-card ${cardAccent(g)}`}>
               <div className="mc-card-head">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{
-                    width: 36, height: 36, borderRadius: 6,
+                    width: 36, height: 36, borderRadius: 6, flexShrink: 0,
                     background: 'var(--blue-soft)', color: 'var(--blue)',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <Ic d={P.hosp} size={16}/>
                   </div>
-                  <div>
-                    <div className="mc-card-title">{r.hospitalName}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mc-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {g.hospitals.join(' · ')}
+                      <GenBadge gen={g.gen}/>
+                    </div>
                     <div className="mc-card-sub">
-                      <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
-                      {r.claimInsurance && <> · {r.claimInsurance}</>}
-                      {r.matchedCoverage && <> · {r.matchedCoverage}</>}
+                      <Ic d={P.cal} size={10}/> {g.visitDate}
+                      {g.treatTypes.length > 0 && <> · {g.treatTypes.join(' + ')}</>}
+                      {g.claimInsurance && <> · {g.claimInsurance}</>}
                     </div>
                   </div>
                 </div>
@@ -212,44 +268,66 @@ const MedicalRecords = () => {
               </div>
 
               <div className="mc-card-body">
+                {/* 비용 요약 */}
                 <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div>
                     <div className="mc-field-label">환자 부담</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                      {formatKRW(r.patientPayment)}
+                      {fmt(g.totalPatientPayment)}
                     </div>
                   </div>
                   <div>
-                    <div className="mc-field-label">보험 부담</div>
+                    <div className="mc-field-label">건보 부담</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                      {formatKRW(r.insurancePayment)}
+                      {fmt(g.totalInsurance)}
                     </div>
                   </div>
                   <div>
                     <div className="mc-field-label">총 비용</div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
-                      {formatKRW(r.totalCost)}
+                      {fmt(g.totalCost)}
                     </div>
                   </div>
                 </div>
 
-                {isClaimable(r) && (
-                  <button
-                    className="mc-btn mc-btn-primary"
-                    style={{ marginTop: 14 }}
-                    onClick={() => handleClaimClick(r)}
-                  >
-                    <Ic d={P.arrow} size={12}/> 청구하기 ({formatKRW(r.claimAmount)})
-                  </button>
+                {/* 이미 지급된 내역 */}
+                {g.alreadyPaid > 0 && (
+                  <div style={{
+                    marginTop: 12, padding: '8px 12px', borderRadius: 8,
+                    background: 'var(--green-soft, #E8F5E9)', display: 'flex',
+                    alignItems: 'center', gap: 8,
+                  }}>
+                    <Ic d={P.paid} size={14}/>
+                    <span style={{ fontSize: 13, color: '#2E7D32', fontWeight: 600 }}>
+                      이미 수령 {fmt(g.alreadyPaid)}
+                      {g.paidCompany && <> ({g.paidCompany})</>}
+                    </span>
+                  </div>
                 )}
 
-                {isCheckNeeded(r) && (
-                  <button
-                    className="mc-btn"
-                    style={{ marginTop: 14, borderColor: 'var(--blue)', color: 'var(--blue)' }}
-                    onClick={() => handleClaimClick(r)}
-                  >
-                    <Ic d={P.info} size={12}/> 보험사 확인 필요
+                {/* 보장 메모 */}
+                {g.coverageNotes.length > 0 && !g.isFullyClaimed && (
+                  <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {g.coverageNotes.map((note, i) => (
+                      <span key={i} style={{
+                        fontSize: 11, color: 'var(--text-3)', background: 'var(--bg-2)',
+                        padding: '3px 8px', borderRadius: 4,
+                      }}>{note}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* 청구 버튼 */}
+                {g.hasClaimable && !g.isFullyClaimed && (
+                  <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
+                    onClick={() => openModal(g)}>
+                    <Ic d={P.arrow} size={12}/> 청구하기 ({fmt(g.totalClaimAmount)})
+                  </button>
+                )}
+                {!g.hasClaimable && g.hasCheckNeeded && !g.isFullyClaimed && (
+                  <button className="mc-btn" style={{ marginTop: 14, borderColor: 'var(--blue)', color: 'var(--blue)' }}
+                    onClick={() => openModal(g)}>
+                    <Ic d={P.info} size={12}/> 보장 여부 확인
                   </button>
                 )}
               </div>
@@ -257,7 +335,7 @@ const MedicalRecords = () => {
           );
         })}
 
-        {filteredRecords.length === 0 && !loading && (
+        {filtered.length === 0 && !loading && (
           <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: 'var(--text-3)' }}>
             조건에 맞는 진료 기록이 없어요.
           </div>
@@ -273,25 +351,24 @@ const MedicalRecords = () => {
         </div>
       )}
 
-      {/* 청구 절차 모달 */}
+      {/* 동기화 모달 */}
       {showSyncModal && (
-        <CodefSyncModal
-          userId={user?.userId}
-          onClose={() => setShowSyncModal(false)}
-          onSuccess={handleSyncSuccess}
-        />
+        <CodefSyncModal userId={user?.userId}
+          onClose={() => setShowSyncModal(false)} onSuccess={handleSyncSuccess}/>
       )}
 
-      {showClaimModal && selectedRecord && (
+      {/* 청구 / 확인 안내 모달 */}
+      {showClaimModal && selectedGroup && (
         <div className="mc-modal-backdrop" onClick={() => setShowClaimModal(false)}>
           <div className="mc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="mc-modal-head">
               <div>
-                <div className="mc-card-title" style={{ fontSize: 16 }}>
-                  {isCheckNeeded(selectedRecord) ? '보험사 확인 안내' : '청구 절차 안내'}
+                <div className="mc-card-title" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {selectedGroup.hasClaimable ? '청구 절차 안내' : '보장 여부 확인 안내'}
+                  <GenBadge gen={selectedGroup.gen}/>
                 </div>
                 <div className="mc-card-sub" style={{ marginTop: 2 }}>
-                  {selectedRecord.hospitalName} · {selectedRecord.visitDate}
+                  {selectedGroup.hospitals.join(' · ')} · {selectedGroup.visitDate}
                 </div>
               </div>
               <button className="mc-modal-close" onClick={() => setShowClaimModal(false)}>
@@ -300,23 +377,31 @@ const MedicalRecords = () => {
             </div>
 
             <div className="mc-modal-body">
-              {isCheckNeeded(selectedRecord) ? (
-                <div style={{ color: 'var(--text-2)', lineHeight: 1.7, fontSize: 14 }}>
-                  <p style={{ marginBottom: 12 }}>
-                    이 항목은 <strong>치과 급여 진료</strong>로, 실손 보험 보장 여부가 가입한 상품의 세대(1~4세대) 및 약관에 따라 달라질 수 있습니다.
-                  </p>
-                  <p>가입하신 보험사({selectedRecord.claimInsurance || '해당 보험사'})에 직접 문의하여 보장 여부를 확인하세요.</p>
+              {/* 세대별 보장 메모 */}
+              {selectedGroup.coverageNotes.length > 0 && (
+                <div style={{
+                  marginBottom: 16, padding: '10px 14px', borderRadius: 8,
+                  background: 'var(--bg-2)', border: '1px solid var(--border)',
+                }}>
+                  {selectedGroup.coverageNotes.map((note, i) => (
+                    <div key={i} style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                      <Ic d={P.info} size={12}/> {note}
+                    </div>
+                  ))}
                 </div>
-              ) : (
+              )}
+
+              {selectedGroup.hasClaimable ? (
+                // 청구 가능 → 4단계 안내
                 [
                   { n: 1, title: '서류 준비',
-                    desc: '영수증, 진료비 명세서, 처방전 등을 준비합니다.' },
+                    desc: '영수증, 진료비 명세서, 처방전을 준비합니다.' },
                   { n: 2, title: '보험사 접수',
-                    desc: `${selectedRecord.claimInsurance || '보험사'}에 서류를 제출합니다.` },
+                    desc: `${selectedGroup.claimInsurance || '보험사'}에 서류를 제출합니다.` },
                   { n: 3, title: '심사 및 승인',
                     desc: '보험사에서 청구 내용을 심사합니다 (약 7~10일).' },
                   { n: 4, title: '보험금 지급',
-                    desc: `승인 후 ${formatKRW(selectedRecord.claimAmount)}이 지급됩니다.` },
+                    desc: `승인 후 ${fmt(selectedGroup.totalClaimAmount)}이 지급됩니다.` },
                 ].map((s) => (
                   <div key={s.n} className="mc-step">
                     <div className="mc-step-num">{s.n}</div>
@@ -326,14 +411,26 @@ const MedicalRecords = () => {
                     </div>
                   </div>
                 ))
+              ) : (
+                // CHECK_NEEDED → 확인 안내
+                <div style={{ color: 'var(--text-2)', lineHeight: 1.8, fontSize: 14 }}>
+                  <p style={{ marginBottom: 10 }}>
+                    가입하신 실손보험의 세대 및 약관에 따라 보장 여부가 달라질 수 있습니다.
+                    {selectedGroup.gen > 0 && (
+                      <> 현재 <strong>{selectedGroup.gen}세대 실손</strong>으로 확인됩니다.</>
+                    )}
+                  </p>
+                  <p>
+                    가입하신 보험사({selectedGroup.claimInsurance || '해당 보험사'})에 직접 문의하여
+                    보장 가능 여부를 확인하세요.
+                  </p>
+                </div>
               )}
             </div>
 
             <div className="mc-modal-foot">
-              <button className="mc-btn" onClick={() => setShowClaimModal(false)}>
-                닫기
-              </button>
-              {!isCheckNeeded(selectedRecord) && (
+              <button className="mc-btn" onClick={() => setShowClaimModal(false)}>닫기</button>
+              {selectedGroup.hasClaimable && (
                 <button className="mc-btn mc-btn-primary">
                   <Ic d={P.check} size={12}/> 청구 접수
                 </button>
