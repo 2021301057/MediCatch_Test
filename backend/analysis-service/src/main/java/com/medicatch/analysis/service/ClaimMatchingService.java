@@ -55,29 +55,63 @@ public class ClaimMatchingService {
         List<ClaimPaymentInfo>  payments  = safeFetch(() -> insuranceClient.getClaimPayments(userId),
                 "insurance-service 지급내역 호출 실패");
 
-        // 날짜별 지급 집계
-        Map<LocalDate, Double> paidByDate    = new HashMap<>();
-        Map<LocalDate, String> companyByDate = new HashMap<>();
+        // 날짜별 지급 집계 (카테고리별 정밀 매핑)
+        Map<LocalDate, Set<ClaimCategory>> paidCatsByDate  = new HashMap<>();
+        Map<LocalDate, Double>             paidAmtByDate   = new HashMap<>();
+        Map<LocalDate, String>             paidCoByDate    = new HashMap<>();
+
         for (ClaimPaymentInfo p : payments) {
             if (!"지급".equals(p.getJudgeResult()) || p.getOccurrenceDate() == null) continue;
+            LocalDate date = p.getOccurrenceDate();
             double amt = p.getPaidAmount() != null ? p.getPaidAmount() : 0;
-            paidByDate.merge(p.getOccurrenceDate(), amt, Double::sum);
-            if (p.getCompanyName() != null)
-                companyByDate.put(p.getOccurrenceDate(), p.getCompanyName());
+            paidAmtByDate.merge(date, amt, Double::sum);
+            if (p.getCompanyName() != null) paidCoByDate.put(date, p.getCompanyName());
+            // resReasonForPayment 파싱 → 어떤 유형이 이미 지급됐는지 추적
+            Set<ClaimCategory> cats = parsePaymentCategories(p.getReasonForPayment());
+            paidCatsByDate.computeIfAbsent(date, k -> new HashSet<>()).addAll(cats);
         }
 
         List<ClaimOpportunityDto> result = new ArrayList<>();
         for (MedicalRecordInfo r : records)
-            result.add(matchRecord(r, policies, paidByDate, companyByDate));
+            result.add(matchRecord(r, policies, paidCatsByDate, paidAmtByDate, paidCoByDate));
         return result;
+    }
+
+    /**
+     * resReasonForPayment → 지급된 ClaimCategory 집합으로 파싱.
+     * 예) "상해통원의료비(실손)" → {INJURY_OUTPATIENT, PHARMACY}
+     *     "질병입원의료비"       → {DISEASE_INPATIENT}
+     *     알 수 없는 사유        → {ALL}  (모든 유형에 해당)
+     */
+    private Set<ClaimCategory> parsePaymentCategories(String reason) {
+        if (reason == null || reason.isBlank()) return Set.of(ClaimCategory.ALL);
+        String lower = reason.toLowerCase();
+        // 상해 통원: 병원 외래 + 약국(처방) 모두 포함
+        if (lower.contains("상해") && (lower.contains("통원") || lower.contains("외래")))
+            return Set.of(ClaimCategory.INJURY_OUTPATIENT, ClaimCategory.PHARMACY);
+        if (lower.contains("상해") && lower.contains("입원"))
+            return Set.of(ClaimCategory.INJURY_INPATIENT);
+        // 질병 통원: 병원 외래 + 약국 포함
+        if (lower.contains("질병") && (lower.contains("통원") || lower.contains("외래")))
+            return Set.of(ClaimCategory.DISEASE_OUTPATIENT, ClaimCategory.PHARMACY);
+        if (lower.contains("질병") && lower.contains("입원"))
+            return Set.of(ClaimCategory.DISEASE_INPATIENT);
+        if (lower.contains("처방") || lower.contains("조제"))
+            return Set.of(ClaimCategory.PHARMACY);
+        // 암, 뇌혈관 등 정액 지급
+        if (lower.contains("암") || lower.contains("뇌혈관") || lower.contains("허혈")
+                || lower.contains("골절") || lower.contains("화상"))
+            return Set.of(ClaimCategory.LUMP_SUM);
+        return Set.of(ClaimCategory.ALL);
     }
 
     // ── 레코드 1건 매핑 ──────────────────────────────────────────────────────
 
     private ClaimOpportunityDto matchRecord(MedicalRecordInfo record,
                                              List<PolicyInfo> policies,
-                                             Map<LocalDate, Double> paidByDate,
-                                             Map<LocalDate, String> companyByDate) {
+                                             Map<LocalDate, Set<ClaimCategory>> paidCatsByDate,
+                                             Map<LocalDate, Double>             paidAmtByDate,
+                                             Map<LocalDate, String>             paidCoByDate) {
 
         String     diseaseCode    = resolveDiseaseCode(record);
         TreatClass tc             = classify(diseaseCode, record.getDepartment());
@@ -87,10 +121,18 @@ public class ClaimMatchingService {
                                     && record.getInsurancePayment() > 0;
         LocalDate  visitDate      = record.getVisitDate();
 
-        Double alreadyPaid  = visitDate != null ? paidByDate.get(visitDate)    : null;
-        String paidCompany  = visitDate != null ? companyByDate.get(visitDate) : null;
-        boolean isClaimed   = "CLAIMED".equals(record.getClaimStatus())
-                              || (alreadyPaid != null && alreadyPaid > 0);
+        // 이 레코드의 지급 카테고리를 구하고, 해당 날짜에 동일 카테고리가 지급됐는지 확인
+        ClaimCategory recCat    = toClaimCategory(tc, treatType);
+        Set<ClaimCategory> paid = visitDate != null
+                                  ? paidCatsByDate.getOrDefault(visitDate, Set.of())
+                                  : Set.of();
+        boolean isClaimed = "CLAIMED".equals(record.getClaimStatus())
+                || paid.contains(ClaimCategory.ALL)
+                || paid.contains(recCat);
+
+        // 표시용: 해당 날짜의 총 지급금 + 보험사 (카테고리 무관하게 합산)
+        Double alreadyPaid = visitDate != null ? paidAmtByDate.get(visitDate) : null;
+        String paidCompany = visitDate != null ? paidCoByDate.get(visitDate)  : null;
 
         var builder = ClaimOpportunityDto.builder()
                 .id(record.getId())
@@ -397,6 +439,27 @@ public class ClaimMatchingService {
     // ── 내부 타입 ─────────────────────────────────────────────────────────────
 
     private enum TreatClass { DISEASE, INJURY, DENTAL, PHARMACY, ORIENTAL }
+
+    /** resReasonForPayment → 파싱된 지급 분류 */
+    private enum ClaimCategory {
+        INJURY_OUTPATIENT,   // 상해 통원
+        INJURY_INPATIENT,    // 상해 입원
+        DISEASE_OUTPATIENT,  // 질병 통원
+        DISEASE_INPATIENT,   // 질병 입원
+        PHARMACY,            // 처방조제비
+        LUMP_SUM,            // 정액 지급 (암/골절 등)
+        ALL                  // 사유 불명 → 전체 해당
+    }
+
+    /** TreatClass + treatType → ClaimCategory 변환 */
+    private ClaimCategory toClaimCategory(TreatClass tc, String treatType) {
+        if (tc == TreatClass.PHARMACY) return ClaimCategory.PHARMACY;
+        boolean inpatient = isInpatient(treatType);
+        if (tc == TreatClass.INJURY)
+            return inpatient ? ClaimCategory.INJURY_INPATIENT : ClaimCategory.INJURY_OUTPATIENT;
+        // DISEASE, DENTAL, ORIENTAL 모두 질병 카테고리로 매핑
+        return inpatient ? ClaimCategory.DISEASE_INPATIENT : ClaimCategory.DISEASE_OUTPATIENT;
+    }
 
     /** MatchResult 축약형 */
     private static class MR extends MatchResult {
