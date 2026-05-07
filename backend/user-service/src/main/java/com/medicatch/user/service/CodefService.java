@@ -327,11 +327,23 @@ public class CodefService {
         Map<String, Object> result = (Map<String, Object>) responseMap.get("result");
         if (result == null) throw new RuntimeException("CODEF 응답 형식 오류");
         String code = (String) result.get("code");
-        // 3차: 이메일 발송 트리거 → CF-03002(method:emailAuthNo) 또는 CF-00000 이 정상
-        if (!"CF-03002".equals(code) && !"CF-00000".equals(code)) {
-            String msg = buildErrorMessage(result);
-            throw new SignupFieldException(resolveErrorField(msg), msg.isBlank() ? "이메일 인증 요청에 실패했습니다." : msg);
+
+        if ("CF-03002".equals(code) || "CF-00000".equals(code)) {
+            // extraInfo에 실제 오류가 담겨 있으면 실패 처리
+            Map<String, Object> data = toMap(responseMap.get("data"));
+            Map<String, Object> extraInfo = toMap(data.get("extraInfo"));
+            String extraCode = (String) extraInfo.get("code");
+            String extraMsg  = (String) extraInfo.get("message");
+            if (extraCode != null && !extraCode.isBlank()) {
+                throw new SignupFieldException(
+                        resolveErrorField(extraMsg),
+                        extraMsg != null && !extraMsg.isBlank() ? extraMsg : "이메일 인증 요청에 실패했습니다.");
+            }
+            return;
         }
+
+        String msg = buildErrorMessage(result);
+        throw new SignupFieldException(resolveErrorField(msg), msg.isBlank() ? "이메일 인증 요청에 실패했습니다." : msg);
     }
 
     @SuppressWarnings("unchecked")
@@ -339,11 +351,23 @@ public class CodefService {
         Map<String, Object> result = (Map<String, Object>) responseMap.get("result");
         if (result == null) throw new RuntimeException("CODEF 응답 형식 오류");
         String code = (String) result.get("code");
-        // 2차 응답은 CF-03002 (method:"etc") 가 정상
-        if (!"CF-03002".equals(code) && !"CF-00000".equals(code)) {
-            String msg = buildErrorMessage(result);
-            throw new SignupFieldException("smsAuthNo", msg.isBlank() ? "휴대폰 인증에 실패했습니다." : msg);
+
+        if ("CF-03002".equals(code) || "CF-00000".equals(code)) {
+            // CF-03002여도 data.extraInfo에 실제 오류가 담길 수 있음 (예: CF-13349 이미 등록된 아이디)
+            Map<String, Object> data = toMap(responseMap.get("data"));
+            Map<String, Object> extraInfo = toMap(data.get("extraInfo"));
+            String extraCode = (String) extraInfo.get("code");
+            String extraMsg  = (String) extraInfo.get("message");
+            if (extraCode != null && !extraCode.isBlank()) {
+                throw new SignupFieldException(
+                        resolveErrorField(extraMsg),
+                        extraMsg != null && !extraMsg.isBlank() ? extraMsg : "인증에 실패했습니다.");
+            }
+            return;
         }
+
+        String msg = buildErrorMessage(result);
+        throw new SignupFieldException("smsAuthNo", msg.isBlank() ? "휴대폰 인증에 실패했습니다." : msg);
     }
 
     @SuppressWarnings("unchecked")

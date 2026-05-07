@@ -51,6 +51,10 @@ public class MedicalRecord {
     @Column
     private Double outOfPocket;
 
+    @Column(columnDefinition = "VARCHAR(20) DEFAULT 'UNCLAIMED'")
+    @Builder.Default
+    private String claimStatus = "UNCLAIMED";
+
     @Column(columnDefinition = "LONGTEXT")
     private String notes;
 

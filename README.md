@@ -13,7 +13,7 @@
 | API Gateway | Spring Cloud Gateway (JWT 인증, 라우팅) |
 | Backend MSA | Spring Boot 4.x (Java 21), Spring Cloud Eureka |
 | AI 채팅 | OpenAI GPT-4o (Chat Completions API) |
-| 메시지 | Apache Kafka, RabbitMQ |
+| 메시지 | RabbitMQ |
 | Database | MySQL 8.0 |
 | Cache | Redis |
 | CI/CD | GitHub Actions + Jenkins + Docker Hub |

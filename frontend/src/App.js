@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/common/Navbar';
 import useAuthStore from './store/authStore';
@@ -35,13 +35,20 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
-  const { setUser, isAuthenticated } = useAuthStore();
+  const { setUser, logout, isAuthenticated } = useAuthStore();
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
-      authAPI.profile().then(r => setUser(r)).catch(() => {});
+      authAPI.profile()
+        .then(r => { setUser(r); setAuthChecked(true); })
+        .catch(() => { logout(); setAuthChecked(true); });
+    } else {
+      setAuthChecked(true);
     }
   }, []);
+
+  if (!authChecked) return null;
 
   return (
     <BrowserRouter>
