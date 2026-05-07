@@ -33,7 +33,7 @@ public class InsuranceController {
     @GetMapping("/policies")
     public ResponseEntity<List<PolicyDto>> getActivePolicies(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestParam(required = false) Long userIdParam) {
+            @RequestParam(value = "userId", required = false) Long userIdParam) {
         Long userId = userIdParam;
         if (userId == null && userIdHeader != null && !userIdHeader.isBlank()) {
             userId = Long.parseLong(userIdHeader);
