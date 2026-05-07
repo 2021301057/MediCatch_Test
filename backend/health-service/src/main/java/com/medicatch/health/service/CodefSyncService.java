@@ -50,7 +50,8 @@ public class CodefSyncService {
     private final MedicalRecordRepository medicalRecordRepo;
     private final CheckupResultRepository checkupResultRepo;
     private final MedicationDetailRepository medicationDetailRepo;
-    private final ConcurrentHashMap<String, SyncSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, SyncSession>           sessions        = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<NtsYearSession>>  ntsMultiSessions = new ConcurrentHashMap<>();
 
     public CodefSyncService(ObjectMapper objectMapper,
                             MedicalRecordRepository medicalRecordRepo,
@@ -96,10 +97,7 @@ public class CodefSyncService {
             hiraParams.put("id",             sharedId);
             if ("5".equals(loginTypeLevel)) hiraParams.put("telecom", telecom);
 
-            HashMap<String, Object> ntsParams = buildNtsParams(userName, phoneNo, identity13, currentYear);
-            ntsParams.put("id", sharedId);
-
-            // NHIS + HIRA + NTS 1차 동시 요청
+            // NHIS + HIRA 1차 요청
             EasyCodefServiceType svcType = serviceType();
             CompletableFuture<String> nhisFuture = CompletableFuture.supplyAsync(() -> {
                 try {
@@ -113,12 +111,28 @@ public class CodefSyncService {
                     return createCodef().requestProduct(HIRA_URL, svcType, hiraParams);
                 } catch (Exception e) { throw new RuntimeException(e); }
             });
-            CompletableFuture<String> ntsFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    log.info("NTS 연말정산 1차 요청 - userId: {}", userId);
-                    return createCodef().requestProduct(NTS_URL, svcType, ntsParams);
-                } catch (Exception e) { throw new RuntimeException(e); }
-            });
+
+            // NTS 연말정산 다건 인증: 2023 ~ 현재연도 병렬 요청 (같은 id로 1회 인증)
+            String[] ntsYears = buildNtsYears();
+            List<CompletableFuture<NtsYearSession>> ntsFutures = new ArrayList<>();
+            for (String ntsYear : ntsYears) {
+                HashMap<String, Object> p = buildNtsParams(userName, phoneNo, identity13, ntsYear);
+                p.put("id", sharedId);
+                ntsFutures.add(CompletableFuture.supplyAsync(() -> {
+                    try {
+                        log.info("NTS 연말정산 1차 요청 {} - userId: {}", ntsYear, userId);
+                        String r = createCodef().requestProduct(NTS_URL, svcType, p);
+                        Map<String, Object> m = objectMapper.readValue(r, Map.class);
+                        String c = (String) toMap(m.get("result")).get("code");
+                        if ("CF-00000".equals(c) || "CF-03002".equals(c))
+                            return new NtsYearSession(ntsYear, p, toMap(m.get("data")));
+                        log.warn("NTS {} 1차 오류 [{}]", ntsYear, c);
+                        return null;
+                    } catch (Exception e) {
+                        log.warn("NTS {} 1차 실패: {}", ntsYear, e.getMessage()); return null;
+                    }
+                }));
+            }
 
             String nhisResult = nhisFuture.get(90, TimeUnit.SECONDS);
             String hiraResult = hiraFuture.get(90, TimeUnit.SECONDS);
@@ -143,33 +157,22 @@ public class CodefSyncService {
             }
             Map<String, Object> hiraData = toMap(hiraMap.get("data"));
 
-            // NTS는 실패해도 전체 sync 중단하지 않음
-            HashMap<String, Object> savedNtsParams = null;
-            Map<String, Object> ntsData = null;
-            try {
-                String ntsResult = ntsFuture.get(90, TimeUnit.SECONDS);
-                log.info("NTS 연말정산 1차 응답: {}", ntsResult);
-                Map<String, Object> ntsMap     = objectMapper.readValue(ntsResult, Map.class);
-                Map<String, Object> ntsResult2 = toMap(ntsMap.get("result"));
-                String ntsCode = (String) ntsResult2.get("code");
-                if ("CF-00000".equals(ntsCode) || "CF-03002".equals(ntsCode)) {
-                    savedNtsParams = ntsParams;
-                    ntsData        = toMap(ntsMap.get("data"));
-                } else {
-                    log.warn("NTS 연말정산 1차 오류 [{}] - 비급여 동기화 건너뜀", ntsCode);
-                }
-            } catch (Exception e) {
-                log.warn("NTS 연말정산 1차 요청 실패 - 비급여 동기화 건너뜀: {}", e.getMessage());
+            // NTS 결과 수집 (실패 연도는 건너뜀)
+            List<NtsYearSession> ntsYearSessions = new ArrayList<>();
+            for (CompletableFuture<NtsYearSession> f : ntsFutures) {
+                try {
+                    NtsYearSession s = f.get(90, TimeUnit.SECONDS);
+                    if (s != null) ntsYearSessions.add(s);
+                } catch (Exception e) { log.warn("NTS future 수집 실패: {}", e.getMessage()); }
             }
 
             String sessionKey = UUID.randomUUID().toString();
             sessions.put(sessionKey, new SyncSession(
                     userId, nhisParams, nhisData, hiraParams, hiraData,
-                    savedNtsParams, ntsData,
-                    loginTypeLevel, LocalDateTime.now()
+                    ntsYearSessions, loginTypeLevel, LocalDateTime.now()
             ));
 
-            log.info("건강 데이터 동기화 1차 완료 - sessionKey: {}, nts: {}", sessionKey, savedNtsParams != null);
+            log.info("건강 데이터 동기화 1차 완료 - sessionKey: {}, ntsYears: {}", sessionKey, ntsYearSessions.size());
             return new SyncStep1Response(sessionKey, loginTypeLevel, true);
 
         } catch (Exception e) {
@@ -216,22 +219,21 @@ public class CodefSyncService {
             medicalCount    = hiraCounts[0];
             medicationCount = hiraCounts[1];
 
-            // 연말정산 2차 (NTS가 1차에 포함된 경우만)
-            if (session.getNtsParams() != null && session.getNtsTwoWayData() != null) {
+            // 연말정산 2차: 연도별 다건 인증 (1차에 성공한 연도만)
+            for (NtsYearSession nts : session.getNtsYearSessions()) {
                 try {
-                    Thread.sleep(300);
-                    EasyCodef ntsCodef = createCodef();
-                    HashMap<String, Object> ntsCertMap = new HashMap<>(session.getNtsParams());
-                    ntsCertMap.put("twoWayInfo", buildTwoWayInfo(session.getNtsTwoWayData()));
+                    Thread.sleep(200);
+                    HashMap<String, Object> ntsCertMap = new HashMap<>(nts.getParams());
+                    ntsCertMap.put("twoWayInfo", buildTwoWayInfo(nts.getTwoWayData()));
                     ntsCertMap.put("is2Way",    true);
                     ntsCertMap.put("simpleAuth","1");
 
-                    log.info("NTS 연말정산 2차 요청 - sessionKey: {}", sessionKey);
-                    String ntsResult = ntsCodef.requestCertification(NTS_URL, serviceType(), ntsCertMap);
-                    log.debug("NTS 연말정산 2차 응답: {}", ntsResult);
-                    nonCoveredCount = updateNonCoveredAmounts(session.getUserId(), ntsResult);
+                    log.info("NTS 연말정산 {} 2차 요청", nts.getYear());
+                    String ntsResult = createCodef().requestCertification(NTS_URL, serviceType(), ntsCertMap);
+                    log.debug("NTS {} 2차 응답: {}", nts.getYear(), ntsResult);
+                    nonCoveredCount += updateNonCoveredAmounts(session.getUserId(), ntsResult);
                 } catch (Exception e) {
-                    log.warn("NTS 연말정산 2차 실패 - 비급여 업데이트 건너뜀: {}", e.getMessage());
+                    log.warn("NTS {} 2차 실패 - 건너뜀: {}", nts.getYear(), e.getMessage());
                 }
             }
 
@@ -590,87 +592,127 @@ public class CodefSyncService {
         }
     }
 
-    // ── 연말정산(NTS) 단독 ───────────────────────────────────────────────
+    // ── 연말정산(NTS) 단독 – 다건 인증 (2023 ~ 현재연도) ──────────────────
 
     public String syncYeartaxStep1(Long userId, String userName, String phoneNo,
-                                   String identity13, String searchYear) {
+                                   String identity13) {
         try {
-            String year = (searchYear != null && !searchYear.isBlank())
-                    ? searchYear : String.valueOf(LocalDate.now().getYear());
+            String sharedId = "mc_nts_" + userId;
+            String[] years  = buildNtsYears();
+            EasyCodefServiceType svcType = serviceType();
 
-            HashMap<String, Object> params = buildNtsParams(userName, phoneNo, identity13, year);
-            params.put("id", "mc_nts_" + userId);
-
-            log.info("NTS 연말정산 1차 요청 - userId: {}, year: {}", userId, year);
-            String result = createCodef().requestProduct(NTS_URL, serviceType(), params);
-            log.info("NTS 연말정산 1차 응답: {}", result);
-
-            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
-            Map<String, Object> resultField = toMap(respMap.get("result"));
-            String code = (String) resultField.get("code");
-            if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
-                String msg = (String) resultField.getOrDefault("message", "연말정산 조회 실패");
-                throw new RuntimeException("연말정산(NTS) 오류 [" + code + "]: " + msg);
+            // 연도별 병렬 1차 요청 (같은 id → 사용자는 1회 인증)
+            List<CompletableFuture<NtsYearSession>> futures = new ArrayList<>();
+            for (String year : years) {
+                HashMap<String, Object> p = buildNtsParams(userName, phoneNo, identity13, year);
+                p.put("id", sharedId);
+                futures.add(CompletableFuture.supplyAsync(() -> {
+                    try {
+                        log.info("NTS 연말정산 단독 1차 {} - userId: {}", year, userId);
+                        String r = createCodef().requestProduct(NTS_URL, svcType, p);
+                        Map<String, Object> m = objectMapper.readValue(r, Map.class);
+                        String c = (String) toMap(m.get("result")).get("code");
+                        if ("CF-00000".equals(c) || "CF-03002".equals(c))
+                            return new NtsYearSession(year, p, toMap(m.get("data")));
+                        log.warn("NTS 단독 {} 1차 오류 [{}]", year, c); return null;
+                    } catch (Exception e) {
+                        log.warn("NTS 단독 {} 1차 실패: {}", year, e.getMessage()); return null;
+                    }
+                }));
             }
 
+            List<NtsYearSession> yearSessions = new ArrayList<>();
+            for (CompletableFuture<NtsYearSession> f : futures) {
+                try { NtsYearSession s = f.get(90, TimeUnit.SECONDS); if (s != null) yearSessions.add(s); }
+                catch (Exception e) { log.warn("NTS future 수집: {}", e.getMessage()); }
+            }
+            if (yearSessions.isEmpty())
+                throw new RuntimeException("연말정산 데이터 조회에 실패했습니다. 잠시 후 다시 시도해주세요.");
+
             String sessionKey = UUID.randomUUID().toString();
-            singleSessions.put(sessionKey, new SingleSession(userId, params,
-                    toMap(respMap.get("data")), LocalDateTime.now()));
-            log.info("NTS 연말정산 1차 완료 - sessionKey: {}", sessionKey);
+            ntsMultiSessions.put(sessionKey, yearSessions);
+            log.info("NTS 연말정산 단독 1차 완료 - sessionKey: {}, years: {}", sessionKey, yearSessions.size());
             return sessionKey;
 
         } catch (RuntimeException e) { throw e;
         } catch (Exception e) {
-            log.error("NTS 연말정산 1차 실패: {}", e.getMessage(), e);
+            log.error("NTS 연말정산 단독 1차 실패: {}", e.getMessage(), e);
             throw new RuntimeException("연말정산 요청 중 오류: " + e.getMessage(), e);
         }
     }
 
     @Transactional
     public int syncYeartaxStep2(String sessionKey) {
-        SingleSession session = getValidSingleSession(sessionKey);
+        List<NtsYearSession> yearSessions = ntsMultiSessions.get(sessionKey);
+        if (yearSessions == null || yearSessions.isEmpty())
+            throw new RuntimeException("세션이 없거나 만료되었습니다. 처음부터 다시 시도해주세요.");
+
+        Long userId = yearSessions.get(0).getParams() != null
+                ? Long.parseLong(yearSessions.get(0).getParams()
+                    .getOrDefault("id", "mc_nts_0").toString().replace("mc_nts_", ""))
+                : null;
+        if (userId == null) throw new RuntimeException("세션에서 userId를 확인할 수 없습니다.");
+
+        int totalUpdated = 0;
         try {
-            HashMap<String, Object> certMap = new HashMap<>(session.getParams());
-            certMap.put("twoWayInfo", new HashMap<>(session.getTwoWayData()));
-            certMap.put("is2Way",    true);
-            certMap.put("simpleAuth","1");
+            for (NtsYearSession nts : yearSessions) {
+                try {
+                    HashMap<String, Object> certMap = new HashMap<>(nts.getParams());
+                    certMap.put("twoWayInfo", buildTwoWayInfo(nts.getTwoWayData()));
+                    certMap.put("is2Way",    true);
+                    certMap.put("simpleAuth","1");
 
-            log.info("NTS 연말정산 2차 요청 - sessionKey: {}", sessionKey);
-            String result = createCodef().requestCertification(NTS_URL, serviceType(), certMap);
-            log.info("NTS 연말정산 2차 응답: {}", result);
+                    log.info("NTS 연말정산 단독 {} 2차 요청", nts.getYear());
+                    String result = createCodef().requestCertification(NTS_URL, serviceType(), certMap);
+                    log.debug("NTS {} 2차 응답: {}", nts.getYear(), result);
 
-            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
-            Map<String, Object> resultField = toMap(respMap.get("result"));
-            String code = (String) resultField.get("code");
-            if (!"CF-00000".equals(code)) {
-                String msg = (String) resultField.getOrDefault("message", "연말정산 인증 실패");
-                throw new RuntimeException("연말정산(NTS) 인증 오류 [" + code + "]: " + msg);
+                    Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+                    Map<String, Object> resultField = toMap(respMap.get("result"));
+                    String code = (String) resultField.get("code");
+                    if ("CF-00000".equals(code))
+                        totalUpdated += updateNonCoveredAmounts(userId, result);
+                    else
+                        log.warn("NTS {} 인증 오류 [{}]", nts.getYear(), code);
+                } catch (Exception e) {
+                    log.warn("NTS {} 2차 실패 - 건너뜀: {}", nts.getYear(), e.getMessage());
+                }
             }
-
-            int count = updateNonCoveredAmounts(session.getUserId(), result);
-            singleSessions.remove(sessionKey);
-            log.info("NTS 연말정산 동기화 완료 - userId: {}, updated: {}", session.getUserId(), count);
-            return count;
+            ntsMultiSessions.remove(sessionKey);
+            log.info("NTS 연말정산 단독 동기화 완료 - userId: {}, updated: {}", userId, totalUpdated);
+            return totalUpdated;
 
         } catch (RuntimeException e) { throw e;
         } catch (Exception e) {
-            log.error("NTS 연말정산 2차 실패: {}", e.getMessage(), e);
+            log.error("NTS 연말정산 단독 2차 실패: {}", e.getMessage(), e);
             throw new RuntimeException("연말정산 인증 중 오류: " + e.getMessage(), e);
         }
     }
 
-    /** NTS 공통 파라미터 생성 (organization=0004, loginType=6) */
+    /**
+     * NTS 연말정산 파라미터 생성.
+     * loginType="6" (비회원 간편인증): identity=13자리, loginTypeLevel 불필요.
+     * inquiryTypeCD: 의료비(index 3)만 조회 → "000100000000000"
+     */
     private HashMap<String, Object> buildNtsParams(String userName, String phoneNo,
                                                     String identity13, String searchYear) {
         HashMap<String, Object> params = new HashMap<>();
-        params.put("organization",   "0004");
-        params.put("loginType",      "6");
-        params.put("loginTypeLevel", "1");
-        params.put("userName",       userName);
-        params.put("phoneNo",        phoneNo);
-        params.put("identity",       identity13);
+        params.put("organization",    "0004");
+        params.put("loginType",       "6");
+        params.put("userName",        userName);
+        params.put("phoneNo",         phoneNo);
+        params.put("identity",        identity13);
         params.put("searchStartYear", searchYear);
+        params.put("inquiryTypeCD",   "000100000000000");  // 의료비만 조회
         return params;
+    }
+
+    /** HIRA 시작연도(2023) ~ 현재연도 배열 반환 */
+    private String[] buildNtsYears() {
+        int startYear   = 2023;
+        int currentYear = LocalDate.now().getYear();
+        List<String> years = new ArrayList<>();
+        for (int y = startYear; y <= currentYear; y++) years.add(String.valueOf(y));
+        return years.toArray(new String[0]);
     }
 
     /**
@@ -761,6 +803,15 @@ public class CodefSyncService {
         private int updatedNonCovered;
     }
 
+    /** 연말정산 단년도 요청 세션 (params + 2차 twoWayData) */
+    @Data
+    @AllArgsConstructor
+    static class NtsYearSession {
+        private String year;
+        private HashMap<String, Object> params;
+        private Map<String, Object> twoWayData;
+    }
+
     @Data
     @AllArgsConstructor
     private static class SyncSession {
@@ -769,8 +820,8 @@ public class CodefSyncService {
         private Map<String, Object> nhisTwoWayData;
         private HashMap<String, Object> hiraParams;
         private Map<String, Object> hiraTwoWayData;
-        private HashMap<String, Object> ntsParams;
-        private Map<String, Object> ntsTwoWayData;
+        /** 연말정산 다건 인증: 연도별 세션 목록. NTS 실패 시 빈 리스트 */
+        private List<NtsYearSession> ntsYearSessions;
         private String authMethod;
         private LocalDateTime createdAt;
     }
