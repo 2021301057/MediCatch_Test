@@ -224,13 +224,13 @@ const MedicalRecords = () => {
               )}
               <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                 <div>
-                  <div className="mc-field-label">환자 부담</div>
+                  <div className="mc-field-label">본인 부담</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
                     {formatKRW(r.patientPayment)}
                   </div>
                 </div>
                 <div>
-                  <div className="mc-field-label">보험 부담</div>
+                  <div className="mc-field-label">건보 부담</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
                     {formatKRW(r.insurancePayment)}
                   </div>
