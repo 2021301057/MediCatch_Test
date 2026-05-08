@@ -608,16 +608,16 @@ public class CodefSyncService {
                 p.put("id", sharedId);
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        log.info("NTS 연말정산 단독 1차 {} - userId: {}, params: {}", year, userId, p);
+                        log.info("NTS 연말정산 단독 1차 {} - userId: {}", year, userId);
                         String r = createCodef().requestProduct(NTS_URL, svcType, p);
-                        log.info("NTS {} 1차 응답: {}", year, r);
+                        log.error("NTS {} 1차 응답 전문: {}", year, r);
                         Map<String, Object> m = objectMapper.readValue(r, Map.class);
                         Map<String, Object> resultField = toMap(m.get("result"));
                         String c = (String) resultField.get("code");
                         String msg = (String) resultField.getOrDefault("message", "");
                         if ("CF-00000".equals(c) || "CF-03002".equals(c))
                             return new NtsYearSession(year, p, toMap(m.get("data")));
-                        log.warn("NTS 단독 {} 1차 오류 [{}] - {}", year, c, msg); return null;
+                        log.error("NTS 단독 {} 1차 오류 [{}] - {}", year, c, msg); return null;
                     } catch (Exception e) {
                         log.error("NTS 단독 {} 1차 예외: {}", year, e.getMessage(), e); return null;
                     }
@@ -627,7 +627,7 @@ public class CodefSyncService {
             List<NtsYearSession> yearSessions = new ArrayList<>();
             for (CompletableFuture<NtsYearSession> f : futures) {
                 try { NtsYearSession s = f.get(90, TimeUnit.SECONDS); if (s != null) yearSessions.add(s); }
-                catch (Exception e) { log.warn("NTS future 수집: {}", e.getMessage()); }
+                catch (Exception e) { log.error("NTS future 수집 오류: {}", e.getMessage(), e); }
             }
             if (yearSessions.isEmpty()) {
                 log.error("NTS 연말정산 단독 1차 - 모든 연도 실패. userId: {}, years: {}", userId, years);
