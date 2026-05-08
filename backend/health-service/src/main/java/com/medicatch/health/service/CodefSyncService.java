@@ -608,15 +608,18 @@ public class CodefSyncService {
                 p.put("id", sharedId);
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        log.info("NTS 연말정산 단독 1차 {} - userId: {}", year, userId);
+                        log.info("NTS 연말정산 단독 1차 {} - userId: {}, params: {}", year, userId, p);
                         String r = createCodef().requestProduct(NTS_URL, svcType, p);
+                        log.info("NTS {} 1차 응답: {}", year, r);
                         Map<String, Object> m = objectMapper.readValue(r, Map.class);
-                        String c = (String) toMap(m.get("result")).get("code");
+                        Map<String, Object> resultField = toMap(m.get("result"));
+                        String c = (String) resultField.get("code");
+                        String msg = (String) resultField.getOrDefault("message", "");
                         if ("CF-00000".equals(c) || "CF-03002".equals(c))
                             return new NtsYearSession(year, p, toMap(m.get("data")));
-                        log.warn("NTS 단독 {} 1차 오류 [{}]", year, c); return null;
+                        log.warn("NTS 단독 {} 1차 오류 [{}] - {}", year, c, msg); return null;
                     } catch (Exception e) {
-                        log.warn("NTS 단독 {} 1차 실패: {}", year, e.getMessage()); return null;
+                        log.error("NTS 단독 {} 1차 예외: {}", year, e.getMessage(), e); return null;
                     }
                 }));
             }
@@ -626,8 +629,10 @@ public class CodefSyncService {
                 try { NtsYearSession s = f.get(90, TimeUnit.SECONDS); if (s != null) yearSessions.add(s); }
                 catch (Exception e) { log.warn("NTS future 수집: {}", e.getMessage()); }
             }
-            if (yearSessions.isEmpty())
+            if (yearSessions.isEmpty()) {
+                log.error("NTS 연말정산 단독 1차 - 모든 연도 실패. userId: {}, years: {}", userId, years);
                 throw new RuntimeException("연말정산 데이터 조회에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            }
 
             String sessionKey = UUID.randomUUID().toString();
             ntsMultiSessions.put(sessionKey, yearSessions);
