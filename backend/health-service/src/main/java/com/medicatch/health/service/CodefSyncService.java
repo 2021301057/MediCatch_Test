@@ -51,8 +51,10 @@ public class CodefSyncService {
     private final MedicalRecordRepository medicalRecordRepo;
     private final CheckupResultRepository checkupResultRepo;
     private final MedicationDetailRepository medicationDetailRepo;
-    private final ConcurrentHashMap<String, SyncSession>           sessions        = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, List<NtsYearSession>>  ntsMultiSessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, SyncSession>                              sessions         = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<NtsYearSession>>                     ntsMultiSessions = new ConcurrentHashMap<>();
+    /** step1에서 20초 내 미완료된 NTS futures → step2에서 사용자 인증 후 수집 */
+    private final ConcurrentHashMap<String, List<CompletableFuture<NtsYearSession>>>  pendingNtsFutures = new ConcurrentHashMap<>();
 
     public CodefSyncService(ObjectMapper objectMapper,
                             MedicalRecordRepository medicalRecordRepo,
@@ -126,7 +128,8 @@ public class CodefSyncService {
                         Map<String, Object> m = objectMapper.readValue(r, Map.class);
                         String c = (String) toMap(m.get("result")).get("code");
                         if ("CF-00000".equals(c) || "CF-03002".equals(c))
-                            return new NtsYearSession(ntsYear, p, toMap(m.get("data")));
+                            return new NtsYearSession(ntsYear, p, toMap(m.get("data")), c,
+                                    "CF-00000".equals(c) ? r : null);
                         log.warn("NTS {} 1차 오류 [{}]", ntsYear, c);
                         return null;
                     } catch (Exception e) {
@@ -159,7 +162,9 @@ public class CodefSyncService {
             Map<String, Object> hiraData = toMap(hiraMap.get("data"));
 
             // anyOf: 첫 번째 완료까지 최대 20초 대기, 이후 완료된 것 모두 수집
+            // 미완료 futures는 cancel하지 않고 pendingNtsFutures에 보관 → step2에서 사용자 인증 후 수집
             List<NtsYearSession> ntsYearSessions = new ArrayList<>();
+            List<CompletableFuture<NtsYearSession>> ntsPendingFutures = new ArrayList<>();
             CompletableFuture<Object> ntsAnyDone = CompletableFuture.anyOf(
                 ntsFutures.toArray(new CompletableFuture[0]));
             try {
@@ -168,7 +173,7 @@ public class CodefSyncService {
                 log.warn("NTS 통합 1차 - 20초 내 응답 없음");
             } catch (Exception ignored) {}
             for (CompletableFuture<NtsYearSession> f : ntsFutures) {
-                if (!f.isDone()) { f.cancel(false); continue; }
+                if (!f.isDone()) { ntsPendingFutures.add(f); continue; }
                 try { NtsYearSession s = f.join(); if (s != null) ntsYearSessions.add(s); }
                 catch (Exception ignored) {}
             }
@@ -178,6 +183,7 @@ public class CodefSyncService {
                     userId, nhisParams, nhisData, hiraParams, hiraData,
                     ntsYearSessions, loginTypeLevel, LocalDateTime.now()
             ));
+            if (!ntsPendingFutures.isEmpty()) pendingNtsFutures.put(sessionKey, ntsPendingFutures);
 
             log.info("건강 데이터 동기화 1차 완료 - sessionKey: {}, ntsYears: {}", sessionKey, ntsYearSessions.size());
             return new SyncStep1Response(sessionKey, loginTypeLevel, true);
@@ -229,18 +235,43 @@ public class CodefSyncService {
             // 연말정산 2차: 연도별 다건 인증 (1차에 성공한 연도만)
             for (NtsYearSession nts : session.getNtsYearSessions()) {
                 try {
-                    Thread.sleep(200);
-                    HashMap<String, Object> ntsCertMap = new HashMap<>(nts.getParams());
-                    ntsCertMap.put("twoWayInfo", buildTwoWayInfo(nts.getTwoWayData()));
-                    ntsCertMap.put("is2Way",    true);
-                    ntsCertMap.put("simpleAuth","1");
+                    if ("CF-00000".equals(nts.getCode()) && nts.getRawResult() != null) {
+                        // 1차에서 직접 데이터 수신 - 재인증 불필요
+                        log.info("NTS 연말정산 {} - CF-00000 직접 저장", nts.getYear());
+                        nonCoveredCount += updateNonCoveredAmounts(session.getUserId(), nts.getRawResult());
+                    } else {
+                        Thread.sleep(200);
+                        HashMap<String, Object> ntsCertMap = new HashMap<>(nts.getParams());
+                        ntsCertMap.put("twoWayInfo", buildTwoWayInfo(nts.getTwoWayData()));
+                        ntsCertMap.put("is2Way",    true);
+                        ntsCertMap.put("simpleAuth","1");
 
-                    log.info("NTS 연말정산 {} 2차 요청", nts.getYear());
-                    String ntsResult = createCodef().requestCertification(NTS_URL, serviceType(), ntsCertMap);
-                    log.debug("NTS {} 2차 응답: {}", nts.getYear(), ntsResult);
-                    nonCoveredCount += updateNonCoveredAmounts(session.getUserId(), ntsResult);
+                        log.info("NTS 연말정산 {} 2차 요청", nts.getYear());
+                        String ntsResult = createCodef().requestCertification(NTS_URL, serviceType(), ntsCertMap);
+                        log.debug("NTS {} 2차 응답: {}", nts.getYear(), ntsResult);
+                        nonCoveredCount += updateNonCoveredAmounts(session.getUserId(), ntsResult);
+                    }
                 } catch (Exception e) {
                     log.warn("NTS {} 2차 실패 - 건너뜀: {}", nts.getYear(), e.getMessage());
+                }
+            }
+
+            // 1차에서 미완료된 NTS futures 수집 (사용자 인증 완료 후 CF-00000으로 도착)
+            List<CompletableFuture<NtsYearSession>> ntsPending = pendingNtsFutures.remove(sessionKey);
+            if (ntsPending != null && !ntsPending.isEmpty()) {
+                CompletableFuture<Object> anyPending = CompletableFuture.anyOf(ntsPending.toArray(new CompletableFuture[0]));
+                try { anyPending.get(30, TimeUnit.SECONDS); }
+                catch (TimeoutException e) { log.warn("NTS pending futures 30초 초과 - 일부 연도 저장 누락 가능"); }
+                catch (Exception ignored) {}
+                for (CompletableFuture<NtsYearSession> f : ntsPending) {
+                    if (!f.isDone()) { f.cancel(false); continue; }
+                    try {
+                        NtsYearSession s = f.join();
+                        if (s != null && "CF-00000".equals(s.getCode()) && s.getRawResult() != null) {
+                            log.info("NTS pending {} 저장", s.getYear());
+                            nonCoveredCount += updateNonCoveredAmounts(session.getUserId(), s.getRawResult());
+                        }
+                    } catch (Exception ignored) {}
                 }
             }
 
@@ -623,7 +654,8 @@ public class CodefSyncService {
                         String c = (String) resultField.get("code");
                         String msg = (String) resultField.getOrDefault("message", "");
                         if ("CF-00000".equals(c) || "CF-03002".equals(c))
-                            return new NtsYearSession(year, p, toMap(m.get("data")));
+                            return new NtsYearSession(year, p, toMap(m.get("data")), c,
+                                    "CF-00000".equals(c) ? r : null);
                         log.error("NTS 단독 {} 1차 오류 [{}] - {}", year, c, msg); return null;
                     } catch (Exception e) {
                         log.error("NTS 단독 {} 1차 예외: {}", year, e.getMessage(), e); return null;
@@ -632,7 +664,9 @@ public class CodefSyncService {
             }
 
             // anyOf: 첫 번째 완료까지 최대 20초 대기, 이후 완료된 것 모두 수집
+            // 미완료 futures는 cancel하지 않고 pendingNtsFutures에 보관 → step2에서 사용자 인증 후 수집
             List<NtsYearSession> yearSessions = new ArrayList<>();
+            List<CompletableFuture<NtsYearSession>> yeartaxPendingFutures = new ArrayList<>();
             CompletableFuture<Object> anyDone = CompletableFuture.anyOf(
                 futures.toArray(new CompletableFuture[0]));
             try {
@@ -641,7 +675,7 @@ public class CodefSyncService {
                 log.warn("NTS 단독 1차 - 20초 내 응답 없음, 완료된 연도만 수집");
             } catch (Exception ignored) {}
             for (CompletableFuture<NtsYearSession> f : futures) {
-                if (!f.isDone()) { f.cancel(false); continue; }
+                if (!f.isDone()) { yeartaxPendingFutures.add(f); continue; }
                 try { NtsYearSession s = f.join(); if (s != null) yearSessions.add(s); }
                 catch (Exception ignored) {}
             }
@@ -653,6 +687,7 @@ public class CodefSyncService {
 
             String sessionKey = UUID.randomUUID().toString();
             ntsMultiSessions.put(sessionKey, yearSessions);
+            if (!yeartaxPendingFutures.isEmpty()) pendingNtsFutures.put(sessionKey, yeartaxPendingFutures);
             log.info("NTS 연말정산 단독 1차 완료 - sessionKey: {}, years: {}", sessionKey, yearSessions.size());
             return sessionKey;
 
@@ -679,26 +714,52 @@ public class CodefSyncService {
         try {
             for (NtsYearSession nts : yearSessions) {
                 try {
-                    HashMap<String, Object> certMap = new HashMap<>(nts.getParams());
-                    certMap.put("twoWayInfo", buildTwoWayInfo(nts.getTwoWayData()));
-                    certMap.put("is2Way",    true);
-                    certMap.put("simpleAuth","1");
+                    if ("CF-00000".equals(nts.getCode()) && nts.getRawResult() != null) {
+                        // 1차에서 직접 데이터 수신 - 재인증 불필요
+                        log.info("NTS 연말정산 단독 {} - CF-00000 직접 저장", nts.getYear());
+                        totalUpdated += updateNonCoveredAmounts(userId, nts.getRawResult());
+                    } else {
+                        HashMap<String, Object> certMap = new HashMap<>(nts.getParams());
+                        certMap.put("twoWayInfo", buildTwoWayInfo(nts.getTwoWayData()));
+                        certMap.put("is2Way",    true);
+                        certMap.put("simpleAuth","1");
 
-                    log.info("NTS 연말정산 단독 {} 2차 요청", nts.getYear());
-                    String result = createCodef().requestCertification(NTS_URL, serviceType(), certMap);
-                    log.debug("NTS {} 2차 응답: {}", nts.getYear(), result);
+                        log.info("NTS 연말정산 단독 {} 2차 요청", nts.getYear());
+                        String result = createCodef().requestCertification(NTS_URL, serviceType(), certMap);
+                        log.debug("NTS {} 2차 응답: {}", nts.getYear(), result);
 
-                    Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
-                    Map<String, Object> resultField = toMap(respMap.get("result"));
-                    String code = (String) resultField.get("code");
-                    if ("CF-00000".equals(code))
-                        totalUpdated += updateNonCoveredAmounts(userId, result);
-                    else
-                        log.warn("NTS {} 인증 오류 [{}]", nts.getYear(), code);
+                        Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+                        Map<String, Object> resultField = toMap(respMap.get("result"));
+                        String code = (String) resultField.get("code");
+                        if ("CF-00000".equals(code))
+                            totalUpdated += updateNonCoveredAmounts(userId, result);
+                        else
+                            log.warn("NTS {} 인증 오류 [{}]", nts.getYear(), code);
+                    }
                 } catch (Exception e) {
                     log.warn("NTS {} 2차 실패 - 건너뜀: {}", nts.getYear(), e.getMessage());
                 }
             }
+
+            // 1차에서 미완료된 NTS futures 수집 (사용자 인증 완료 후 CF-00000으로 도착)
+            List<CompletableFuture<NtsYearSession>> ytPending = pendingNtsFutures.remove(sessionKey);
+            if (ytPending != null && !ytPending.isEmpty()) {
+                CompletableFuture<Object> anyPending = CompletableFuture.anyOf(ytPending.toArray(new CompletableFuture[0]));
+                try { anyPending.get(30, TimeUnit.SECONDS); }
+                catch (TimeoutException e) { log.warn("NTS pending futures 30초 초과 - 일부 연도 저장 누락 가능"); }
+                catch (Exception ignored) {}
+                for (CompletableFuture<NtsYearSession> f : ytPending) {
+                    if (!f.isDone()) { f.cancel(false); continue; }
+                    try {
+                        NtsYearSession s = f.join();
+                        if (s != null && "CF-00000".equals(s.getCode()) && s.getRawResult() != null) {
+                            log.info("NTS pending {} 저장", s.getYear());
+                            totalUpdated += updateNonCoveredAmounts(userId, s.getRawResult());
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+
             ntsMultiSessions.remove(sessionKey);
             log.info("NTS 연말정산 단독 동기화 완료 - userId: {}, updated: {}", userId, totalUpdated);
             return totalUpdated;
@@ -766,6 +827,7 @@ public class CodefSyncService {
         Map<String, List<Double>> ytByDate = new HashMap<>();
 
         for (Map<String, Object> basic : basicList) {
+            if ("1".equals(str(basic.get("resType")))) continue; // 보험급여(실손보험 등) 항목 제외
             String companyNm = str(basic.get("resCompanyNm"));
             List<Map<String, Object>> detailList =
                     (List<Map<String, Object>>) basic.getOrDefault("resDetailList", List.of());
@@ -836,6 +898,10 @@ public class CodefSyncService {
         private String year;
         private HashMap<String, Object> params;
         private Map<String, Object> twoWayData;
+        /** "CF-00000" (데이터 직접 수신) 또는 "CF-03002" (2차 인증 필요) */
+        private String code;
+        /** CF-00000 응답 시 raw JSON 보관 → step2에서 직접 저장. CF-03002이면 null */
+        private String rawResult;
     }
 
     @Data
