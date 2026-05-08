@@ -547,10 +547,22 @@ const MedicalRecords = () => {
                 )}
 
                 {g.hasClaimable && !g.isFullyClaimed && (
-                  <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
-                    onClick={() => openModal(g)}>
-                    <Ic d={P.arrow} size={12}/> 청구하기 ({fmt(g.totalClaimAmount)})
-                  </button>
+                  <div style={{ marginTop: 14 }}>
+                    {g.gen && (
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 5 }}>
+                        <Ic d={P.info} size={10}/>
+                        {' '}{genLabel(g.gen)} 기준 예상 청구금액
+                      </div>
+                    )}
+                    <button className="mc-btn mc-btn-primary"
+                      style={{ width: '100%', justifyContent: 'space-between' }}
+                      onClick={() => openModal(g)}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Ic d={P.arrow} size={12}/> 청구하기
+                      </span>
+                      <span style={{ fontWeight: 800 }}>약 {fmt(g.totalClaimAmount)}</span>
+                    </button>
+                  </div>
                 )}
                 {!g.hasClaimable && g.hasCheckNeeded && !g.isFullyClaimed && (
                   <button className="mc-btn" style={{ marginTop: 14, borderColor: 'var(--blue)', color: 'var(--blue)' }}
@@ -629,7 +641,7 @@ const MedicalRecords = () => {
                   { n: 3, title: '심사 및 승인',
                     desc: '보험사에서 청구 내용을 심사합니다 (약 7~10일).' },
                   { n: 4, title: '보험금 지급',
-                    desc: `승인 후 ${fmt(selectedGroup.totalClaimAmount)}이 지급됩니다.` },
+                    desc: `승인 후 약 ${fmt(selectedGroup.totalClaimAmount)} 지급 예정${selectedGroup.gen ? ` (${genLabel(selectedGroup.gen)} 기준)` : ''}.` },
                 ].map((s) => (
                   <div key={s.n} className="mc-step">
                     <div className="mc-step-num">{s.n}</div>
