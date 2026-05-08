@@ -158,19 +158,19 @@ public class CodefSyncService {
             }
             Map<String, Object> hiraData = toMap(hiraMap.get("data"));
 
-            // NTS 결과 수집 (20초 예산, CODEF 순차처리 특성상 먼저 온 것만 수집)
+            // anyOf: 첫 번째 완료까지 최대 20초 대기, 이후 완료된 것 모두 수집
             List<NtsYearSession> ntsYearSessions = new ArrayList<>();
-            long ntsDeadline = System.currentTimeMillis() + 20_000;
+            CompletableFuture<Object> ntsAnyDone = CompletableFuture.anyOf(
+                ntsFutures.toArray(new CompletableFuture[0]));
+            try {
+                ntsAnyDone.get(20, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                log.warn("NTS 통합 1차 - 20초 내 응답 없음");
+            } catch (Exception ignored) {}
             for (CompletableFuture<NtsYearSession> f : ntsFutures) {
-                long remaining = ntsDeadline - System.currentTimeMillis();
-                if (remaining <= 500) break;
-                try {
-                    NtsYearSession s = f.get(remaining, TimeUnit.MILLISECONDS);
-                    if (s != null) ntsYearSessions.add(s);
-                } catch (TimeoutException e) {
-                    log.info("NTS future 시간 예산 소진 - 남은 연도 건너뜀");
-                    break;
-                } catch (Exception e) { log.warn("NTS future 수집 실패: {}", e.getMessage()); }
+                if (!f.isDone()) { f.cancel(false); continue; }
+                try { NtsYearSession s = f.join(); if (s != null) ntsYearSessions.add(s); }
+                catch (Exception ignored) {}
             }
 
             String sessionKey = UUID.randomUUID().toString();
@@ -631,21 +631,19 @@ public class CodefSyncService {
                 }));
             }
 
-            // CODEF는 same-id 요청을 순차 처리 → 먼저 응답한 연도만 수집 (20초 전체 예산)
+            // anyOf: 첫 번째 완료까지 최대 20초 대기, 이후 완료된 것 모두 수집
             List<NtsYearSession> yearSessions = new ArrayList<>();
-            long deadline = System.currentTimeMillis() + 20_000;
+            CompletableFuture<Object> anyDone = CompletableFuture.anyOf(
+                futures.toArray(new CompletableFuture[0]));
+            try {
+                anyDone.get(20, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                log.warn("NTS 단독 1차 - 20초 내 응답 없음, 완료된 연도만 수집");
+            } catch (Exception ignored) {}
             for (CompletableFuture<NtsYearSession> f : futures) {
-                long remaining = deadline - System.currentTimeMillis();
-                if (remaining <= 500) break;
-                try {
-                    NtsYearSession s = f.get(remaining, TimeUnit.MILLISECONDS);
-                    if (s != null) yearSessions.add(s);
-                } catch (TimeoutException e) {
-                    log.info("NTS future 시간 예산 소진 - 남은 연도 건너뜀");
-                    break;
-                } catch (Exception e) {
-                    log.error("NTS future 수집 오류: {}", e.getMessage(), e);
-                }
+                if (!f.isDone()) { f.cancel(false); continue; }
+                try { NtsYearSession s = f.join(); if (s != null) yearSessions.add(s); }
+                catch (Exception ignored) {}
             }
             if (yearSessions.isEmpty()) {
                 log.error("NTS 연말정산 단독 1차 - 모든 연도 실패. userId: {}, years: {}", userId, years);
