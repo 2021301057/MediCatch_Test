@@ -129,6 +129,8 @@ public class ClaimMatchingService {
         boolean isClaimed  = "CLAIMED".equals(record.getClaimStatus()) || matchedPayment != null;
         Double alreadyPaid = matchedPayment != null ? matchedPayment.getPaidAmount() : null;
         String paidCompany = matchedPayment != null ? matchedPayment.getCompanyName() : null;
+        String claimGroupKey = matchedPayment != null
+                ? matchedPayment.getCompanyName() + "_" + matchedPayment.getOccurrenceDate() : null;
 
         var builder = ClaimOpportunityDto.builder()
                 .id(record.getId())
@@ -141,6 +143,7 @@ public class ClaimMatchingService {
                 .nonCoveredAmount(nonCovered)
                 .alreadyPaidAmount(alreadyPaid)
                 .paidByCompany(paidCompany)
+                .claimGroupKey(claimGroupKey)
                 .claimStatus(isClaimed ? "CLAIMED" : record.getClaimStatus());
 
         if (isClaimed)

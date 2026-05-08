@@ -44,66 +44,110 @@ const GenBadge = ({ gen }) => {
   );
 };
 
-// ── 진료 기록 → 날짜별 그룹 변환 ────────────────────────────────────────────
+// ── 날짜별 단일 그룹 빌더 (기존 로직) ──────────────────────────────────────
+const buildDateGroup = (date, recs) => {
+  const claimable   = recs.filter(r => r.hasClaimOpportunity &&
+                        (r.confidenceLevel === 'CONFIRMED' || r.confidenceLevel === 'LIKELY'));
+  const checkNeeded = recs.filter(r => r.confidenceLevel === 'CHECK_NEEDED');
+  const claimed     = recs.filter(r => r.claimStatus === 'CLAIMED');
+  const primary     = claimable[0] || checkNeeded[0] || recs[0];
+  const totalNonCovered = recs.reduce((s, r) => s + (r.nonCoveredAmount || 0), 0);
+  return {
+    groupType:           'date',
+    id:                  date,
+    visitDate:           date,
+    sortKey:             date,
+    records:             recs,
+    hospitals:           [...new Set(recs.map(r => r.hospitalName).filter(Boolean))],
+    treatTypes:          [...new Set(recs.map(r => r.treatmentType).filter(Boolean))],
+    coverageNotes:       [...new Set(recs.map(r => r.coverageNote).filter(Boolean))],
+    totalPatientPayment: recs.reduce((s, r) => s + (r.patientPayment   || 0), 0),
+    totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment || 0), 0),
+    totalCost:           recs.reduce((s, r) => s + (r.totalCost        || 0), 0),
+    totalClaimAmount:    claimable.reduce((s, r) => s + (r.claimAmount || 0), 0),
+    totalNonCovered,
+    hasNonCovered:       totalNonCovered > 0,
+    alreadyPaid:         recs[0]?.alreadyPaidAmount || 0,
+    paidCompany:         recs[0]?.paidByCompany,
+    isFullyClaimed:      recs.length > 0 && recs.every(r => r.claimStatus === 'CLAIMED'),
+    isAnyClaimed:        claimed.length > 0,
+    hasClaimable:        claimable.length > 0,
+    hasCheckNeeded:      checkNeeded.length > 0,
+    claimableRecs:       claimable,
+    checkNeededRecs:     checkNeeded,
+    gen:                 primary?.supplementaryGeneration || 0,
+    claimInsurance:      primary?.claimInsurance,
+  };
+};
+
+// ── 진료 기록 → 그룹 변환 ────────────────────────────────────────────────────
+// 동일 claimGroupKey를 가진 "청구 완료" 레코드는 하나의 청구 그룹으로 묶음
 const buildGroups = (records) => {
-  const map = new Map();
+  const claimMap = new Map(); // claimGroupKey → records[]
+  const dateMap  = new Map(); // visitDate     → records[]
+
   for (const r of records) {
-    const key = r.visitDate || 'unknown';
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(r);
+    if (r.claimGroupKey) {
+      if (!claimMap.has(r.claimGroupKey)) claimMap.set(r.claimGroupKey, []);
+      claimMap.get(r.claimGroupKey).push(r);
+    } else {
+      const key = r.visitDate || 'unknown';
+      if (!dateMap.has(key)) dateMap.set(key, []);
+      dateMap.get(key).push(r);
+    }
   }
 
-  return [...map.entries()]
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([date, recs]) => {
-      const claimable    = recs.filter(r => r.hasClaimOpportunity &&
-                             (r.confidenceLevel === 'CONFIRMED' || r.confidenceLevel === 'LIKELY'));
-      const checkNeeded  = recs.filter(r => r.confidenceLevel === 'CHECK_NEEDED');
-      const claimed      = recs.filter(r => r.claimStatus === 'CLAIMED');
+  const groups = [];
 
-      // 대표 레코드: 청구가능 → 확인필요 → 기타
-      const primary = claimable[0] || checkNeeded[0] || recs[0];
+  // 청구 완료 그룹 (동일 보험 청구 건으로 묶인 여러 방문)
+  for (const [key, recs] of claimMap) {
+    const sorted    = [...recs].sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+    const dates     = [...new Set(sorted.map(r => r.visitDate))].sort();
+    const earliest  = dates[0];
+    const latest    = dates[dates.length - 1];
+    const totalNonCovered = recs.reduce((s, r) => s + (r.nonCoveredAmount || 0), 0);
 
-      // 이미 지급된 금액: 같은 날짜면 동일하므로 recs[0]에서 가져옴
-      const alreadyPaid   = recs[0]?.alreadyPaidAmount || 0;
-      const paidCompany   = recs[0]?.paidByCompany;
+    // 날짜별 소그룹 (펼쳤을 때 각 날짜 행 표시용)
+    const subDateMap = new Map();
+    for (const r of sorted) {
+      if (!subDateMap.has(r.visitDate)) subDateMap.set(r.visitDate, []);
+      subDateMap.get(r.visitDate).push(r);
+    }
+    const subGroups = [...subDateMap.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([d, rs]) => buildDateGroup(d, rs));
 
-      // 병원명 목록 (중복 제거)
-      const hospitals = [...new Set(recs.map(r => r.hospitalName).filter(Boolean))];
-
-      // 진료 유형 목록 (중복 제거)
-      const treatTypes = [...new Set(recs.map(r => r.treatmentType).filter(Boolean))];
-
-      // 보장 메모 목록 (중복 제거, null 제외)
-      const coverageNotes = [...new Set(recs.map(r => r.coverageNote).filter(Boolean))];
-
-      const totalNonCovered = recs.reduce((s, r) => s + (r.nonCoveredAmount || 0), 0);
-      const hasNonCovered   = totalNonCovered > 0;
-
-      return {
-        visitDate:           date,
-        records:             recs,
-        hospitals,
-        treatTypes,
-        totalPatientPayment: recs.reduce((s, r) => s + (r.patientPayment    || 0), 0),
-        totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment  || 0), 0),
-        totalCost:           recs.reduce((s, r) => s + (r.totalCost         || 0), 0),
-        totalClaimAmount:    claimable.reduce((s, r) => s + (r.claimAmount  || 0), 0),
-        totalNonCovered,
-        hasNonCovered,
-        alreadyPaid,
-        paidCompany,
-        isFullyClaimed:  recs.length > 0 && recs.every(r => r.claimStatus === 'CLAIMED'),
-        isAnyClaimed:    claimed.length > 0,
-        hasClaimable:    claimable.length > 0,
-        hasCheckNeeded:  checkNeeded.length > 0,
-        claimableRecs:   claimable,
-        checkNeededRecs: checkNeeded,
-        gen:             primary?.supplementaryGeneration || 0,
-        claimInsurance:  primary?.claimInsurance,
-        coverageNotes,
-      };
+    groups.push({
+      groupType:           'claim',
+      id:                  key,
+      sortKey:             latest,
+      dateRange:           earliest === latest ? earliest : `${earliest} ~ ${latest}`,
+      visitCount:          dates.length,
+      records:             sorted,
+      subGroups,
+      hospitals:           [...new Set(sorted.map(r => r.hospitalName).filter(Boolean))],
+      treatTypes:          [...new Set(sorted.map(r => r.treatmentType).filter(Boolean))],
+      totalPatientPayment: recs.reduce((s, r) => s + (r.patientPayment   || 0), 0),
+      totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment || 0), 0),
+      totalCost:           recs.reduce((s, r) => s + (r.totalCost        || 0), 0),
+      totalNonCovered,
+      hasNonCovered:       totalNonCovered > 0,
+      alreadyPaid:         recs[0]?.alreadyPaidAmount || 0,
+      paidCompany:         recs[0]?.paidByCompany,
+      isFullyClaimed:      true,
+      isAnyClaimed:        true,
+      hasClaimable:        false,
+      hasCheckNeeded:      false,
+      coverageNotes:       [],
+      gen:                 0,
     });
+  }
+
+  // 일반 날짜 그룹
+  for (const [date, recs] of dateMap)
+    groups.push({ ...buildDateGroup(date, recs), sortKey: date });
+
+  return groups.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 };
 
 // ── 메인 컴포넌트 ────────────────────────────────────────────────────────────
@@ -115,6 +159,13 @@ const MedicalRecords = () => {
   const [showSyncModal,  setShowSyncModal]  = useState(false);
   const [selectedGroup,  setSelectedGroup]  = useState(null);
   const [loading,        setLoading]        = useState(false);
+  const [expandedClaims, setExpandedClaims] = useState(new Set());
+
+  const toggleExpand = (id) => setExpandedClaims(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   useEffect(() => {
     const fetch = async () => {
@@ -246,6 +297,148 @@ const MedicalRecords = () => {
       <div className="mc-stack-sm">
         {filtered.map((g) => {
           const tag = cardTag(g);
+
+          // ── 청구 그룹 카드 (동일 보험 청구 건으로 묶인 여러 방문) ──────────
+          if (g.groupType === 'claim') {
+            const expanded = expandedClaims.has(g.id);
+            return (
+              <div key={g.id} className="mc-card mc-card-accent-success">
+                <div className="mc-card-head">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 6, flexShrink: 0,
+                      background: '#E8F5E9', color: '#2E7D32',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Ic d={P.paid} size={16}/>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="mc-card-title">
+                        {g.hospitals.join(' · ')}
+                      </div>
+                      <div className="mc-card-sub">
+                        <Ic d={P.cal} size={10}/> {g.dateRange} · {g.visitCount}건
+                        {g.treatTypes.length > 0 && <> · {g.treatTypes[0]}</>}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="mc-tag mc-tag-success">청구 완료</span>
+                </div>
+
+                <div className="mc-card-body">
+                  {/* 합산 비용 */}
+                  <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                    <div>
+                      <div className="mc-field-label">{g.hasNonCovered ? '환자 부담 합계 (실부담)' : '환자 부담 합계'}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                        {fmt(g.hasNonCovered ? g.totalPatientPayment + g.totalNonCovered : g.totalPatientPayment)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mc-field-label">건보 부담 합계</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                        {fmt(g.totalInsurance)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mc-field-label">총 비용 합계</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
+                        {fmt(g.hasNonCovered ? g.totalCost + g.totalNonCovered : g.totalCost)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 비급여 합산 */}
+                  {g.hasNonCovered && (
+                    <div style={{
+                      marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                      background: 'var(--bg-2)', border: '1px solid var(--border)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                          급여 자기부담 <strong style={{ color: 'var(--text-2)' }}>{fmt(g.totalPatientPayment)}</strong>
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ 비급여</span>
+                        <span style={{ fontSize: 12, color: '#E65100', fontWeight: 700 }}>{fmt(g.totalNonCovered)}</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', marginLeft: 8 }}>연말정산 기준</span>
+                    </div>
+                  )}
+
+                  {/* 수령 내역 */}
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                    background: '#E8F5E9', display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <Ic d={P.paid} size={14}/>
+                    <span style={{ fontSize: 13, color: '#2E7D32', fontWeight: 600 }}>
+                      이미 수령 {fmt(g.alreadyPaid)}{g.paidCompany && <> ({g.paidCompany})</>}
+                    </span>
+                  </div>
+
+                  {/* 펼치기 버튼 */}
+                  <button
+                    onClick={() => toggleExpand(g.id)}
+                    style={{
+                      marginTop: 12, width: '100%', padding: '7px 0',
+                      background: 'var(--bg-2)', border: '1px solid var(--border)',
+                      borderRadius: 8, fontSize: 12, color: 'var(--text-3)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6,
+                    }}>
+                    {expanded ? '▲ 방문 내역 접기' : `▼ 방문 내역 보기 (${g.visitCount}건)`}
+                  </button>
+
+                  {/* 펼쳐진 방문 내역 */}
+                  {expanded && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {g.subGroups.map((sg) => (
+                        <div key={sg.visitDate} style={{
+                          padding: '10px 12px', borderRadius: 8,
+                          background: 'var(--bg-2)', border: '1px solid var(--border)',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+                                {sg.hospitals.join(' · ')}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                                <Ic d={P.cal} size={10}/> {sg.visitDate}
+                                {sg.treatTypes.length > 0 && <> · {sg.treatTypes.join(' + ')}</>}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                              환자부담 <strong style={{ color: 'var(--text-1)' }}>
+                                {fmt(sg.hasNonCovered ? sg.totalPatientPayment + sg.totalNonCovered : sg.totalPatientPayment)}
+                              </strong>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                              건보 <strong style={{ color: 'var(--text-1)' }}>{fmt(sg.totalInsurance)}</strong>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                              총 <strong style={{ color: 'var(--blue)' }}>
+                                {fmt(sg.hasNonCovered ? sg.totalCost + sg.totalNonCovered : sg.totalCost)}
+                              </strong>
+                            </span>
+                            {sg.hasNonCovered && (
+                              <span style={{ fontSize: 12, color: '#E65100' }}>
+                                비급여 {fmt(sg.totalNonCovered)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          // ── 일반 날짜 카드 ────────────────────────────────────────────────
           return (
             <div key={g.visitDate} className={`mc-card ${cardAccent(g)}`}>
               <div className="mc-card-head">
@@ -273,7 +466,6 @@ const MedicalRecords = () => {
               </div>
 
               <div className="mc-card-body">
-                {/* 비용 요약 */}
                 <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div>
                     <div className="mc-field-label">
@@ -301,7 +493,6 @@ const MedicalRecords = () => {
                   </div>
                 </div>
 
-                {/* 비급여 내역 */}
                 {g.hasNonCovered ? (
                   <div style={{
                     marginTop: 10, padding: '8px 12px', borderRadius: 8,
@@ -329,7 +520,6 @@ const MedicalRecords = () => {
                   </div>
                 )}
 
-                {/* 이미 지급된 내역 */}
                 {g.alreadyPaid > 0 && (
                   <div style={{
                     marginTop: 12, padding: '8px 12px', borderRadius: 8,
@@ -344,7 +534,6 @@ const MedicalRecords = () => {
                   </div>
                 )}
 
-                {/* 보장 메모 */}
                 {g.coverageNotes.length > 0 && !g.isFullyClaimed && (
                   <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {g.coverageNotes.map((note, i) => (
@@ -356,7 +545,6 @@ const MedicalRecords = () => {
                   </div>
                 )}
 
-                {/* 청구 버튼 */}
                 {g.hasClaimable && !g.isFullyClaimed && (
                   <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
                     onClick={() => openModal(g)}>

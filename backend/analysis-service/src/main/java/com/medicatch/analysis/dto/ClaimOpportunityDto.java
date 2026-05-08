@@ -38,6 +38,9 @@ public class ClaimOpportunityDto {
     /** 세대·약관 기반 설명 메시지 (예: "2세대 실손 · 치과 급여 보장 가능") */
     private String coverageNote;
 
+    /** 동일 청구 건 묶음 키. null = 청구 없음. 같은 키를 가진 레코드는 하나의 청구 그룹으로 표시 */
+    private String claimGroupKey;
+
     /** 이미 지급 받은 금액 (resActualLossPaymentList 기준). null = 없음 */
     private Double alreadyPaidAmount;
 
