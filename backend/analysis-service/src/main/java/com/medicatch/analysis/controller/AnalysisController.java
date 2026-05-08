@@ -109,22 +109,20 @@ public class AnalysisController {
     }
 
     /**
-     * Find claim opportunities by matching medical records with insurance policies
+     * Find claim opportunities – matches medical records against active insurance policies
      */
     @GetMapping("/claim-opportunities")
     public ResponseEntity<List<ClaimOpportunityDto>> findClaimOpportunities(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestParam(required = false) Long userId) {
-        Long resolvedUserId = userId;
-        if (resolvedUserId == null && userIdHeader != null && !userIdHeader.isBlank()) {
-            resolvedUserId = Long.parseLong(userIdHeader);
-        }
-        if (resolvedUserId == null) {
+            @RequestParam(value = "userId", required = false) String userIdParam) {
+        String raw = userIdHeader != null ? userIdHeader : userIdParam;
+        if (raw == null || raw.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        log.info("GET /api/analysis/claim-opportunities - userId: {}", resolvedUserId);
+        Long userId = Long.parseLong(raw);
+        log.info("GET /api/analysis/claim-opportunities - userId: {}", userId);
         try {
-            List<ClaimOpportunityDto> opportunities = claimMatchingService.findClaimOpportunities(resolvedUserId);
+            List<ClaimOpportunityDto> opportunities = claimMatchingService.matchClaimOpportunities(userId);
             return ResponseEntity.ok(opportunities);
         } catch (Exception e) {
             log.error("Error finding claim opportunities: {}", e.getMessage(), e);

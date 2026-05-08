@@ -161,10 +161,11 @@ public class HealthController {
             String sessionKey = (String) body.get("sessionKey");
             CodefSyncService.SyncStep2Result result = codefSyncService.syncStep2(sessionKey, "");
             return ResponseEntity.ok(Map.of(
-                    "message",          "건강 데이터 동기화가 완료되었습니다.",
-                    "savedCheckups",    result.getSavedCheckups(),
-                    "savedMedicals",    result.getSavedMedicals(),
-                    "savedMedications", result.getSavedMedications()
+                    "message",           "건강 데이터 동기화가 완료되었습니다.",
+                    "savedCheckups",     result.getSavedCheckups(),
+                    "savedMedicals",     result.getSavedMedicals(),
+                    "savedMedications",  result.getSavedMedications(),
+                    "updatedNonCovered", result.getUpdatedNonCovered()
             ));
         } catch (Exception e) {
             log.error("건강 데이터 동기화 2차 실패: {}", e.getMessage(), e);
@@ -260,6 +261,53 @@ public class HealthController {
             ));
         } catch (Exception e) {
             log.error("진료정보 2차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    // ── 연말정산(NTS) 단독 ──────────────────────────────────────────────
+
+    @PostMapping("/sync/yeartax/step1")
+    public ResponseEntity<Map<String, Object>> syncYeartaxStep1(@RequestBody Map<String, Object> body) {
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) {
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", "userId가 필요합니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+        Long userId = Long.parseLong(userIdObj.toString());
+        log.info("POST /api/health/sync/yeartax/step1 - userId: {}", userId);
+        try {
+            String sessionKey = codefSyncService.syncYeartaxStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.getOrDefault("telecom", ""),
+                    (String) body.getOrDefault("loginTypeLevel", "1")
+            );
+            return ResponseEntity.ok(Map.of("sessionKey", sessionKey));
+        } catch (Exception e) {
+            log.error("연말정산 1차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    @PostMapping("/sync/yeartax/step2")
+    public ResponseEntity<Map<String, Object>> syncYeartaxStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/yeartax/step2");
+        try {
+            int count = codefSyncService.syncYeartaxStep2((String) body.get("sessionKey"));
+            return ResponseEntity.ok(Map.of(
+                    "message",            "연말정산 동기화 완료",
+                    "updatedNonCovered",  count
+            ));
+        } catch (Exception e) {
+            log.error("연말정산 2차 실패: {}", e.getMessage(), e);
             HashMap<String, Object> err = new HashMap<>();
             err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
             return ResponseEntity.badRequest().body(err);

@@ -10,6 +10,9 @@ application-prod.yml
 *.war
 /backend/build/
 /backend/target/
+**/build/tmp/
+**/build/classes/
+**/build/generated/
 .gradle/
 /backend/.gradle/
 

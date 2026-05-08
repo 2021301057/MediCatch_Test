@@ -55,8 +55,11 @@ public class MedicalRecord {
     @Builder.Default
     private String claimStatus = "UNCLAIMED";
 
-    @Column
+    @Column(length = 20)
     private String diseaseCode;
+
+    @Column
+    private Double nonCoveredAmount;
 
     @Column(columnDefinition = "LONGTEXT")
     private String notes;
