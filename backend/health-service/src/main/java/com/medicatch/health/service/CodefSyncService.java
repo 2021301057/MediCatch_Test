@@ -737,9 +737,9 @@ public class CodefSyncService {
     /** HIRA 시작연도(2023) ~ 현재연도 배열 반환 */
     private String[] buildNtsYears() {
         int startYear   = 2023;
-        int currentYear = LocalDate.now().getYear();
+        int currentYear = LocalDate.now().getYear() - 1; // 전년도까지만 (당해연도 간소화 자료 미제공)
         List<String> years = new ArrayList<>();
-        for (int y = startYear; y <= currentYear; y++) years.add(String.valueOf(y));
+        for (int y = currentYear; y >= startYear; y--) years.add(String.valueOf(y)); // 최신연도 우선
         return years.toArray(new String[0]);
     }
 
