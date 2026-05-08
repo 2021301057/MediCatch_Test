@@ -172,8 +172,9 @@ public class ClaimMatchingService {
         boolean claimable = CONFIRMED.equals(best.confidence) || LIKELY.equals(best.confidence);
         double claimAmt = 0.0;
         if (claimable) {
-            claimAmt = (outOfPocket != null ? outOfPocket : 0.0)
-                     + eligibleNonCovered(nonCovered, gen, tc);
+            double base = (outOfPocket != null ? outOfPocket : 0.0)
+                        * publicChargeRatio(gen);
+            claimAmt = base + eligibleNonCovered(nonCovered, gen, tc);
         }
         return builder
                 .hasClaimOpportunity(claimable)
@@ -198,6 +199,20 @@ public class ClaimMatchingService {
             case "2", "3"   -> nonCovered * 0.8;
             case "3k", "4"  -> nonCovered * 0.7;
             default         -> nonCovered * 0.8;
+        };
+    }
+
+    /**
+     * 세대별 급여 자기부담금 보상 비율.
+     * 1d: 100%, 1h: 80%(생보 특성), 2세대: 90%, 3/3k/4세대: 80%
+     */
+    private double publicChargeRatio(String gen) {
+        return switch (gen != null ? gen : "") {
+            case "1d"           -> 1.0;
+            case "1h"           -> 0.8;
+            case "2"            -> 0.9;
+            case "3", "3k", "4" -> 0.8;
+            default             -> 1.0;
         };
     }
 
