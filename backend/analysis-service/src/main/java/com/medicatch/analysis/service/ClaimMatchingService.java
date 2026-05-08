@@ -251,12 +251,12 @@ public class ClaimMatchingService {
         String lower = itemName.toLowerCase();
 
         // ── 치과 ─────────────────────────────────────────────────────────
-        // AK* = 치과 질병 코드. 질병 치과는 실손 전 세대 면책.
-        // AS* = 치과 상해 코드 → TreatClass.INJURY로 분류되어 상해 통원 항목에서 정상 처리됨.
+        // AK* = 치과 질병 코드 / AS* = 치과 상해 → TreatClass.INJURY로 분류되어 상해 항목에서 처리됨
+        // 치과 질병: 1세대 완전 면책, 2세대 이후 급여 자기부담금만 보상 (비급여 제외)
         if (tc == TreatClass.DENTAL) {
             if (lower.contains("질병") && (lower.contains("통원") || lower.contains("입원")))
-                return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 면책");
-            return null; // 상해 커버리지는 AS*(INJURY)에서 처리 — AK*와 매칭 안 함
+                return matchDentalDisease(company, itemName, hasPublicCharge, gen);
+            return null; // 상해 커버리지는 AS*(INJURY)에서 처리
         }
 
         // ── 한방 ─────────────────────────────────────────────────────────
@@ -352,6 +352,20 @@ public class ClaimMatchingService {
                     gl(gen) + " · 비급여 할증제 적용 · 보험사 확인 권장");
             default      -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 약관 확인");
         };
+    }
+
+    /**
+     * 치과 질병 (AK*): 1세대 완전 면책, 2세대 이후 급여 자기부담금만 보상.
+     * 비급여 치과 질병은 전 세대 제외.
+     */
+    private MatchResult matchDentalDisease(String company, String itemName,
+                                            boolean hasPublicCharge, int gen) {
+        if (gen == 1)
+            return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 면책");
+        // 2세대 이후: 급여 자기부담금만 보상, 비급여 제외
+        if (hasPublicCharge)
+            return new MR(company, itemName, CONFIRMED, gen, gl(gen) + " · 치과 질병 급여만 보상");
+        return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 비급여 제외");
     }
 
     /**
