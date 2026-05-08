@@ -9,12 +9,12 @@ application-prod.yml
 *.jar
 *.war
 /backend/build/
+/backend/*/build/
 /backend/target/
-**/build/tmp/
-**/build/classes/
-**/build/generated/
+/backend/*/target/
 .gradle/
 /backend/.gradle/
+/backend/*/.gradle/
 
 # IntelliJ IDEA
 .idea/

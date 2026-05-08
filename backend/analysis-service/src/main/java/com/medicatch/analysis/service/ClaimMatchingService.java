@@ -16,12 +16,13 @@ import java.util.stream.Collectors;
 /**
  * 진료 기록과 보험 보장 내역을 매핑하여 청구 가능 여부를 판단한다.
  *
- * 실손 세대 기준일:
- *   1세대: ~ 2009-09-30
- *   2세대: 2009-10-01 ~ 2012-12-31
- *   3세대: 2013-01-01 ~ 2017-03-31
- *   4세대: 2017-04-01 ~ 2021-06-30
- *   5세대: 2021-07-01 ~
+ * 실손 세대 코드:
+ *   "1d" = 1세대 손보 (~2009.09): 급여 100%, 비급여 100%
+ *   "1h" = 1세대 생보 (~2009.09): 급여 80%, 비급여 100%
+ *   "2"  = 2세대 (2009.10~2017.03)
+ *   "3"  = 3세대 표준 (2017.04~2021.06)
+ *   "3k" = 3세대 착한실손 (2017.04~2021.06)
+ *   "4"  = 4세대 (2021.07~현재)
  */
 @Slf4j
 @Service
@@ -32,10 +33,10 @@ public class ClaimMatchingService {
     private static final String CHECK_NEEDED = "CHECK_NEEDED";
     private static final String EXCLUDED     = "EXCLUDED";
 
+    // 실손보험 세대 기준일 (업계 표준 4세대 체계)
     private static final LocalDate GEN2_START = LocalDate.of(2009, 10, 1);
-    private static final LocalDate GEN3_START = LocalDate.of(2013,  1, 1);
-    private static final LocalDate GEN4_START = LocalDate.of(2017,  4, 1);
-    private static final LocalDate GEN5_START = LocalDate.of(2021,  7, 1);
+    private static final LocalDate GEN3_START = LocalDate.of(2017,  4, 1);
+    private static final LocalDate GEN4_START = LocalDate.of(2021,  7, 1);
 
     private final HealthServiceClient healthClient;
     private final InsuranceServiceClient insuranceClient;
@@ -76,19 +77,16 @@ public class ClaimMatchingService {
     private Set<ClaimCategory> parsePaymentCategories(String reason) {
         if (reason == null || reason.isBlank()) return Set.of(ClaimCategory.ALL);
         String lower = reason.toLowerCase();
-        // 상해 통원: 병원 외래 + 약국(처방) 모두 포함
         if (lower.contains("상해") && (lower.contains("통원") || lower.contains("외래")))
             return Set.of(ClaimCategory.INJURY_OUTPATIENT, ClaimCategory.PHARMACY);
         if (lower.contains("상해") && lower.contains("입원"))
             return Set.of(ClaimCategory.INJURY_INPATIENT);
-        // 질병 통원: 병원 외래 + 약국 포함
         if (lower.contains("질병") && (lower.contains("통원") || lower.contains("외래")))
             return Set.of(ClaimCategory.DISEASE_OUTPATIENT, ClaimCategory.PHARMACY);
         if (lower.contains("질병") && lower.contains("입원"))
             return Set.of(ClaimCategory.DISEASE_INPATIENT);
         if (lower.contains("처방") || lower.contains("조제"))
             return Set.of(ClaimCategory.PHARMACY);
-        // 암, 뇌혈관 등 정액 지급
         if (lower.contains("암") || lower.contains("뇌혈관") || lower.contains("허혈")
                 || lower.contains("골절") || lower.contains("화상"))
             return Set.of(ClaimCategory.LUMP_SUM);
@@ -103,7 +101,7 @@ public class ClaimMatchingService {
 
         String     diseaseCode    = resolveDiseaseCode(record);
         TreatClass tc             = classify(diseaseCode, record.getDepartment());
-        String     treatType      = record.getTreatmentType();   // "외래" / "입원" / "약국"
+        String     treatType      = record.getTreatmentType();
         Double     outOfPocket    = record.getPatientPayment();
         Double     nonCovered     = record.getNonCoveredAmount();
         boolean    hasPublicCharge= record.getInsurancePayment() != null
@@ -111,7 +109,6 @@ public class ClaimMatchingService {
         LocalDate  visitDate      = record.getVisitDate();
 
         // occurrenceDate ≤ visitDate ≤ paymentDate 범위에서 동일 카테고리 지급 건 탐색
-        // 한 사고로 인한 여러 날짜 방문이 모두 동일 청구 건으로 처리될 수 있음
         ClaimCategory recCat = toClaimCategory(tc, treatType);
         ClaimPaymentInfo matchedPayment = null;
         if (visitDate != null) {
@@ -161,22 +158,22 @@ public class ClaimMatchingService {
             if (mr != null && rank(mr.confidence) > rank(best != null ? best.confidence : EXCLUDED))
                 best = mr;
         }
+        String gen = best != null ? best.gen : null;
 
         if (best == null || EXCLUDED.equals(best.confidence)) {
             return builder
                     .hasClaimOpportunity(false).claimAmount(0.0)
                     .confidenceLevel(best != null ? best.confidence : EXCLUDED)
                     .coverageNote(best != null ? best.note : null)
-                    .supplementaryGeneration(best != null ? best.gen : 0)
+                    .supplementaryGeneration(gen)
                     .build();
         }
 
         boolean claimable = CONFIRMED.equals(best.confidence) || LIKELY.equals(best.confidence);
-        // 급여 자기부담 + 세대별 비급여 보장 가능 금액
         double claimAmt = 0.0;
         if (claimable) {
             claimAmt = (outOfPocket != null ? outOfPocket : 0.0)
-                     + eligibleNonCovered(nonCovered, best.gen, tc);
+                     + eligibleNonCovered(nonCovered, gen, tc);
         }
         return builder
                 .hasClaimOpportunity(claimable)
@@ -184,38 +181,37 @@ public class ClaimMatchingService {
                 .claimInsurance(best.company)
                 .matchedCoverage(best.coverageName)
                 .confidenceLevel(best.confidence)
-                .supplementaryGeneration(best.gen)
-                .coverageNote(buildCoverageNote(best.note, nonCovered, best.gen, tc))
+                .supplementaryGeneration(gen)
+                .coverageNote(buildCoverageNote(best.note, nonCovered, gen, tc))
                 .build();
     }
 
     /**
      * 세대별 비급여 보장 가능 금액.
-     * 1세대: 100%, 2~3세대: 80%, 4세대: 70% (일부 제외), 5세대: 0% (급여전환 특약 한정)
-     * 치과 비급여: 모든 세대 0% (이미 matchDental에서 EXCLUDED 처리됨)
+     * 1d/1h: 비급여 100%, 2/3세대: 80%, 3k/4세대: 70%
      */
-    private double eligibleNonCovered(Double nonCovered, int gen, TreatClass tc) {
+    private double eligibleNonCovered(Double nonCovered, String gen, TreatClass tc) {
         if (nonCovered == null || nonCovered <= 0) return 0.0;
         if (tc == TreatClass.DENTAL || tc == TreatClass.PHARMACY) return 0.0;
-        return switch (gen) {
-            case 1       -> nonCovered;
-            case 2, 3    -> nonCovered * 0.8;
-            case 4       -> nonCovered * 0.7;
-            case 5       -> 0.0;
-            default      -> nonCovered * 0.8;
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h" -> nonCovered;
+            case "2", "3"   -> nonCovered * 0.8;
+            case "3k", "4"  -> nonCovered * 0.7;
+            default         -> nonCovered * 0.8;
         };
     }
 
     /** coverageNote에 비급여 정보 보충 */
-    private String buildCoverageNote(String baseNote, Double nonCovered, int gen, TreatClass tc) {
+    private String buildCoverageNote(String baseNote, Double nonCovered, String gen, TreatClass tc) {
         if (nonCovered == null || nonCovered <= 0 || tc == TreatClass.DENTAL || tc == TreatClass.PHARMACY)
             return baseNote;
-        String ncInfo = switch (gen) {
-            case 1    -> " · 비급여 전액 포함";
-            case 2, 3 -> " · 비급여 20% 자기부담";
-            case 4    -> " · 비급여 30% 자기부담";
-            case 5    -> " · 비급여 미보장";
-            default   -> "";
+        String ncInfo = switch (gen != null ? gen : "") {
+            case "1d"       -> " · 비급여 전액 포함";
+            case "1h"       -> " · 급여 80% · 비급여 전액 포함";
+            case "2", "3"   -> " · 비급여 20% 자기부담";
+            case "3k"       -> " · 비급여 특약 30% 자기부담";
+            case "4"        -> " · 비급여 30% 자기부담";
+            default         -> "";
         };
         return baseNote != null ? baseNote + ncInfo : ncInfo.trim();
     }
@@ -228,7 +224,7 @@ public class ClaimMatchingService {
         if (policy.getCoverageItems() == null || !"ACTIVE".equals(policy.getContractStatus()))
             return null;
 
-        int gen = detectGeneration(policy.getStartDate());
+        String gen = detectGeneration(policy);
         MatchResult best = null;
 
         for (PolicyInfo.CoverageItemInfo item : policy.getCoverageItems()) {
@@ -247,16 +243,16 @@ public class ClaimMatchingService {
     private MatchResult tryMatchItem(String company, String itemName,
                                       TreatClass tc, String treatType,
                                       boolean hasPublicCharge, String diseaseCode,
-                                      int gen) {
+                                      String gen) {
         String lower = itemName.toLowerCase();
 
         // ── 치과 ─────────────────────────────────────────────────────────
-        // AK* = 치과 질병 코드 / AS* = 치과 상해 → TreatClass.INJURY로 분류되어 상해 항목에서 처리됨
-        // 치과 질병: 1세대 완전 면책, 2세대 이후 급여 자기부담금만 보상 (비급여 제외)
+        // AK* = 치과 질병 코드: 1세대 완전 면책, 2세대+ 급여만 보상
+        // AS* = 치과 상해 → TreatClass.INJURY로 분류되어 상해 항목에서 처리됨
         if (tc == TreatClass.DENTAL) {
             if (lower.contains("질병") && (lower.contains("통원") || lower.contains("입원")))
                 return matchDentalDisease(company, itemName, hasPublicCharge, gen);
-            return null; // 상해 커버리지는 AS*(INJURY)에서 처리
+            return null;
         }
 
         // ── 한방 ─────────────────────────────────────────────────────────
@@ -294,15 +290,15 @@ public class ClaimMatchingService {
         // ── 정액 (진단코드 직접 매핑) ─────────────────────────────────────
         if (diseaseCode != null) {
             if (lower.contains("화상") && diseaseCode.startsWith("AT"))
-                return new MR(company, itemName, CONFIRMED, 0, "화상진단 정액 보장");
+                return new MR(company, itemName, CONFIRMED, null, "화상진단 정액 보장");
             if (lower.contains("암") && diseaseCode.startsWith("C"))
-                return new MR(company, itemName, CONFIRMED, 0, "암진단 정액 보장");
+                return new MR(company, itemName, CONFIRMED, null, "암진단 정액 보장");
             if ((lower.contains("뇌혈관") || lower.contains("뇌졸중")) && diseaseCode.startsWith("I6"))
-                return new MR(company, itemName, CONFIRMED, 0, "뇌혈관질환 정액 보장");
+                return new MR(company, itemName, CONFIRMED, null, "뇌혈관질환 정액 보장");
             if ((lower.contains("허혈") || lower.contains("심근경색")) && diseaseCode.startsWith("I2"))
-                return new MR(company, itemName, CONFIRMED, 0, "허혈성심장질환 정액 보장");
+                return new MR(company, itemName, CONFIRMED, null, "허혈성심장질환 정액 보장");
             if (lower.contains("골절") && (tc == TreatClass.INJURY || diseaseCode.startsWith("S")))
-                return new MR(company, itemName, LIKELY, 0, "골절진단 정액 (약관 확인)");
+                return new MR(company, itemName, LIKELY, null, "골절진단 정액 (약관 확인)");
             if (lower.contains("질병") && lower.contains("입원") && lower.contains("일당")
                     && tc == TreatClass.DISEASE && isInpatient(treatType))
                 return new MR(company, itemName, CONFIRMED, gen, gl(gen) + " · 질병입원일당");
@@ -316,17 +312,15 @@ public class ClaimMatchingService {
 
     // ── 분류별 보장 규칙 ─────────────────────────────────────────────────────
 
-    // 상해 (AS코드/AT코드): 모든 세대에서 비급여 포함 보장. 5세대는 비급여 할증 적용.
-    private MatchResult matchInjury(String company, String itemName, int gen, boolean inpatient) {
+    // 상해: 모든 세대에서 비급여 포함 보장. 4세대는 비급여 30% 자기부담.
+    private MatchResult matchInjury(String company, String itemName, String gen, boolean inpatient) {
         String place = inpatient ? "입원" : "통원";
-        return switch (gen) {
-            case 1, 2, 3 -> new MR(company, itemName, CONFIRMED, gen,
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h", "2", "3", "3k" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 상해 " + place + " 급여+비급여 보장");
-            case 4       -> new MR(company, itemName, CONFIRMED, gen,
+            case "4" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 상해 " + place + " 보장 (비급여 30% 자기부담)");
-            case 5       -> new MR(company, itemName, CONFIRMED, gen,
-                    gl(gen) + " · 상해 " + place + " 보장 (비급여 할증 적용)");
-            default      -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 상해 보장 확인");
+            default  -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 상해 보장 확인");
         };
     }
 
@@ -335,79 +329,94 @@ public class ClaimMatchingService {
      * 비급여는 세대가 높을수록 자기부담 증가 및 제한.
      */
     private MatchResult matchDisease(String company, String itemName,
-                                      boolean hasPublicCharge, int gen, boolean inpatient) {
+                                      boolean hasPublicCharge, String gen, boolean inpatient) {
         String place = inpatient ? "입원" : "통원";
         if (hasPublicCharge) {
-            // 급여: 전 세대 보장
             return new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 질병 " + place + " 급여 보장");
         }
-        // 비급여
-        return switch (gen) {
-            case 1, 2, 3 -> new MR(company, itemName, CONFIRMED, gen,
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h", "2", "3" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 질병 " + place + " 급여+비급여 보장");
-            case 4       -> new MR(company, itemName, LIKELY, gen,
+            case "3k" -> new MR(company, itemName, CONFIRMED, gen,
+                    gl(gen) + " · 질병 " + place + " 보장 (비급여 특약 별도)");
+            case "4"  -> new MR(company, itemName, LIKELY, gen,
                     gl(gen) + " · 비급여 30% 자기부담 (도수치료 등 특약 확인)");
-            case 5       -> new MR(company, itemName, CHECK_NEEDED, gen,
-                    gl(gen) + " · 비급여 할증제 적용 · 보험사 확인 권장");
-            default      -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 약관 확인");
+            default   -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 약관 확인");
         };
     }
 
     /**
      * 치과 질병 (AK*): 1세대 완전 면책, 2세대 이후 급여 자기부담금만 보상.
-     * 비급여 치과 질병은 전 세대 제외.
      */
     private MatchResult matchDentalDisease(String company, String itemName,
-                                            boolean hasPublicCharge, int gen) {
-        if (gen == 1)
+                                            boolean hasPublicCharge, String gen) {
+        if ("1d".equals(gen) || "1h".equals(gen))
             return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 면책");
-        // 2세대 이후: 급여 자기부담금만 보상, 비급여 제외
         if (hasPublicCharge)
             return new MR(company, itemName, CONFIRMED, gen, gl(gen) + " · 치과 질병 급여만 보상");
         return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 비급여 제외");
     }
 
     /**
-     * 한방 (oriental medicine, department 기준 분류):
-     * 세대가 높을수록 한방 비급여 보장 축소.
+     * 한방: 세대가 높을수록 비급여 보장 축소.
      */
     private MatchResult matchOriental(String company, String itemName,
-                                       boolean hasPublicCharge, int gen, String treatType) {
+                                       boolean hasPublicCharge, String gen, String treatType) {
         String place = isInpatient(treatType) ? "입원" : "통원";
         if (hasPublicCharge) {
-            // 급여 한방: 전 세대 기본 보장
             return new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 한방 " + place + " 급여 보장");
         }
-        // 비급여 한방
-        return switch (gen) {
-            case 1       -> new MR(company, itemName, CONFIRMED, gen,
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 한방 비급여 포함 보장");
-            case 2, 3    -> new MR(company, itemName, LIKELY, gen,
+            case "2", "3", "3k" -> new MR(company, itemName, LIKELY, gen,
                     gl(gen) + " · 한방 비급여 약관 확인");
-            case 4, 5    -> new MR(company, itemName, EXCLUDED, gen,
+            case "4" -> new MR(company, itemName, EXCLUDED, gen,
                     gl(gen) + " · 한방 비급여 제외");
-            default      -> new MR(company, itemName, CHECK_NEEDED, gen,
+            default  -> new MR(company, itemName, CHECK_NEEDED, gen,
                     gl(gen) + " · 한방 약관 확인");
         };
     }
 
     // ── 세대 판별 ────────────────────────────────────────────────────────────
 
-    /** 실손보험 세대 판별 (가입일 기준) */
-    private int detectGeneration(LocalDate startDate) {
-        if (startDate == null) return 0;
-        if (startDate.isBefore(GEN2_START)) return 1;
-        if (startDate.isBefore(GEN3_START)) return 2;
-        if (startDate.isBefore(GEN4_START)) return 3;
-        if (startDate.isBefore(GEN5_START)) return 4;
-        return 5;
+    /**
+     * 실손보험 세대 판별.
+     * - 1세대: 손보(1d) vs 생보(1h) 구분 (companyName에 "생명" 포함 여부)
+     * - 3세대: 착한실손(3k) 여부 (productName에 "착한" 또는 "경제형" 포함)
+     */
+    private String detectGeneration(PolicyInfo policy) {
+        LocalDate startDate = policy.getStartDate();
+        if (startDate == null) return null;
+        if (startDate.isBefore(GEN2_START)) {
+            String company = policy.getCompanyName();
+            if (company != null && company.contains("생명")) return "1h";
+            return "1d";
+        }
+        if (startDate.isBefore(GEN3_START)) return "2";
+        if (startDate.isBefore(GEN4_START)) {
+            String product = policy.getProductName();
+            if (product != null && (product.contains("착한") || product.contains("경제형")))
+                return "3k";
+            return "3";
+        }
+        return "4";
     }
 
-    /** 세대 레이블 */
-    private String gl(int gen) {
-        return gen > 0 ? gen + "세대 실손" : "실손";
+    /** 세대 코드 → 표시 레이블 */
+    private String gl(String gen) {
+        if (gen == null) return "실손";
+        return switch (gen) {
+            case "1d" -> "1세대 손보 실손";
+            case "1h" -> "1세대 생보 실손";
+            case "2"  -> "2세대 실손";
+            case "3"  -> "3세대 실손";
+            case "3k" -> "3세대 착한실손";
+            case "4"  -> "4세대 실손";
+            default   -> "실손";
+        };
     }
 
     // ── 분류 ────────────────────────────────────────────────────────────────
@@ -459,30 +468,22 @@ public class ClaimMatchingService {
 
     private enum TreatClass { DISEASE, INJURY, DENTAL, PHARMACY, ORIENTAL }
 
-    /** resReasonForPayment → 파싱된 지급 분류 */
     private enum ClaimCategory {
-        INJURY_OUTPATIENT,   // 상해 통원
-        INJURY_INPATIENT,    // 상해 입원
-        DISEASE_OUTPATIENT,  // 질병 통원
-        DISEASE_INPATIENT,   // 질병 입원
-        PHARMACY,            // 처방조제비
-        LUMP_SUM,            // 정액 지급 (암/골절 등)
-        ALL                  // 사유 불명 → 전체 해당
+        INJURY_OUTPATIENT, INJURY_INPATIENT,
+        DISEASE_OUTPATIENT, DISEASE_INPATIENT,
+        PHARMACY, LUMP_SUM, ALL
     }
 
-    /** TreatClass + treatType → ClaimCategory 변환 */
     private ClaimCategory toClaimCategory(TreatClass tc, String treatType) {
         if (tc == TreatClass.PHARMACY) return ClaimCategory.PHARMACY;
         boolean inpatient = isInpatient(treatType);
         if (tc == TreatClass.INJURY)
             return inpatient ? ClaimCategory.INJURY_INPATIENT : ClaimCategory.INJURY_OUTPATIENT;
-        // DISEASE, DENTAL, ORIENTAL 모두 질병 카테고리로 매핑
         return inpatient ? ClaimCategory.DISEASE_INPATIENT : ClaimCategory.DISEASE_OUTPATIENT;
     }
 
-    /** MatchResult 축약형 */
     private static class MR extends MatchResult {
-        MR(String c, String cn, String conf, int gen, String note) {
+        MR(String c, String cn, String conf, String gen, String note) {
             super(c, cn, conf, gen, note);
         }
     }
@@ -491,11 +492,11 @@ public class ClaimMatchingService {
         final String company;
         final String coverageName;
         final String confidence;
-        final int    gen;
+        final String gen;
         final String note;
 
         MatchResult(String company, String coverageName, String confidence,
-                    int gen, String note) {
+                    String gen, String note) {
             this.company      = company;
             this.coverageName = coverageName;
             this.confidence   = confidence;

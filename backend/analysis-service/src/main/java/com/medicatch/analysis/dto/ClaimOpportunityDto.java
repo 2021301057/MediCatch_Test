@@ -32,8 +32,8 @@ public class ClaimOpportunityDto {
      */
     private String confidenceLevel;
 
-    /** 실손 세대 (1~5). 0 = 해당 없음/알 수 없음 */
-    private int supplementaryGeneration;
+    /** 실손 세대 코드: "1" / "2" / "3" / "3k"(착한실손) / "4". null = 해당 없음 */
+    private String supplementaryGeneration;
 
     /** 세대·약관 기반 설명 메시지 (예: "2세대 실손 · 치과 급여 보장 가능") */
     private String coverageNote;
