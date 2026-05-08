@@ -23,6 +23,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Service
@@ -157,12 +158,18 @@ public class CodefSyncService {
             }
             Map<String, Object> hiraData = toMap(hiraMap.get("data"));
 
-            // NTS 결과 수집 (실패 연도는 건너뜀)
+            // NTS 결과 수집 (20초 예산, CODEF 순차처리 특성상 먼저 온 것만 수집)
             List<NtsYearSession> ntsYearSessions = new ArrayList<>();
+            long ntsDeadline = System.currentTimeMillis() + 20_000;
             for (CompletableFuture<NtsYearSession> f : ntsFutures) {
+                long remaining = ntsDeadline - System.currentTimeMillis();
+                if (remaining <= 500) break;
                 try {
-                    NtsYearSession s = f.get(90, TimeUnit.SECONDS);
+                    NtsYearSession s = f.get(remaining, TimeUnit.MILLISECONDS);
                     if (s != null) ntsYearSessions.add(s);
+                } catch (TimeoutException e) {
+                    log.info("NTS future 시간 예산 소진 - 남은 연도 건너뜀");
+                    break;
                 } catch (Exception e) { log.warn("NTS future 수집 실패: {}", e.getMessage()); }
             }
 
@@ -624,15 +631,27 @@ public class CodefSyncService {
                 }));
             }
 
+            // CODEF는 same-id 요청을 순차 처리 → 먼저 응답한 연도만 수집 (20초 전체 예산)
             List<NtsYearSession> yearSessions = new ArrayList<>();
+            long deadline = System.currentTimeMillis() + 20_000;
             for (CompletableFuture<NtsYearSession> f : futures) {
-                try { NtsYearSession s = f.get(90, TimeUnit.SECONDS); if (s != null) yearSessions.add(s); }
-                catch (Exception e) { log.error("NTS future 수집 오류: {}", e.getMessage(), e); }
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 500) break;
+                try {
+                    NtsYearSession s = f.get(remaining, TimeUnit.MILLISECONDS);
+                    if (s != null) yearSessions.add(s);
+                } catch (TimeoutException e) {
+                    log.info("NTS future 시간 예산 소진 - 남은 연도 건너뜀");
+                    break;
+                } catch (Exception e) {
+                    log.error("NTS future 수집 오류: {}", e.getMessage(), e);
+                }
             }
             if (yearSessions.isEmpty()) {
                 log.error("NTS 연말정산 단독 1차 - 모든 연도 실패. userId: {}, years: {}", userId, years);
                 throw new RuntimeException("연말정산 데이터 조회에 실패했습니다. 잠시 후 다시 시도해주세요.");
             }
+            log.info("NTS 1차 완료 - 수집된 연도: {}", yearSessions.stream().map(NtsYearSession::getYear).toList());
 
             String sessionKey = UUID.randomUUID().toString();
             ntsMultiSessions.put(sessionKey, yearSessions);
