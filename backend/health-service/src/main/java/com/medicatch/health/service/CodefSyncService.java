@@ -116,7 +116,7 @@ public class CodefSyncService {
             String[] ntsYears = buildNtsYears();
             List<CompletableFuture<NtsYearSession>> ntsFutures = new ArrayList<>();
             for (String ntsYear : ntsYears) {
-                HashMap<String, Object> p = buildNtsParams(userName, phoneNo, identity13, ntsYear);
+                HashMap<String, Object> p = buildNtsParams(userName, phoneNo, identity13, ntsYear, loginTypeLevel, telecom);
                 p.put("id", sharedId);
                 ntsFutures.add(CompletableFuture.supplyAsync(() -> {
                     try {
@@ -595,7 +595,7 @@ public class CodefSyncService {
     // ── 연말정산(NTS) 단독 – 다건 인증 (2023 ~ 현재연도) ──────────────────
 
     public String syncYeartaxStep1(Long userId, String userName, String phoneNo,
-                                   String identity13) {
+                                   String identity13, String telecom, String loginTypeLevel) {
         try {
             String sharedId = "mc_nts_" + userId;
             String[] years  = buildNtsYears();
@@ -604,7 +604,7 @@ public class CodefSyncService {
             // 연도별 병렬 1차 요청 (같은 id → 사용자는 1회 인증)
             List<CompletableFuture<NtsYearSession>> futures = new ArrayList<>();
             for (String year : years) {
-                HashMap<String, Object> p = buildNtsParams(userName, phoneNo, identity13, year);
+                HashMap<String, Object> p = buildNtsParams(userName, phoneNo, identity13, year, loginTypeLevel, telecom);
                 p.put("id", sharedId);
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
@@ -690,19 +690,22 @@ public class CodefSyncService {
 
     /**
      * NTS 연말정산 파라미터 생성.
-     * loginType="6" (비회원 간편인증): identity=13자리, loginTypeLevel 불필요.
+     * loginType="5" (회원 간편인증): loginTypeLevel로 앱 지정, loginTypeLevel="5"일 때만 telecom 추가.
      * inquiryTypeCD: 의료비(index 3)만 조회 → "000100000000000"
      */
     private HashMap<String, Object> buildNtsParams(String userName, String phoneNo,
-                                                    String identity13, String searchYear) {
+                                                    String identity13, String searchYear,
+                                                    String loginTypeLevel, String telecom) {
         HashMap<String, Object> params = new HashMap<>();
         params.put("organization",    "0004");
-        params.put("loginType",       "6");
+        params.put("loginType",       "5");
+        params.put("loginTypeLevel",  loginTypeLevel);
         params.put("userName",        userName);
         params.put("phoneNo",         phoneNo);
         params.put("identity",        identity13);
         params.put("searchStartYear", searchYear);
         params.put("inquiryTypeCD",   "000100000000000");  // 의료비만 조회
+        if ("5".equals(loginTypeLevel)) params.put("telecom", telecom);
         return params;
     }
 
