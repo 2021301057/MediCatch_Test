@@ -284,9 +284,7 @@ public class HealthController {
                     userId,
                     (String) body.get("userName"),
                     (String) body.get("phoneNo"),
-                    (String) body.get("identity13"),
-                    (String) body.getOrDefault("telecom", ""),
-                    (String) body.getOrDefault("loginTypeLevel", "1")
+                    (String) body.get("identity13")
             );
             return ResponseEntity.ok(Map.of("sessionKey", sessionKey));
         } catch (Exception e) {

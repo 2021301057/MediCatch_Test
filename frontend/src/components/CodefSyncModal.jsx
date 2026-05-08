@@ -146,8 +146,6 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
       const data = await healthAPI.syncYeartaxStep1({
         userId,
         userName: form.userName, phoneNo: form.phoneNo, identity13: cleanId,
-        telecom: form.loginTypeLevel === '5' ? form.telecom : '',
-        loginTypeLevel: form.loginTypeLevel,
       });
       setYeartaxSessionKey(data.sessionKey);
       setScreen('yeartax-auth');
@@ -326,7 +324,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
             <InfoBox>
               이어서 연말정산 간소화 소득세액공제자료(NTS) 연동을 시작합니다.<br />
               <b>{NTS_YEARS.join(', ')}년도</b> 의료비 자료를 한 번에 조회합니다.<br />
-              {auth?.label} 앱으로 인증 요청이 전송됩니다.
+              국세청 비회원 간편인증으로 진행됩니다 (별도 앱 불필요).
             </InfoBox>
             <button onClick={handleStartYeartax} disabled={loading} style={s.primaryBtn}>
               {loading ? '⏳ 연동 요청 중...' : '5단계: 연말정산 데이터 연동 시작 →'}
@@ -340,12 +338,20 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         {/* ── 화면 6: 연말정산 2차 인증 ── */}
         {screen === 'yeartax-auth' && (
           <div style={s.body}>
-            <AuthNotice auth={auth} />
+            <div style={s.authNotice}>
+              <span style={{ fontSize: 48 }}>🏛️</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: 4 }}>
+                  국세청 비회원 간편인증을 진행해주세요
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                  연말정산 간소화 소득세액공제자료 조회 인증입니다.
+                </div>
+              </div>
+            </div>
             <InfoBox>
-              국세청(NTS) 연말정산 간소화 소득세액공제자료 인증을 진행 중입니다.<br />
               {NTS_YEARS.join(', ')}년도({NTS_YEARS.length}건) 의료비 자료를 동시에 처리합니다.<br />
-              {auth?.label} 앱에서 인증 요청을 승인한 후 아래 버튼을 눌러주세요.<br />
-              다수 연도 처리로 수 분이 소요될 수 있습니다.
+              인증 완료 후 아래 버튼을 눌러주세요. 다수 연도 처리로 수 분이 소요될 수 있습니다.
             </InfoBox>
             <button onClick={handleConfirmYeartax} disabled={loading} style={s.primaryBtn}>
               {loading ? '⏳ 처리 중...' : '6단계: 인증 완료 →'}
