@@ -259,8 +259,8 @@ public class CodefSyncService {
             // 1차에서 미완료된 NTS futures 수집 (사용자 인증 완료 후 CF-00000으로 도착)
             List<CompletableFuture<NtsYearSession>> ntsPending = pendingNtsFutures.remove(sessionKey);
             if (ntsPending != null && !ntsPending.isEmpty()) {
-                CompletableFuture<Object> anyPending = CompletableFuture.anyOf(ntsPending.toArray(new CompletableFuture[0]));
-                try { anyPending.get(30, TimeUnit.SECONDS); }
+                CompletableFuture<Void> allPending = CompletableFuture.allOf(ntsPending.toArray(new CompletableFuture[0]));
+                try { allPending.get(30, TimeUnit.SECONDS); }
                 catch (TimeoutException e) { log.warn("NTS pending futures 30초 초과 - 일부 연도 저장 누락 가능"); }
                 catch (Exception ignored) {}
                 for (CompletableFuture<NtsYearSession> f : ntsPending) {
@@ -744,8 +744,8 @@ public class CodefSyncService {
             // 1차에서 미완료된 NTS futures 수집 (사용자 인증 완료 후 CF-00000으로 도착)
             List<CompletableFuture<NtsYearSession>> ytPending = pendingNtsFutures.remove(sessionKey);
             if (ytPending != null && !ytPending.isEmpty()) {
-                CompletableFuture<Object> anyPending = CompletableFuture.anyOf(ytPending.toArray(new CompletableFuture[0]));
-                try { anyPending.get(30, TimeUnit.SECONDS); }
+                CompletableFuture<Void> allPending = CompletableFuture.allOf(ytPending.toArray(new CompletableFuture[0]));
+                try { allPending.get(30, TimeUnit.SECONDS); }
                 catch (TimeoutException e) { log.warn("NTS pending futures 30초 초과 - 일부 연도 저장 누락 가능"); }
                 catch (Exception ignored) {}
                 for (CompletableFuture<NtsYearSession> f : ytPending) {
