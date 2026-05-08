@@ -1,418 +1,669 @@
-import React, { useState, useEffect } from 'react';
-import { healthAPI } from '../api/services';
+import React, { useState, useEffect, useMemo } from 'react';
+import { analysisAPI } from '../api/services';
+import useAuthStore from '../store/authStore';
+import CodefSyncModal from '../components/CodefSyncModal';
 
-const MOCK_RECORDS = [
-  { id: 1, visitDate: '2026-03-15', hospitalName: '서울성모병원', treatmentType: '외래',
-    patientPayment: 45000, insurancePayment: 180000, totalCost: 225000,
-    hasClaimOpportunity: true, claimAmount: 45000, claimInsurance: '삼성생명 실손' },
-  { id: 2, visitDate: '2026-02-28', hospitalName: '연세세브란스병원', treatmentType: '입원',
-    patientPayment: 320000, insurancePayment: 1280000, totalCost: 1600000,
-    hasClaimOpportunity: true, claimAmount: 320000, claimInsurance: '한화생명 암보험' },
-  { id: 3, visitDate: '2026-01-10', hospitalName: '강남구 우리약국', treatmentType: '약국',
-    patientPayment: 8500, insurancePayment: 0, totalCost: 8500,
-    hasClaimOpportunity: false, claimAmount: 0, claimInsurance: null },
-  { id: 4, visitDate: '2025-12-05', hospitalName: '분당서울대병원', treatmentType: '외래',
-    patientPayment: 28000, insurancePayment: 112000, totalCost: 140000,
-    hasClaimOpportunity: false, claimAmount: 0, claimInsurance: null },
-];
+const Ic = ({ d, size = 13 }) => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
+    strokeLinecap="round" strokeLinejoin="round"
+    style={{ width: size, height: size, flexShrink: 0 }}>{d}</svg>
+);
 
+const P = {
+  alert:  (<><path d="M8 3l6 10H2z"/><path d="M8 7v3M8 12v.01"/></>),
+  close:  (<path d="M4 4l8 8M12 4l-8 8"/>),
+  hosp:   (<><path d="M2 14V6l6-3 6 3v8"/><path d="M6 14V9h4v5"/></>),
+  cal:    (<><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></>),
+  check:  (<path d="M3 8l3 3 7-7"/>),
+  arrow:  (<path d="M3 8h10M9 4l4 4-4 4"/>),
+  info:   (<><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5.5v.01"/></>),
+  paid:   (<><circle cx="8" cy="8" r="6"/><path d="M5.5 8l2 2 3-3"/></>),
+};
+
+const FILTERS = ['전체', '청구가능', '확인필요', '청구완료'];
+const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+
+// ── 세대 뱃지 ──────────────────────────────────────────────────────────────
+const GEN_CONFIG = {
+  '1d': { bg: '#E8F5E9', color: '#2E7D32', label: '1세대 손보 실손' },
+  '1h': { bg: '#F1F8E9', color: '#33691E', label: '1세대 생보 실손' },
+  '2':  { bg: '#E3F2FD', color: '#1565C0', label: '2세대 실손' },
+  '3':  { bg: '#FFF3E0', color: '#E65100', label: '3세대 실손' },
+  '3k': { bg: '#FBE9E7', color: '#BF360C', label: '3세대 착한실손' },
+  '4':  { bg: '#FCE4EC', color: '#AD1457', label: '4세대 실손' },
+};
+const genLabel = (gen) => GEN_CONFIG[gen]?.label || null;
+
+const GenBadge = ({ gen }) => {
+  if (!gen) return null;
+  const s = GEN_CONFIG[gen] || { bg: '#F5F5F5', color: '#616161', label: gen };
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+      background: s.bg, color: s.color, flexShrink: 0,
+    }}>
+      {s.label}
+    </span>
+  );
+};
+
+// ── 날짜별 단일 그룹 빌더 (기존 로직) ──────────────────────────────────────
+const buildDateGroup = (date, recs) => {
+  const claimable   = recs.filter(r => r.hasClaimOpportunity &&
+                        (r.confidenceLevel === 'CONFIRMED' || r.confidenceLevel === 'LIKELY'));
+  const checkNeeded = recs.filter(r => r.confidenceLevel === 'CHECK_NEEDED');
+  const claimed     = recs.filter(r => r.claimStatus === 'CLAIMED');
+  const primary     = claimable[0] || checkNeeded[0] || recs[0];
+  const totalNonCovered = recs.reduce((s, r) => s + (r.nonCoveredAmount || 0), 0);
+  return {
+    groupType:           'date',
+    id:                  date,
+    visitDate:           date,
+    sortKey:             date,
+    records:             recs,
+    hospitals:           [...new Set(recs.map(r => r.hospitalName).filter(Boolean))],
+    treatTypes:          [...new Set(recs.map(r => r.treatmentType).filter(Boolean))],
+    coverageNotes:       [...new Set(recs.map(r => r.coverageNote).filter(Boolean))],
+    totalPatientPayment: recs.reduce((s, r) => s + (r.patientPayment   || 0), 0),
+    totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment || 0), 0),
+    totalCost:           recs.reduce((s, r) => s + (r.totalCost        || 0), 0),
+    totalClaimAmount:    claimable.reduce((s, r) => s + (r.claimAmount || 0), 0),
+    totalNonCovered,
+    hasNonCovered:       totalNonCovered > 0,
+    alreadyPaid:         recs[0]?.alreadyPaidAmount || 0,
+    paidCompany:         recs[0]?.paidByCompany,
+    isFullyClaimed:      recs.length > 0 && recs.every(r => r.claimStatus === 'CLAIMED'),
+    isAnyClaimed:        claimed.length > 0,
+    hasClaimable:        claimable.length > 0,
+    hasCheckNeeded:      checkNeeded.length > 0,
+    claimableRecs:       claimable,
+    checkNeededRecs:     checkNeeded,
+    gen:                 primary?.supplementaryGeneration || null,
+    claimInsurance:      primary?.claimInsurance,
+  };
+};
+
+// ── 진료 기록 → 그룹 변환 ────────────────────────────────────────────────────
+// 동일 claimGroupKey를 가진 "청구 완료" 레코드는 하나의 청구 그룹으로 묶음
+const buildGroups = (records) => {
+  const claimMap = new Map(); // claimGroupKey → records[]
+  const dateMap  = new Map(); // visitDate     → records[]
+
+  for (const r of records) {
+    if (r.claimGroupKey) {
+      if (!claimMap.has(r.claimGroupKey)) claimMap.set(r.claimGroupKey, []);
+      claimMap.get(r.claimGroupKey).push(r);
+    } else {
+      const key = r.visitDate || 'unknown';
+      if (!dateMap.has(key)) dateMap.set(key, []);
+      dateMap.get(key).push(r);
+    }
+  }
+
+  const groups = [];
+
+  // 청구 완료 그룹 (동일 보험 청구 건으로 묶인 여러 방문)
+  for (const [key, recs] of claimMap) {
+    const sorted    = [...recs].sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+    const dates     = [...new Set(sorted.map(r => r.visitDate))].sort();
+    const earliest  = dates[0];
+    const latest    = dates[dates.length - 1];
+    const totalNonCovered = recs.reduce((s, r) => s + (r.nonCoveredAmount || 0), 0);
+
+    // 날짜별 소그룹 (펼쳤을 때 각 날짜 행 표시용)
+    const subDateMap = new Map();
+    for (const r of sorted) {
+      if (!subDateMap.has(r.visitDate)) subDateMap.set(r.visitDate, []);
+      subDateMap.get(r.visitDate).push(r);
+    }
+    const subGroups = [...subDateMap.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([d, rs]) => buildDateGroup(d, rs));
+
+    groups.push({
+      groupType:           'claim',
+      id:                  key,
+      sortKey:             latest,
+      dateRange:           earliest === latest ? earliest : `${earliest} ~ ${latest}`,
+      visitCount:          dates.length,
+      records:             sorted,
+      subGroups,
+      hospitals:           [...new Set(sorted.map(r => r.hospitalName).filter(Boolean))],
+      treatTypes:          [...new Set(sorted.map(r => r.treatmentType).filter(Boolean))],
+      totalPatientPayment: recs.reduce((s, r) => s + (r.patientPayment   || 0), 0),
+      totalInsurance:      recs.reduce((s, r) => s + (r.insurancePayment || 0), 0),
+      totalCost:           recs.reduce((s, r) => s + (r.totalCost        || 0), 0),
+      totalNonCovered,
+      hasNonCovered:       totalNonCovered > 0,
+      alreadyPaid:         recs[0]?.alreadyPaidAmount || 0,
+      paidCompany:         recs[0]?.paidByCompany,
+      isFullyClaimed:      true,
+      isAnyClaimed:        true,
+      hasClaimable:        false,
+      hasCheckNeeded:      false,
+      coverageNotes:       [],
+      gen:                 null,
+    });
+  }
+
+  // 일반 날짜 그룹
+  for (const [date, recs] of dateMap)
+    groups.push({ ...buildDateGroup(date, recs), sortKey: date });
+
+  return groups.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+};
+
+// ── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 const MedicalRecords = () => {
-  const [records, setRecords] = useState(MOCK_RECORDS);
-  const [filterStatus, setFilterStatus] = useState('전체');
+  const { user } = useAuthStore();
+  const [records,       setRecords]       = useState([]);
+  const [filterStatus,  setFilterStatus]  = useState('전체');
   const [showClaimModal, setShowClaimModal] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [showSyncModal,  setShowSyncModal]  = useState(false);
+  const [selectedGroup,  setSelectedGroup]  = useState(null);
+  const [loading,        setLoading]        = useState(false);
+  const [expandedClaims, setExpandedClaims] = useState(new Set());
 
-  useEffect(() => {
-    const fetchRecords = async () => {
-      setLoading(true);
-      try {
-        const data = await healthAPI.getMedicalRecords();
-        setRecords(data);
-      } catch (error) {
-        console.error('Failed to fetch records:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRecords();
-  }, []);
-
-  const claimOpportunities = records.filter(r => r.hasClaimOpportunity);
-  const totalUnclaimedAmount = claimOpportunities.reduce((sum, r) => sum + r.claimAmount, 0);
-
-  const filteredRecords = filterStatus === '전체'
-    ? records
-    : filterStatus === '청구가능'
-      ? records.filter(r => r.hasClaimOpportunity)
-      : records.filter(r => !r.hasClaimOpportunity);
-
-  const handleClaimClick = (record) => {
-    setSelectedRecord(record);
-    setShowClaimModal(true);
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('ko-KR', {
-      style: 'currency',
-      currency: 'KRW',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const pageStyle = {
-    padding: '20px',
-    backgroundColor: '#f8fafc',
-    minHeight: '100vh',
-  };
-
-  const titleStyle = {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: '20px',
-  };
-
-  const alertBannerStyle = {
-    background: '#fee2e2',
-    border: '1px solid #fecaca',
-    borderRadius: '10px',
-    padding: '16px',
-    marginBottom: '20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  };
-
-  const alertTextStyle = {
-    color: '#7f1d1d',
-    fontSize: '14px',
-    fontWeight: '600',
-    margin: '0',
-  };
-
-  const alertAmountStyle = {
-    fontSize: '18px',
-    fontWeight: '700',
-    color: '#dc2626',
-    margin: '0 0 4px 0',
-  };
-
-  const cardStyle = {
-    background: '#fff',
-    borderRadius: '14px',
-    padding: '20px',
-    boxShadow: '0 1px 4px rgba(0,0,0,.06)',
-    marginBottom: '16px',
-  };
-
-  const filterButtonStyle = (isActive) => ({
-    padding: '8px 16px',
-    backgroundColor: isActive ? '#1d4ed8' : '#e2e8f0',
-    color: isActive ? '#fff' : '#0f172a',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '13px',
-    marginRight: '8px',
-    marginBottom: '16px',
+  const toggleExpand = (id) => setExpandedClaims(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
   });
 
-  const recordItemStyle = {
-    borderRadius: '10px',
-    padding: '16px',
-    marginBottom: '12px',
-    backgroundColor: '#fff',
-    border: '1px solid #e2e8f0',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  useEffect(() => {
+    const fetch = async () => {
+      setLoading(true);
+      try {
+        const data = await analysisAPI.getClaimOpportunities();
+        if (Array.isArray(data)) setRecords(data);
+      } catch (e) { console.error('claim-opportunities 실패:', e); }
+      finally { setLoading(false); }
+    };
+    fetch();
+  }, []);
+
+  const groups = useMemo(() => buildGroups(records), [records]);
+
+  const claimGroups     = groups.filter(g => g.hasClaimable);
+  const checkGroups     = groups.filter(g => !g.hasClaimable && g.hasCheckNeeded);
+  const totalUnclaimed  = claimGroups.reduce((s, g) => s + g.totalClaimAmount, 0);
+  const totalPaid       = groups.reduce((s, g) => s + (g.alreadyPaid || 0), 0);
+
+  const filtered =
+    filterStatus === '청구가능' ? groups.filter(g => g.hasClaimable) :
+    filterStatus === '확인필요' ? groups.filter(g => !g.hasClaimable && g.hasCheckNeeded) :
+    filterStatus === '청구완료' ? groups.filter(g => g.isFullyClaimed) :
+    groups;
+
+  const openModal = (group) => { setSelectedGroup(group); setShowClaimModal(true); };
+
+  const handleSyncSuccess = async () => {
+    try { const d = await analysisAPI.getClaimOpportunities(); if (Array.isArray(d)) setRecords(d); }
+    catch {}
   };
 
-  const recordInfoStyle = {
-    flex: 1,
+  const cardAccent = (g) => {
+    if (g.isFullyClaimed || g.isAnyClaimed) return 'mc-card-accent-success';
+    if (g.hasClaimable)   return 'mc-card-accent-warning';
+    if (g.hasCheckNeeded) return 'mc-card-accent-blue';
+    return '';
   };
 
-  const recordHeaderStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '8px',
-  };
-
-  const recordDateStyle = {
-    fontSize: '12px',
-    color: '#64748b',
-  };
-
-  const recordHospitalStyle = {
-    fontSize: '14px',
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: '4px',
-  };
-
-  const recordTypeStyle = {
-    fontSize: '12px',
-    color: '#475569',
-    marginBottom: '8px',
-  };
-
-  const costBreakdownStyle = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '8px',
-    fontSize: '11px',
-  };
-
-  const costItemStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    color: '#475569',
-  };
-
-  const costAmountStyle = {
-    fontWeight: '700',
-    color: '#0f172a',
-  };
-
-  const claimBadgeStyle = {
-    display: 'inline-block',
-    padding: '4px 8px',
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    borderRadius: '4px',
-    fontSize: '11px',
-    fontWeight: '600',
-  };
-
-  const claimButtonStyle = {
-    background: '#ef4444',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    padding: '8px 16px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '12px',
-    marginLeft: '12px',
-  };
-
-  const modalStyle = {
-    position: 'fixed',
-    top: '0',
-    left: '0',
-    right: '0',
-    bottom: '0',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: '1000',
-  };
-
-  const modalContentStyle = {
-    background: '#fff',
-    borderRadius: '14px',
-    padding: '24px',
-    maxWidth: '500px',
-    width: '90%',
-  };
-
-  const modalTitleStyle = {
-    fontSize: '18px',
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: '16px',
-  };
-
-  const stepStyle = {
-    marginBottom: '16px',
-    paddingBottom: '16px',
-    borderBottom: '1px solid #e2e8f0',
-  };
-
-  const stepNumberStyle = {
-    display: 'inline-block',
-    width: '24px',
-    height: '24px',
-    backgroundColor: '#1d4ed8',
-    color: '#fff',
-    borderRadius: '50%',
-    textAlign: 'center',
-    lineHeight: '24px',
-    fontWeight: '700',
-    marginRight: '8px',
-    fontSize: '12px',
-  };
-
-  const stepTitleStyle = {
-    fontSize: '13px',
-    fontWeight: '700',
-    color: '#0f172a',
-    display: 'inline-block',
-  };
-
-  const stepDescStyle = {
-    fontSize: '12px',
-    color: '#475569',
-    marginTop: '8px',
-    marginLeft: '32px',
-  };
-
-  const closeButtonStyle = {
-    background: '#e2e8f0',
-    color: '#0f172a',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '10px 20px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '14px',
-    width: '100%',
-    marginTop: '16px',
-  };
-
-  const sectionTitleStyle = {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: '16px',
-  };
-
-  const syncButtonStyle = {
-    background: '#1d4ed8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '10px',
-    padding: '10px 20px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '14px',
-    width: '100%',
-    marginTop: '16px',
+  const cardTag = (g) => {
+    if (g.isFullyClaimed) return { text: '청구 완료', cls: 'mc-tag-success' };
+    if (g.isAnyClaimed)   return { text: '일부 완료', cls: 'mc-tag-success' };
+    if (g.hasClaimable)   return { text: '청구 가능', cls: 'mc-tag-warning' };
+    if (g.hasCheckNeeded) return { text: '확인 필요', cls: 'mc-tag-blue' };
+    return { text: '처리 완료', cls: 'mc-tag-success' };
   };
 
   return (
-    <div style={pageStyle}>
-      <h1 style={titleStyle}>의료 기록</h1>
+    <div className="mc-page fade-in">
+      <div className="mc-page-top">
+        <div>
+          <div className="mc-page-title">의료 기록 & 청구</div>
+          <div className="mc-page-subtitle">진료 내역을 확인하고 놓친 보험 청구 기회를 확인하세요.</div>
+        </div>
+      </div>
 
-      {claimOpportunities.length > 0 && (
-        <div style={alertBannerStyle}>
-          <div>
-            <p style={alertTextStyle}>청구 가능한 의료비가 있습니다</p>
-            <p style={alertAmountStyle}>{formatCurrency(totalUnclaimedAmount)}</p>
+      {/* 청구 가능 알림 */}
+      {claimGroups.length > 0 && (
+        <div className="mc-alert mc-alert-warning" style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Ic d={P.alert} size={18}/>
+            <div>
+              <div className="mc-alert-title">청구 가능한 의료비가 있어요</div>
+              <div className="mc-alert-body">{claimGroups.length}건의 진료일 · 지금 바로 청구하세요</div>
+            </div>
           </div>
-          <div style={{ textAlign: 'right', color: '#7f1d1d' }}>
-            <p style={alertTextStyle}>{claimOpportunities.length}건</p>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#8A7040', letterSpacing: '-0.4px' }}>
+            +{fmt(totalUnclaimed)}
           </div>
         </div>
       )}
 
-      <div style={cardStyle}>
-        <h3 style={sectionTitleStyle}>필터</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-          {['전체', '청구가능', '청구완료'].map(status => (
-            <button
-              key={status}
-              style={filterButtonStyle(filterStatus === status)}
-              onClick={() => setFilterStatus(status)}
-            >
-              {status}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <h3 style={sectionTitleStyle}>의료 기록</h3>
-      {filteredRecords.map(record => (
-        <div key={record.id} style={recordItemStyle}>
-          <div style={recordInfoStyle}>
-            <div style={recordHeaderStyle}>
-              <div>
-                <div style={recordHospitalStyle}>{record.hospitalName}</div>
-                <div style={recordDateStyle}>{record.visitDate}</div>
-              </div>
-              {record.hasClaimOpportunity && (
-                <span style={claimBadgeStyle}>청구 가능</span>
-              )}
-            </div>
-            <div style={recordTypeStyle}>
-              {record.treatmentType} ({record.claimInsurance || '비급여'})
-            </div>
-            <div style={costBreakdownStyle}>
-              <div style={costItemStyle}>
-                <span>환자부담:</span>
-                <span style={costAmountStyle}>{formatCurrency(record.patientPayment)}</span>
-              </div>
-              <div style={costItemStyle}>
-                <span>보험청구:</span>
-                <span style={costAmountStyle}>{formatCurrency(record.insurancePayment)}</span>
-              </div>
-              <div style={costItemStyle}>
-                <span>총 비용:</span>
-                <span style={costAmountStyle}>{formatCurrency(record.totalCost)}</span>
+      {/* 확인 필요 알림 */}
+      {checkGroups.length > 0 && (
+        <div className="mc-alert mc-alert-blue" style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Ic d={P.info} size={18}/>
+            <div>
+              <div className="mc-alert-title">보험사 확인이 필요한 진료가 있어요</div>
+              <div className="mc-alert-body">
+                세대별 약관 차이로 보장 여부가 불확실합니다 · {checkGroups.length}건
               </div>
             </div>
           </div>
-
-          {record.hasClaimOpportunity && (
-            <button
-              style={claimButtonStyle}
-              onClick={() => handleClaimClick(record)}
-            >
-              청구하기
-            </button>
-          )}
         </div>
-      ))}
+      )}
 
-      <button style={syncButtonStyle}>
-        CODEF 동기화
-      </button>
+      {/* 요약 통계 */}
+      <div className="mc-stats-strip">
+        <div className="mc-stat">
+          <div className="mc-stat-label">전체 진료일</div>
+          <div className="mc-stat-value">{groups.length}건</div>
+          <div className="mc-stat-sub">기간 내 방문</div>
+        </div>
+        <div className="mc-stat">
+          <div className="mc-stat-label">청구 가능</div>
+          <div className="mc-stat-value" style={{ color: '#8A7040' }}>{claimGroups.length}건</div>
+          <div className="mc-stat-sub">{fmt(totalUnclaimed)}</div>
+        </div>
+        <div className="mc-stat">
+          <div className="mc-stat-label">확인 필요</div>
+          <div className="mc-stat-value" style={{ color: 'var(--blue)' }}>{checkGroups.length}건</div>
+          <div className="mc-stat-sub">보험사 문의</div>
+        </div>
+        <div className="mc-stat">
+          <div className="mc-stat-label">이미 수령</div>
+          <div className="mc-stat-value" style={{ color: '#3A7A62' }}>{fmt(totalPaid)}</div>
+          <div className="mc-stat-sub">지급 확인</div>
+        </div>
+      </div>
 
-      {showClaimModal && selectedRecord && (
-        <div style={modalStyle} onClick={() => setShowClaimModal(false)}>
-          <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
-            <h2 style={modalTitleStyle}>청구 절차</h2>
+      {/* 필터 */}
+      <div className="mc-sec-head"><span className="mc-sec-title">필터</span></div>
+      <div className="mc-row-wrap" style={{ marginBottom: 18 }}>
+        {FILTERS.map((s) => (
+          <button key={s}
+            className={`mc-chip ${filterStatus === s ? 'active' : ''}`}
+            onClick={() => setFilterStatus(s)}>{s}</button>
+        ))}
+      </div>
 
-            <div style={stepStyle}>
-              <span style={stepNumberStyle}>1</span>
-              <span style={stepTitleStyle}>서류 준비</span>
-              <div style={stepDescStyle}>
-                영수증, 진료비 명세서, 처방전 등을 준비합니다
+      {/* 진료 그룹 리스트 */}
+      <div className="mc-sec-head">
+        <span className="mc-sec-title">진료 기록 · {filtered.length}건</span>
+      </div>
+      <div className="mc-stack-sm">
+        {filtered.map((g) => {
+          const tag = cardTag(g);
+
+          // ── 청구 그룹 카드 (동일 보험 청구 건으로 묶인 여러 방문) ──────────
+          if (g.groupType === 'claim') {
+            const expanded = expandedClaims.has(g.id);
+            return (
+              <div key={g.id} className="mc-card mc-card-accent-success">
+                <div className="mc-card-head">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 6, flexShrink: 0,
+                      background: '#E8F5E9', color: '#2E7D32',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Ic d={P.paid} size={16}/>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="mc-card-title">
+                        {g.hospitals.join(' · ')}
+                      </div>
+                      <div className="mc-card-sub">
+                        <Ic d={P.cal} size={10}/> {g.dateRange} · {g.visitCount}건
+                        {g.treatTypes.length > 0 && <> · {g.treatTypes[0]}</>}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="mc-tag mc-tag-success">청구 완료</span>
+                </div>
+
+                <div className="mc-card-body">
+                  {/* 합산 비용 */}
+                  <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                    <div>
+                      <div className="mc-field-label">{g.hasNonCovered ? '환자 부담 합계 (실부담)' : '환자 부담 합계'}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                        {fmt(g.hasNonCovered ? g.totalPatientPayment + g.totalNonCovered : g.totalPatientPayment)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mc-field-label">건보 부담 합계</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                        {fmt(g.totalInsurance)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mc-field-label">총 비용 합계</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
+                        {fmt(g.hasNonCovered ? g.totalCost + g.totalNonCovered : g.totalCost)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 비급여 합산 */}
+                  {g.hasNonCovered && (
+                    <div style={{
+                      marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                      background: 'var(--bg-2)', border: '1px solid var(--border)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                          급여 자기부담 <strong style={{ color: 'var(--text-2)' }}>{fmt(g.totalPatientPayment)}</strong>
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ 비급여</span>
+                        <span style={{ fontSize: 12, color: '#E65100', fontWeight: 700 }}>{fmt(g.totalNonCovered)}</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', marginLeft: 8 }}>연말정산 기준</span>
+                    </div>
+                  )}
+
+                  {/* 수령 내역 */}
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                    background: '#E8F5E9', display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <Ic d={P.paid} size={14}/>
+                    <span style={{ fontSize: 13, color: '#2E7D32', fontWeight: 600 }}>
+                      이미 수령 {fmt(g.alreadyPaid)}{g.paidCompany && <> ({g.paidCompany})</>}
+                    </span>
+                  </div>
+
+                  {/* 펼치기 버튼 */}
+                  <button
+                    onClick={() => toggleExpand(g.id)}
+                    style={{
+                      marginTop: 12, width: '100%', padding: '7px 0',
+                      background: 'var(--bg-2)', border: '1px solid var(--border)',
+                      borderRadius: 8, fontSize: 12, color: 'var(--text-3)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6,
+                    }}>
+                    {expanded ? '▲ 방문 내역 접기' : `▼ 방문 내역 보기 (${g.visitCount}건)`}
+                  </button>
+
+                  {/* 펼쳐진 방문 내역 */}
+                  {expanded && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {g.subGroups.map((sg) => (
+                        <div key={sg.visitDate} style={{
+                          padding: '10px 12px', borderRadius: 8,
+                          background: 'var(--bg-2)', border: '1px solid var(--border)',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+                                {sg.hospitals.join(' · ')}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                                <Ic d={P.cal} size={10}/> {sg.visitDate}
+                                {sg.treatTypes.length > 0 && <> · {sg.treatTypes.join(' + ')}</>}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                              환자부담 <strong style={{ color: 'var(--text-1)' }}>
+                                {fmt(sg.hasNonCovered ? sg.totalPatientPayment + sg.totalNonCovered : sg.totalPatientPayment)}
+                              </strong>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                              건보 <strong style={{ color: 'var(--text-1)' }}>{fmt(sg.totalInsurance)}</strong>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                              총 <strong style={{ color: 'var(--blue)' }}>
+                                {fmt(sg.hasNonCovered ? sg.totalCost + sg.totalNonCovered : sg.totalCost)}
+                              </strong>
+                            </span>
+                            {sg.hasNonCovered && (
+                              <span style={{ fontSize: 12, color: '#E65100' }}>
+                                비급여 {fmt(sg.totalNonCovered)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          // ── 일반 날짜 카드 ────────────────────────────────────────────────
+          return (
+            <div key={g.visitDate} className={`mc-card ${cardAccent(g)}`}>
+              <div className="mc-card-head">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 6, flexShrink: 0,
+                    background: 'var(--blue-soft)', color: 'var(--blue)',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Ic d={P.hosp} size={16}/>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mc-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {g.hospitals.join(' · ')}
+                      <GenBadge gen={g.gen}/>
+                    </div>
+                    <div className="mc-card-sub">
+                      <Ic d={P.cal} size={10}/> {g.visitDate}
+                      {g.treatTypes.length > 0 && <> · {g.treatTypes.join(' + ')}</>}
+                      {g.claimInsurance && <> · {g.claimInsurance}</>}
+                    </div>
+                  </div>
+                </div>
+                <span className={`mc-tag ${tag.cls}`}>{tag.text}</span>
+              </div>
+
+              <div className="mc-card-body">
+                <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                  <div>
+                    <div className="mc-field-label">
+                      {g.hasNonCovered ? '환자 부담 (실부담)' : '환자 부담'}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                      {fmt(g.hasNonCovered
+                        ? g.totalPatientPayment + g.totalNonCovered
+                        : g.totalPatientPayment)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mc-field-label">건보 부담</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
+                      {fmt(g.totalInsurance)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mc-field-label">총 비용</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
+                      {fmt(g.hasNonCovered
+                        ? g.totalCost + g.totalNonCovered
+                        : g.totalCost)}
+                    </div>
+                  </div>
+                </div>
+
+                {g.hasNonCovered ? (
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                    background: 'var(--bg-2)', border: '1px solid var(--border)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        급여 자기부담 <strong style={{ color: 'var(--text-2)' }}>{fmt(g.totalPatientPayment)}</strong>
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ 비급여</span>
+                      <span style={{ fontSize: 12, color: '#E65100', fontWeight: 700 }}>
+                        {fmt(g.totalNonCovered)}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', marginLeft: 8 }}>연말정산 기준</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    marginTop: 10, padding: '7px 12px', borderRadius: 8,
+                    background: 'var(--bg-2)', border: '1px dashed var(--border)',
+                    fontSize: 11.5, color: 'var(--text-3)',
+                  }}>
+                    💡 연말정산 연동 시 비급여 금액을 확인할 수 있습니다
+                  </div>
+                )}
+
+                {g.alreadyPaid > 0 && (
+                  <div style={{
+                    marginTop: 12, padding: '8px 12px', borderRadius: 8,
+                    background: 'var(--green-soft, #E8F5E9)', display: 'flex',
+                    alignItems: 'center', gap: 8,
+                  }}>
+                    <Ic d={P.paid} size={14}/>
+                    <span style={{ fontSize: 13, color: '#2E7D32', fontWeight: 600 }}>
+                      이미 수령 {fmt(g.alreadyPaid)}
+                      {g.paidCompany && <> ({g.paidCompany})</>}
+                    </span>
+                  </div>
+                )}
+
+                {g.coverageNotes.length > 0 && !g.isFullyClaimed && (
+                  <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {g.coverageNotes.map((note, i) => (
+                      <span key={i} style={{
+                        fontSize: 11, color: 'var(--text-3)', background: 'var(--bg-2)',
+                        padding: '3px 8px', borderRadius: 4,
+                      }}>{note}</span>
+                    ))}
+                  </div>
+                )}
+
+                {g.hasClaimable && !g.isFullyClaimed && (
+                  <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
+                    onClick={() => openModal(g)}>
+                    <Ic d={P.arrow} size={12}/> 청구하기 ({fmt(g.totalClaimAmount)})
+                  </button>
+                )}
+                {!g.hasClaimable && g.hasCheckNeeded && !g.isFullyClaimed && (
+                  <button className="mc-btn" style={{ marginTop: 14, borderColor: 'var(--blue)', color: 'var(--blue)' }}
+                    onClick={() => openModal(g)}>
+                    <Ic d={P.info} size={12}/> 보장 여부 확인
+                  </button>
+                )}
               </div>
             </div>
+          );
+        })}
 
-            <div style={stepStyle}>
-              <span style={stepNumberStyle}>2</span>
-              <span style={stepTitleStyle}>보험사 접수</span>
-              <div style={stepDescStyle}>
-                보험사에 서류를 제출합니다 ({selectedRecord.claimInsurance})
+        {filtered.length === 0 && !loading && (
+          <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: 'var(--text-3)' }}>
+            조건에 맞는 진료 기록이 없어요.
+          </div>
+        )}
+      </div>
+
+      {loading && (
+        <div className="mc-alert mc-alert-blue" style={{ marginTop: 16 }}>
+          <div>
+            <div className="mc-alert-title">진료 기록 불러오는 중…</div>
+            <div className="mc-alert-body">잠시만 기다려주세요.</div>
+          </div>
+        </div>
+      )}
+
+      {/* 동기화 모달 */}
+      {showSyncModal && (
+        <CodefSyncModal userId={user?.userId}
+          onClose={() => setShowSyncModal(false)} onSuccess={handleSyncSuccess}/>
+      )}
+
+      {/* 청구 / 확인 안내 모달 */}
+      {showClaimModal && selectedGroup && (
+        <div className="mc-modal-backdrop" onClick={() => setShowClaimModal(false)}>
+          <div className="mc-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mc-modal-head">
+              <div>
+                <div className="mc-card-title" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {selectedGroup.hasClaimable ? '청구 절차 안내' : '보장 여부 확인 안내'}
+                  <GenBadge gen={selectedGroup.gen}/>
+                </div>
+                <div className="mc-card-sub" style={{ marginTop: 2 }}>
+                  {selectedGroup.hospitals.join(' · ')} · {selectedGroup.visitDate}
+                </div>
               </div>
+              <button className="mc-modal-close" onClick={() => setShowClaimModal(false)}>
+                <Ic d={P.close} size={12}/>
+              </button>
             </div>
 
-            <div style={stepStyle}>
-              <span style={stepNumberStyle}>3</span>
-              <span style={stepTitleStyle}>심사 및 승인</span>
-              <div style={stepDescStyle}>
-                보험사에서 청구 내용을 심사합니다 (약 7-10일)
-              </div>
+            <div className="mc-modal-body">
+              {/* 세대별 보장 메모 */}
+              {selectedGroup.coverageNotes.length > 0 && (
+                <div style={{
+                  marginBottom: 16, padding: '10px 14px', borderRadius: 8,
+                  background: 'var(--bg-2)', border: '1px solid var(--border)',
+                }}>
+                  {selectedGroup.coverageNotes.map((note, i) => (
+                    <div key={i} style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                      <Ic d={P.info} size={12}/> {note}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedGroup.hasClaimable ? (
+                // 청구 가능 → 4단계 안내
+                [
+                  { n: 1, title: '서류 준비',
+                    desc: '영수증, 진료비 명세서, 처방전을 준비합니다.' },
+                  { n: 2, title: '보험사 접수',
+                    desc: `${selectedGroup.claimInsurance || '보험사'}에 서류를 제출합니다.` },
+                  { n: 3, title: '심사 및 승인',
+                    desc: '보험사에서 청구 내용을 심사합니다 (약 7~10일).' },
+                  { n: 4, title: '보험금 지급',
+                    desc: `승인 후 ${fmt(selectedGroup.totalClaimAmount)}이 지급됩니다.` },
+                ].map((s) => (
+                  <div key={s.n} className="mc-step">
+                    <div className="mc-step-num">{s.n}</div>
+                    <div>
+                      <div className="mc-step-title">{s.title}</div>
+                      <div className="mc-step-desc">{s.desc}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                // CHECK_NEEDED → 확인 안내
+                <div style={{ color: 'var(--text-2)', lineHeight: 1.8, fontSize: 14 }}>
+                  <p style={{ marginBottom: 10 }}>
+                    가입하신 실손보험의 세대 및 약관에 따라 보장 여부가 달라질 수 있습니다.
+                    {selectedGroup.gen && genLabel(selectedGroup.gen) && (
+                      <> 현재 <strong>{genLabel(selectedGroup.gen)}</strong>으로 확인됩니다.</>
+                    )}
+                  </p>
+                  <p>
+                    가입하신 보험사({selectedGroup.claimInsurance || '해당 보험사'})에 직접 문의하여
+                    보장 가능 여부를 확인하세요.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div style={stepStyle}>
-              <span style={stepNumberStyle}>4</span>
-              <span style={stepTitleStyle}>보험금 지급</span>
-              <div style={stepDescStyle}>
-                승인 후 {formatCurrency(selectedRecord.claimAmount)}이 지급됩니다
-              </div>
+            <div className="mc-modal-foot">
+              <button className="mc-btn" onClick={() => setShowClaimModal(false)}>닫기</button>
+              {selectedGroup.hasClaimable && (
+                <button className="mc-btn mc-btn-primary">
+                  <Ic d={P.check} size={12}/> 청구 접수
+                </button>
+              )}
             </div>
-
-            <button style={closeButtonStyle} onClick={() => setShowClaimModal(false)}>
-              닫기
-            </button>
           </div>
         </div>
       )}
