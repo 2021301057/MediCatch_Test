@@ -251,8 +251,12 @@ public class ClaimMatchingService {
         String lower = itemName.toLowerCase();
 
         // ── 치과 ─────────────────────────────────────────────────────────
-        if (tc == TreatClass.DENTAL && (lower.contains("질병") || lower.contains("상해"))) {
-            return matchDental(company, itemName, hasPublicCharge, gen);
+        // AK* = 치과 질병 코드. 질병 치과는 실손 전 세대 면책.
+        // AS* = 치과 상해 코드 → TreatClass.INJURY로 분류되어 상해 통원 항목에서 정상 처리됨.
+        if (tc == TreatClass.DENTAL) {
+            if (lower.contains("질병") && (lower.contains("통원") || lower.contains("입원")))
+                return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 면책");
+            return null; // 상해 커버리지는 AS*(INJURY)에서 처리 — AK*와 매칭 안 함
         }
 
         // ── 한방 ─────────────────────────────────────────────────────────
@@ -348,39 +352,6 @@ public class ClaimMatchingService {
                     gl(gen) + " · 비급여 할증제 적용 · 보험사 확인 권장");
             default      -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 약관 확인");
         };
-    }
-
-    /**
-     * 치과 (AK*): 세대별 급여/비급여 보장 여부 상이.
-     */
-    private MatchResult matchDental(String company, String itemName,
-                                     boolean hasPublicCharge, int gen) {
-        if (hasPublicCharge) {
-            // 급여 치과
-            return switch (gen) {
-                case 1       -> new MR(company, itemName, CONFIRMED, gen,
-                        gl(gen) + " · 치과 급여 보장");
-                case 2, 3    -> new MR(company, itemName, LIKELY, gen,
-                        gl(gen) + " · 치과 급여 보장 가능 (약관 확인)");
-                case 4       -> new MR(company, itemName, CHECK_NEEDED, gen,
-                        gl(gen) + " · 치과 급여 보장 여부 보험사 확인");
-                case 5       -> new MR(company, itemName, EXCLUDED, gen,
-                        gl(gen) + " · 치과 보장 제외");
-                default      -> new MR(company, itemName, CHECK_NEEDED, gen,
-                        gl(gen) + " · 치과 약관 확인");
-            };
-        } else {
-            // 비급여 치과
-            return switch (gen) {
-                case 1       -> new MR(company, itemName, LIKELY, gen,
-                        gl(gen) + " · 치과 비급여 일부 보장 가능");
-                case 2       -> new MR(company, itemName, CHECK_NEEDED, gen,
-                        gl(gen) + " · 치과 비급여 약관 확인");
-                case 3, 4, 5 -> new MR(company, itemName, EXCLUDED, gen,
-                        gl(gen) + " · 치과 비급여 제외");
-                default      -> null;
-            };
-        }
     }
 
     /**
