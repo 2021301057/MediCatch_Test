@@ -9,9 +9,12 @@ application-prod.yml
 *.jar
 *.war
 /backend/build/
+/backend/*/build/
 /backend/target/
+/backend/*/target/
 .gradle/
 /backend/.gradle/
+/backend/*/.gradle/
 
 # IntelliJ IDEA
 .idea/
