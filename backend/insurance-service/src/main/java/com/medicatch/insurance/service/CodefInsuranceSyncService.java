@@ -231,17 +231,27 @@ public class CodefInsuranceSyncService {
             String policyNumber = str(item.get("resPolicyNumber"));
             if (policyNumber == null || policyNumber.isBlank()) continue;
 
-            // 날짜: 최상위 → 없으면 resCoverageLists[0]에서 추출
-            String startStr = str(item.get("commStartDate"));
-            String endStr   = str(item.get("commEndDate"));
-            if ((startStr == null || endStr == null)) {
-                List<Map<String, Object>> covList =
-                        (List<Map<String, Object>>) item.getOrDefault("resCoverageLists", List.of());
-                if (!covList.isEmpty()) {
-                    if (startStr == null) startStr = str(covList.get(0).get("commStartDate"));
-                    if (endStr   == null) endStr   = str(covList.get(0).get("commEndDate"));
-                }
+            // 날짜: 실손의료비 담보 중 가장 이른 commStartDate 우선 사용 (세대 정확 판별)
+            // 삼성화재처럼 첫 담보가 "기타실손"(최근 날짜)인 경우 오판 방지
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> covListForDate =
+                    (List<Map<String, Object>>) item.getOrDefault("resCoverageLists", List.of());
+            String startStr = null;
+            String endStr   = null;
+            for (Map<String, Object> cov : covListForDate) {
+                if (!"실손의료비".equals(str(cov.get("resType")))) continue;
+                String s = str(cov.get("commStartDate"));
+                String e = str(cov.get("commEndDate"));
+                if (s != null && (startStr == null || s.compareTo(startStr) < 0)) startStr = s;
+                if (e != null && (endStr   == null || e.compareTo(endStr)   > 0)) endStr   = e;
             }
+            // 실손의료비 담보가 없으면 최상위 → resCoverageLists[0] 순으로 fallback
+            if (startStr == null) startStr = str(item.get("commStartDate"));
+            if (endStr   == null) endStr   = str(item.get("commEndDate"));
+            if (startStr == null && !covListForDate.isEmpty())
+                startStr = str(covListForDate.get(0).get("commStartDate"));
+            if (endStr   == null && !covListForDate.isEmpty())
+                endStr   = str(covListForDate.get(0).get("commEndDate"));
             LocalDate startDate = parseDateOrNull(startStr);
             LocalDate endDate   = parseDateOrNull(endStr);
 

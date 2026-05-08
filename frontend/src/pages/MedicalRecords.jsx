@@ -547,22 +547,11 @@ const MedicalRecords = () => {
                 )}
 
                 {g.hasClaimable && !g.isFullyClaimed && (
-                  <div style={{ marginTop: 14 }}>
-                    {g.gen && (
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 5 }}>
-                        <Ic d={P.info} size={10}/>
-                        {' '}{genLabel(g.gen)} 기준 예상 청구금액
-                      </div>
-                    )}
-                    <button className="mc-btn mc-btn-primary"
-                      style={{ width: '100%', justifyContent: 'space-between' }}
-                      onClick={() => openModal(g)}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Ic d={P.arrow} size={12}/> 청구하기
-                      </span>
-                      <span style={{ fontWeight: 800 }}>약 {fmt(g.totalClaimAmount)}</span>
-                    </button>
-                  </div>
+                  <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
+                    onClick={() => openModal(g)}>
+                    <Ic d={P.arrow} size={12}/>
+                    예상 {fmt(g.totalClaimAmount)} 청구하기
+                  </button>
                 )}
                 {!g.hasClaimable && g.hasCheckNeeded && !g.isFullyClaimed && (
                   <button className="mc-btn" style={{ marginTop: 14, borderColor: 'var(--blue)', color: 'var(--blue)' }}
