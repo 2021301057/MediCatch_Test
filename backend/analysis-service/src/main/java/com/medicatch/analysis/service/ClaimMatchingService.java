@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 진료 기록과 보험 보장 내역을 매핑하여 청구 가능 여부를 판단한다.
@@ -55,25 +56,14 @@ public class ClaimMatchingService {
         List<ClaimPaymentInfo>  payments  = safeFetch(() -> insuranceClient.getClaimPayments(userId),
                 "insurance-service 지급내역 호출 실패");
 
-        // 날짜별 지급 집계 (카테고리별 정밀 매핑)
-        Map<LocalDate, Set<ClaimCategory>> paidCatsByDate  = new HashMap<>();
-        Map<LocalDate, Double>             paidAmtByDate   = new HashMap<>();
-        Map<LocalDate, String>             paidCoByDate    = new HashMap<>();
-
-        for (ClaimPaymentInfo p : payments) {
-            if (!"지급".equals(p.getJudgeResult()) || p.getOccurrenceDate() == null) continue;
-            LocalDate date = p.getOccurrenceDate();
-            double amt = p.getPaidAmount() != null ? p.getPaidAmount() : 0;
-            paidAmtByDate.merge(date, amt, Double::sum);
-            if (p.getCompanyName() != null) paidCoByDate.put(date, p.getCompanyName());
-            // resReasonForPayment 파싱 → 어떤 유형이 이미 지급됐는지 추적
-            Set<ClaimCategory> cats = parsePaymentCategories(p.getReasonForPayment());
-            paidCatsByDate.computeIfAbsent(date, k -> new HashSet<>()).addAll(cats);
-        }
+        // 지급 확정 건만 필터링 (날짜 범위 매칭에 사용)
+        List<ClaimPaymentInfo> paidPayments = payments.stream()
+                .filter(p -> "지급".equals(p.getJudgeResult()) && p.getOccurrenceDate() != null)
+                .toList();
 
         List<ClaimOpportunityDto> result = new ArrayList<>();
         for (MedicalRecordInfo r : records)
-            result.add(matchRecord(r, policies, paidCatsByDate, paidAmtByDate, paidCoByDate));
+            result.add(matchRecord(r, policies, paidPayments));
         return result;
     }
 
@@ -109,9 +99,7 @@ public class ClaimMatchingService {
 
     private ClaimOpportunityDto matchRecord(MedicalRecordInfo record,
                                              List<PolicyInfo> policies,
-                                             Map<LocalDate, Set<ClaimCategory>> paidCatsByDate,
-                                             Map<LocalDate, Double>             paidAmtByDate,
-                                             Map<LocalDate, String>             paidCoByDate) {
+                                             List<ClaimPaymentInfo> paidPayments) {
 
         String     diseaseCode    = resolveDiseaseCode(record);
         TreatClass tc             = classify(diseaseCode, record.getDepartment());
@@ -122,18 +110,25 @@ public class ClaimMatchingService {
                                     && record.getInsurancePayment() > 0;
         LocalDate  visitDate      = record.getVisitDate();
 
-        // 이 레코드의 지급 카테고리를 구하고, 해당 날짜에 동일 카테고리가 지급됐는지 확인
-        ClaimCategory recCat    = toClaimCategory(tc, treatType);
-        Set<ClaimCategory> paid = visitDate != null
-                                  ? paidCatsByDate.getOrDefault(visitDate, Set.of())
-                                  : Set.of();
-        boolean isClaimed = "CLAIMED".equals(record.getClaimStatus())
-                || paid.contains(ClaimCategory.ALL)
-                || paid.contains(recCat);
+        // occurrenceDate ≤ visitDate ≤ paymentDate 범위에서 동일 카테고리 지급 건 탐색
+        // 한 사고로 인한 여러 날짜 방문이 모두 동일 청구 건으로 처리될 수 있음
+        ClaimCategory recCat = toClaimCategory(tc, treatType);
+        ClaimPaymentInfo matchedPayment = null;
+        if (visitDate != null) {
+            for (ClaimPaymentInfo p : paidPayments) {
+                if (visitDate.isBefore(p.getOccurrenceDate())) continue;
+                if (p.getPaymentDate() != null && visitDate.isAfter(p.getPaymentDate())) continue;
+                Set<ClaimCategory> cats = parsePaymentCategories(p.getReasonForPayment());
+                if (cats.contains(ClaimCategory.ALL) || cats.contains(recCat)) {
+                    matchedPayment = p;
+                    break;
+                }
+            }
+        }
 
-        // 표시용: 해당 날짜의 총 지급금 + 보험사 (카테고리 무관하게 합산)
-        Double alreadyPaid = visitDate != null ? paidAmtByDate.get(visitDate) : null;
-        String paidCompany = visitDate != null ? paidCoByDate.get(visitDate)  : null;
+        boolean isClaimed  = "CLAIMED".equals(record.getClaimStatus()) || matchedPayment != null;
+        Double alreadyPaid = matchedPayment != null ? matchedPayment.getPaidAmount() : null;
+        String paidCompany = matchedPayment != null ? matchedPayment.getCompanyName() : null;
 
         var builder = ClaimOpportunityDto.builder()
                 .id(record.getId())
