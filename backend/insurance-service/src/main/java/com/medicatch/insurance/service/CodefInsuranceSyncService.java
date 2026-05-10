@@ -255,6 +255,18 @@ public class CodefInsuranceSyncService {
             LocalDate startDate = parseDateOrNull(startStr);
             LocalDate endDate   = parseDateOrNull(endStr);
 
+            // SUPPLEMENTARY(실손보장형)인데 실손의료비 담보가 하나도 없으면 제외
+            String resolvedType = typeResolver.apply(item);
+            if ("SUPPLEMENTARY".equals(resolvedType)) {
+                boolean hasActualLoss = covListForDate.stream()
+                        .anyMatch(cov -> "실손의료비".equals(str(cov.get("resType"))));
+                if (!hasActualLoss) {
+                    log.info("실손의료비 담보 없음, 실손 제외: {} ({})",
+                            policyNumber, str(item.get("resInsuranceName")));
+                    continue;
+                }
+            }
+
             String contractStatus = str(item.get("resContractStatus"));
             boolean isActive = "정상".equals(contractStatus) || "정".equals(contractStatus)
                     || (contractStatus == null && endDate != null && endDate.isAfter(LocalDate.now()));
@@ -272,7 +284,7 @@ public class CodefInsuranceSyncService {
                     .codefId(codefId)
                     .policyNumber(policyNumber)
                     .insurerName(strOrDefault(item.get("resCompanyNm"), "미상"))
-                    .insuranceType(typeResolver.apply(item))
+                    .insuranceType(resolvedType)
                     .startDate(startDate)
                     .endDate(endDate)
                     .isActive(isActive)
