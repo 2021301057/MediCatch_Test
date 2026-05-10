@@ -550,7 +550,7 @@ const MedicalRecords = () => {
                   <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
                     onClick={() => openModal(g)}>
                     <Ic d={P.arrow} size={12}/>
-                    예상 {fmt(g.totalClaimAmount)} 청구하기
+                    예상 금액 {fmt(g.totalClaimAmount)} 청구하기
                   </button>
                 )}
                 {!g.hasClaimable && g.hasCheckNeeded && !g.isFullyClaimed && (
