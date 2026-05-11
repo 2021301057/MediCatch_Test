@@ -24,22 +24,25 @@ const FILTERS = ['전체', '청구가능', '확인필요', '청구완료'];
 const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
 
 // ── 세대 뱃지 ──────────────────────────────────────────────────────────────
+const GEN_CONFIG = {
+  '1d': { bg: '#E8F5E9', color: '#2E7D32', label: '1세대 손보 실손' },
+  '1h': { bg: '#F1F8E9', color: '#33691E', label: '1세대 생보 실손' },
+  '2':  { bg: '#E3F2FD', color: '#1565C0', label: '2세대 실손' },
+  '3':  { bg: '#FFF3E0', color: '#E65100', label: '3세대 실손' },
+  '3k': { bg: '#FBE9E7', color: '#BF360C', label: '3세대 착한실손' },
+  '4':  { bg: '#FCE4EC', color: '#AD1457', label: '4세대 실손' },
+};
+const genLabel = (gen) => GEN_CONFIG[gen]?.label || null;
+
 const GenBadge = ({ gen }) => {
-  if (!gen || gen === 0) return null;
-  const colors = {
-    1: { bg: '#E8F5E9', color: '#2E7D32' },
-    2: { bg: '#E3F2FD', color: '#1565C0' },
-    3: { bg: '#FFF3E0', color: '#E65100' },
-    4: { bg: '#FCE4EC', color: '#AD1457' },
-    5: { bg: '#F3E5F5', color: '#6A1B9A' },
-  };
-  const s = colors[gen] || { bg: '#F5F5F5', color: '#616161' };
+  if (!gen) return null;
+  const s = GEN_CONFIG[gen] || { bg: '#F5F5F5', color: '#616161', label: gen };
   return (
     <span style={{
       fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
       background: s.bg, color: s.color, flexShrink: 0,
     }}>
-      {gen}세대 실손
+      {s.label}
     </span>
   );
 };
@@ -75,7 +78,7 @@ const buildDateGroup = (date, recs) => {
     hasCheckNeeded:      checkNeeded.length > 0,
     claimableRecs:       claimable,
     checkNeededRecs:     checkNeeded,
-    gen:                 primary?.supplementaryGeneration || 0,
+    gen:                 primary?.supplementaryGeneration || null,
     claimInsurance:      primary?.claimInsurance,
   };
 };
@@ -139,7 +142,7 @@ const buildGroups = (records) => {
       hasClaimable:        false,
       hasCheckNeeded:      false,
       coverageNotes:       [],
-      gen:                 0,
+      gen:                 null,
     });
   }
 
@@ -199,7 +202,6 @@ const MedicalRecords = () => {
     catch {}
   };
 
-  // 카드 accent 결정
   const cardAccent = (g) => {
     if (g.isFullyClaimed || g.isAnyClaimed) return 'mc-card-accent-success';
     if (g.hasClaimable)   return 'mc-card-accent-warning';
@@ -207,7 +209,6 @@ const MedicalRecords = () => {
     return '';
   };
 
-  // 카드 우상단 태그
   const cardTag = (g) => {
     if (g.isFullyClaimed) return { text: '청구 완료', cls: 'mc-tag-success' };
     if (g.isAnyClaimed)   return { text: '일부 완료', cls: 'mc-tag-success' };
@@ -548,7 +549,8 @@ const MedicalRecords = () => {
                 {g.hasClaimable && !g.isFullyClaimed && (
                   <button className="mc-btn mc-btn-primary" style={{ marginTop: 14 }}
                     onClick={() => openModal(g)}>
-                    <Ic d={P.arrow} size={12}/> 청구하기 ({fmt(g.totalClaimAmount)})
+                    <Ic d={P.arrow} size={12}/>
+                    예상 금액 {fmt(g.totalClaimAmount)} 청구하기
                   </button>
                 )}
                 {!g.hasClaimable && g.hasCheckNeeded && !g.isFullyClaimed && (
@@ -628,7 +630,7 @@ const MedicalRecords = () => {
                   { n: 3, title: '심사 및 승인',
                     desc: '보험사에서 청구 내용을 심사합니다 (약 7~10일).' },
                   { n: 4, title: '보험금 지급',
-                    desc: `승인 후 ${fmt(selectedGroup.totalClaimAmount)}이 지급됩니다.` },
+                    desc: `승인 후 약 ${fmt(selectedGroup.totalClaimAmount)} 지급 예정${selectedGroup.gen ? ` (${genLabel(selectedGroup.gen)} 기준)` : ''}.` },
                 ].map((s) => (
                   <div key={s.n} className="mc-step">
                     <div className="mc-step-num">{s.n}</div>
@@ -643,8 +645,8 @@ const MedicalRecords = () => {
                 <div style={{ color: 'var(--text-2)', lineHeight: 1.8, fontSize: 14 }}>
                   <p style={{ marginBottom: 10 }}>
                     가입하신 실손보험의 세대 및 약관에 따라 보장 여부가 달라질 수 있습니다.
-                    {selectedGroup.gen > 0 && (
-                      <> 현재 <strong>{selectedGroup.gen}세대 실손</strong>으로 확인됩니다.</>
+                    {selectedGroup.gen && genLabel(selectedGroup.gen) && (
+                      <> 현재 <strong>{genLabel(selectedGroup.gen)}</strong>으로 확인됩니다.</>
                     )}
                   </p>
                   <p>
