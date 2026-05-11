@@ -154,7 +154,7 @@ public class ClaimMatchingService {
         // 모든 활성 보험에서 최선 매칭
         MatchResult best = null;
         for (PolicyInfo p : policies) {
-            MatchResult mr = tryMatchPolicy(p, tc, treatType, hasPublicCharge, diseaseCode);
+            MatchResult mr = tryMatchPolicy(p, tc, treatType, hasPublicCharge, diseaseCode, visitDate);
             if (mr != null && rank(mr.confidence) > rank(best != null ? best.confidence : EXCLUDED))
                 best = mr;
         }
@@ -235,9 +235,17 @@ public class ClaimMatchingService {
 
     private MatchResult tryMatchPolicy(PolicyInfo policy, TreatClass tc,
                                         String treatType, boolean hasPublicCharge,
-                                        String diseaseCode) {
+                                        String diseaseCode, LocalDate visitDate) {
         if (policy.getCoverageItems() == null || !"ACTIVE".equals(policy.getContractStatus()))
             return null;
+
+        // 방문일이 보험 유효기간 밖이면 제외
+        if (visitDate != null) {
+            if (policy.getStartDate() != null && visitDate.isBefore(policy.getStartDate()))
+                return null;
+            if (policy.getEndDate() != null && visitDate.isAfter(policy.getEndDate()))
+                return null;
+        }
 
         String gen = detectGeneration(policy);
         MatchResult best = null;
