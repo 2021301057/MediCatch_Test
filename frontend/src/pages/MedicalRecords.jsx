@@ -330,42 +330,24 @@ const MedicalRecords = () => {
                   {/* 합산 비용 */}
                   <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                     <div>
-                      <div className="mc-field-label">{g.hasNonCovered ? '환자 부담 합계 (실부담)' : '환자 부담 합계'}</div>
+                      <div className="mc-field-label">급여 자기부담 합계</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                        {fmt(g.hasNonCovered ? g.totalPatientPayment + g.totalNonCovered : g.totalPatientPayment)}
+                        {fmt(g.totalPatientPayment)}
                       </div>
                     </div>
                     <div>
-                      <div className="mc-field-label">건보 부담 합계</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                        {fmt(g.totalInsurance)}
+                      <div className="mc-field-label">비급여 합계</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: g.hasNonCovered ? '#E65100' : 'var(--text-3)', marginTop: 4 }}>
+                        {g.hasNonCovered ? fmt(g.totalNonCovered) : '-'}
                       </div>
                     </div>
                     <div>
-                      <div className="mc-field-label">총 비용 합계</div>
+                      <div className="mc-field-label">총금액 합계</div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
-                        {fmt(g.hasNonCovered ? g.totalCost + g.totalNonCovered : g.totalCost)}
+                        {fmt(g.totalPatientPayment + (g.totalNonCovered || 0))}
                       </div>
                     </div>
                   </div>
-
-                  {/* 비급여 합산 */}
-                  {g.hasNonCovered && (
-                    <div style={{
-                      marginTop: 10, padding: '8px 12px', borderRadius: 8,
-                      background: 'var(--bg-2)', border: '1px solid var(--border)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}>
-                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                          급여 자기부담 <strong style={{ color: 'var(--text-2)' }}>{fmt(g.totalPatientPayment)}</strong>
-                        </span>
-                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ 비급여</span>
-                        <span style={{ fontSize: 12, color: '#E65100', fontWeight: 700 }}>{fmt(g.totalNonCovered)}</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', marginLeft: 8 }}>연말정산 기준</span>
-                    </div>
-                  )}
 
                   {/* 수령 내역 */}
                   <div style={{
@@ -412,23 +394,18 @@ const MedicalRecords = () => {
                           </div>
                           <div style={{ display: 'flex', gap: 16 }}>
                             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                              환자부담 <strong style={{ color: 'var(--text-1)' }}>
-                                {fmt(sg.hasNonCovered ? sg.totalPatientPayment + sg.totalNonCovered : sg.totalPatientPayment)}
-                              </strong>
+                              급여 <strong style={{ color: 'var(--text-1)' }}>{fmt(sg.totalPatientPayment)}</strong>
                             </span>
                             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                              건보 <strong style={{ color: 'var(--text-1)' }}>{fmt(sg.totalInsurance)}</strong>
+                              비급여 <strong style={{ color: sg.hasNonCovered ? '#E65100' : 'var(--text-3)' }}>
+                                {sg.hasNonCovered ? fmt(sg.totalNonCovered) : '-'}
+                              </strong>
                             </span>
                             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
                               총 <strong style={{ color: 'var(--blue)' }}>
-                                {fmt(sg.hasNonCovered ? sg.totalCost + sg.totalNonCovered : sg.totalCost)}
+                                {fmt(sg.totalPatientPayment + (sg.totalNonCovered || 0))}
                               </strong>
                             </span>
-                            {sg.hasNonCovered && (
-                              <span style={{ fontSize: 12, color: '#E65100' }}>
-                                비급여 {fmt(sg.totalNonCovered)}
-                              </span>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -469,57 +446,24 @@ const MedicalRecords = () => {
               <div className="mc-card-body">
                 <div className="mc-grid-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div>
-                    <div className="mc-field-label">
-                      {g.hasNonCovered ? '환자 부담 (실부담)' : '환자 부담'}
-                    </div>
+                    <div className="mc-field-label">급여 자기부담</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                      {fmt(g.hasNonCovered
-                        ? g.totalPatientPayment + g.totalNonCovered
-                        : g.totalPatientPayment)}
+                      {fmt(g.totalPatientPayment)}
                     </div>
                   </div>
                   <div>
-                    <div className="mc-field-label">건보 부담</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginTop: 4 }}>
-                      {fmt(g.totalInsurance)}
+                    <div className="mc-field-label">비급여</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: g.hasNonCovered ? '#E65100' : 'var(--text-3)', marginTop: 4 }}>
+                      {g.hasNonCovered ? fmt(g.totalNonCovered) : '-'}
                     </div>
                   </div>
                   <div>
-                    <div className="mc-field-label">총 비용</div>
+                    <div className="mc-field-label">총금액</div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--blue)', marginTop: 4 }}>
-                      {fmt(g.hasNonCovered
-                        ? g.totalCost + g.totalNonCovered
-                        : g.totalCost)}
+                      {fmt(g.totalPatientPayment + (g.totalNonCovered || 0))}
                     </div>
                   </div>
                 </div>
-
-                {g.hasNonCovered ? (
-                  <div style={{
-                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
-                    background: 'var(--bg-2)', border: '1px solid var(--border)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}>
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                        급여 자기부담 <strong style={{ color: 'var(--text-2)' }}>{fmt(g.totalPatientPayment)}</strong>
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ 비급여</span>
-                      <span style={{ fontSize: 12, color: '#E65100', fontWeight: 700 }}>
-                        {fmt(g.totalNonCovered)}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', marginLeft: 8 }}>연말정산 기준</span>
-                  </div>
-                ) : (
-                  <div style={{
-                    marginTop: 10, padding: '7px 12px', borderRadius: 8,
-                    background: 'var(--bg-2)', border: '1px dashed var(--border)',
-                    fontSize: 11.5, color: 'var(--text-3)',
-                  }}>
-                    💡 연말정산 연동 시 비급여 금액을 확인할 수 있습니다
-                  </div>
-                )}
 
                 {g.alreadyPaid > 0 && (
                   <div style={{
