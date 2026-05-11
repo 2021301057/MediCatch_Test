@@ -248,13 +248,14 @@ public class ClaimMatchingService {
         }
 
         String gen = detectGeneration(policy);
+        boolean isSuppl = policy.isHasSupplementaryCoverage();
         MatchResult best = null;
 
         for (PolicyInfo.CoverageItemInfo item : policy.getCoverageItems()) {
             if (!item.isCovered()) continue;
             String itemName = item.getName() != null ? item.getName() : "";
             MatchResult mr  = tryMatchItem(policy.getCompanyName(), itemName,
-                                           tc, treatType, hasPublicCharge, diseaseCode, gen);
+                                           tc, treatType, hasPublicCharge, diseaseCode, gen, isSuppl);
             if (mr != null && rank(mr.confidence) > rank(best != null ? best.confidence : EXCLUDED))
                 best = mr;
         }
@@ -266,13 +267,14 @@ public class ClaimMatchingService {
     private MatchResult tryMatchItem(String company, String itemName,
                                       TreatClass tc, String treatType,
                                       boolean hasPublicCharge, String diseaseCode,
-                                      String gen) {
+                                      String gen, boolean isSuppl) {
         String lower = itemName.toLowerCase();
 
         // ── 치과 ─────────────────────────────────────────────────────────
         // AK* = 치과 질병 코드: 1세대 완전 면책, 2세대+ 급여만 보상
         // AS* = 치과 상해 → TreatClass.INJURY로 분류되어 상해 항목에서 처리됨
         if (tc == TreatClass.DENTAL) {
+            if (!isSuppl) return null;
             if (lower.contains("질병") && (lower.contains("통원") || lower.contains("입원")))
                 return matchDentalDisease(company, itemName, hasPublicCharge, gen);
             return null;
@@ -280,34 +282,35 @@ public class ClaimMatchingService {
 
         // ── 한방 ─────────────────────────────────────────────────────────
         if (tc == TreatClass.ORIENTAL && (lower.contains("질병") || lower.contains("상해"))) {
+            if (!isSuppl) return null;
             return matchOriental(company, itemName, hasPublicCharge, gen, treatType);
         }
 
         // ── 실손 통원/입원 ────────────────────────────────────────────────
         if (lower.contains("상해") && lower.contains("통원")) {
             if (tc == TreatClass.INJURY && isOutpatient(treatType))
-                return matchInjury(company, itemName, gen, false);
+                return isSuppl ? matchInjury(company, itemName, gen, false) : null;
         }
         if (lower.contains("상해") && lower.contains("입원")) {
             if (tc == TreatClass.INJURY && isInpatient(treatType))
-                return matchInjury(company, itemName, gen, true);
+                return isSuppl ? matchInjury(company, itemName, gen, true) : null;
         }
         if (lower.contains("질병") && lower.contains("통원")) {
             if ((tc == TreatClass.DISEASE || tc == TreatClass.DENTAL || tc == TreatClass.ORIENTAL)
                     && isOutpatient(treatType))
-                return matchDisease(company, itemName, hasPublicCharge, gen, false);
+                return isSuppl ? matchDisease(company, itemName, hasPublicCharge, gen, false) : null;
         }
         if (lower.contains("질병") && lower.contains("입원")) {
             if ((tc == TreatClass.DISEASE || tc == TreatClass.DENTAL || tc == TreatClass.ORIENTAL)
                     && isInpatient(treatType))
-                return matchDisease(company, itemName, hasPublicCharge, gen, true);
+                return isSuppl ? matchDisease(company, itemName, hasPublicCharge, gen, true) : null;
         }
 
         // ── 처방약 ────────────────────────────────────────────────────────
         if (lower.contains("처방") || (lower.contains("약") && !lower.contains("의약"))) {
             if (tc == TreatClass.PHARMACY)
-                return new MR(company, itemName, CONFIRMED, gen,
-                        gl(gen) + " · 처방약 보장");
+                return isSuppl ? new MR(company, itemName, CONFIRMED, gen,
+                        gl(gen) + " · 처방약 보장") : null;
         }
 
         // ── 정액 (진단코드 직접 매핑) ─────────────────────────────────────
