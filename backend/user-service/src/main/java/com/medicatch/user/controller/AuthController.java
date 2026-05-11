@@ -6,6 +6,7 @@ import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
 import com.medicatch.user.dto.SignupStep2Request;
 import com.medicatch.user.dto.SignupStep3Request;
+import com.medicatch.user.dto.SignupStep4Request;
 import com.medicatch.user.dto.UserProfileResponse;
 import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
@@ -44,22 +45,32 @@ public class AuthController {
     }
 
     /**
-     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인) → 계정 생성 및 JWT 발급
+     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인)
      */
     @PostMapping("/signup/step2")
-    public ResponseEntity<AuthResponse> signupStep2(@Valid @RequestBody SignupStep2Request request) {
+    public ResponseEntity<Map<String, String>> signupStep2(@Valid @RequestBody SignupStep2Request request) {
         log.info("POST /api/auth/signup/step2 - sessionKey: {}", request.getSessionKey());
-        AuthResponse response = authService.signupStep2(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        authService.signupStep2(request);
+        return ResponseEntity.ok(Map.of("message", "이메일로 발송된 인증번호를 입력해주세요."));
     }
 
     /**
-     * 회원가입 3단계: 이메일 인증 완료 → 계정 생성 및 JWT 발급
+     * 회원가입 3단계: CODEF 이메일 인증 트리거 (이메일 발송)
      */
     @PostMapping("/signup/step3")
-    public ResponseEntity<AuthResponse> signupStep3(@Valid @RequestBody SignupStep3Request request) {
+    public ResponseEntity<Map<String, String>> signupStep3(@Valid @RequestBody SignupStep3Request request) {
         log.info("POST /api/auth/signup/step3 - sessionKey: {}", request.getSessionKey());
-        AuthResponse response = authService.signupStep3(request);
+        authService.signupStep3(request);
+        return ResponseEntity.ok(Map.of("message", "이메일로 인증번호가 발송되었습니다. 이메일을 확인해주세요."));
+    }
+
+    /**
+     * 회원가입 4단계: 이메일 인증 확인 → 계정 생성 및 JWT 발급
+     */
+    @PostMapping("/signup/step4")
+    public ResponseEntity<AuthResponse> signupStep4(@Valid @RequestBody SignupStep4Request request) {
+        log.info("POST /api/auth/signup/step4 - sessionKey: {}", request.getSessionKey());
+        AuthResponse response = authService.signupStep4(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -68,7 +79,7 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        log.info("POST /api/auth/login - loginId: {}", request.getLoginId());
+        log.info("POST /api/auth/login - codefId: {}", request.getCodefId());
         try {
             AuthResponse response = authService.login(request);
             return ResponseEntity.ok(response);

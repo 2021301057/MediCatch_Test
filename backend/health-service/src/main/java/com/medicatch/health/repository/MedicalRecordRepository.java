@@ -13,4 +13,6 @@ public interface MedicalRecordRepository extends JpaRepository<MedicalRecord, Lo
     List<MedicalRecord> findByUserIdOrderByVisitDateDesc(Long userId);
 
     List<MedicalRecord> findByUserIdAndVisitDateBetween(Long userId, LocalDate startDate, LocalDate endDate);
+
+    void deleteByUserId(Long userId);
 }

@@ -50,6 +50,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup/step1").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup/step2").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup/step3").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/signup/step4").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/health").permitAll()

@@ -67,7 +67,7 @@ function getRuleBasedResponse(message) {
   return `안녕하세요! MediCatch AI 어시스턴트입니다.\n\n**"${message}"** 에 대해 도움을 드리겠습니다.\n\n현재 고객님의 보험 정보를 분석하고 있어요. 더 정확한 답변을 위해 좌측 메뉴에서:\n- **진료 전 검색**: 특정 치료의 보장 여부 확인\n- **내 보험 조회**: 가입한 보험 상세 확인\n- **보험 추천 & 공백**: AI 분석 결과 확인\n\n구체적인 질문을 해주시면 더 정확히 안내해드릴게요.`;
 }
 
-export default function HealthChat() {
+export default function HealthChat({ variant = 'page', initialQuery = '' }) {
   const [messages, setMessages] = useState([
     { role: 'assistant',
       content: '안녕하세요! MediCatch AI 어시스턴트입니다.\n\n건강보험에 대해 궁금한 것을 자유롭게 물어보세요.\n- "도수치료 보험 돼?"\n- "실손 청구 어떻게 해?"\n- "내 보장에 뭐가 부족해?" 등\n\n내 건강·보험 데이터를 바탕으로 맞춤 답변을 드립니다.' },
@@ -78,17 +78,18 @@ export default function HealthChat() {
   const bottomRef = useRef(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const isPopup = variant === 'popup';
 
   useEffect(() => {
-    const q = searchParams.get('q') || searchParams.get('query');
+    const q = initialQuery || searchParams.get('q') || searchParams.get('query');
     if (q) setInput(q);
-  }, []);
+  }, [initialQuery, searchParams]);
 
   useEffect(() => {
     chatAPI.getHistory()
       .then((r) => {
-        if (r?.data?.length > 0) {
-          setMessages(r.data.map((h) => ({
+        if (Array.isArray(r) && r.length > 0) {
+          setMessages(r.map((h) => ({
             role: h.role.toLowerCase(), content: h.message,
           })));
           setUseMode('backend');
@@ -110,8 +111,8 @@ export default function HealthChat() {
     try {
       let responseText = '';
       if (useMode === 'backend') {
-        const { data } = await chatAPI.sendMessage(msg);
-        responseText = data.message;
+        const res = await chatAPI.sendMessage(msg);
+        responseText = res?.message || res?.content || '';
       } else if (useMode === 'openai') {
         const history = messages.map((m) => ({ role: m.role, content: m.content }));
         responseText = await callOpenAIDirect([...history, { role: 'user', content: msg }]);
@@ -146,25 +147,38 @@ export default function HealthChat() {
   }[useMode];
 
   return (
-    <div className="mc-page fade-in">
-      <div className="mc-page-top">
-        <div>
-          <div className="mc-page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Ic d={P.chat} size={16}/> 건강 AI 채팅
+    <div className={isPopup ? 'mc-chat-embed' : 'mc-page fade-in'}>
+      {!isPopup && (
+        <div className="mc-page-top">
+          <div>
+            <div className="mc-page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Ic d={P.chat} size={16}/> 건강 AI 채팅
+            </div>
+            <div className="mc-page-subtitle">내 건강·보험 데이터 기반 AI 어시스턴트</div>
           </div>
-          <div className="mc-page-subtitle">내 건강·보험 데이터 기반 AI 어시스턴트</div>
+          <div className="mc-page-top-right" style={{ gap: 8 }}>
+            <span className={`mc-tag ${modeLabel.cls}`}>
+              <Ic d={P.spark} size={10}/> {modeLabel.text}
+            </span>
+            <button className="mc-btn" onClick={clearHistory}>
+              <Ic d={P.trash} size={12}/> 대화 초기화
+            </button>
+          </div>
         </div>
-        <div className="mc-page-top-right" style={{ gap: 8 }}>
-          <span className={`mc-tag ${modeLabel.cls}`}>
-            <Ic d={P.spark} size={10}/> {modeLabel.text}
-          </span>
-          <button className="mc-btn" onClick={clearHistory}>
-            <Ic d={P.trash} size={12}/> 대화 초기화
-          </button>
-        </div>
-      </div>
+      )}
 
       <div className="mc-chat-shell">
+        {isPopup && (
+          <div className="mc-chat-popup-toolbar">
+            <span className={`mc-tag ${modeLabel.cls}`}>
+              <Ic d={P.spark} size={10}/> {modeLabel.text}
+            </span>
+            <button className="mc-btn" onClick={clearHistory}>
+              <Ic d={P.trash} size={12}/> 초기화
+            </button>
+          </div>
+        )}
+
         {/* 빠른 질문 */}
         <div className="mc-chat-quick">
           <div className="mc-chat-quick-label">자주 묻는 질문</div>

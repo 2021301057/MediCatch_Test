@@ -1,8 +1,9 @@
 package com.medicatch.health.controller;
 
-import com.medicatch.health.entity.CheckupResult;
-import com.medicatch.health.entity.MedicalRecord;
+import com.medicatch.health.dto.CheckupResultDto;
+import com.medicatch.health.dto.MedicalRecordDto;
 import com.medicatch.health.entity.MedicationDetail;
+import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -19,9 +21,11 @@ import java.util.Map;
 public class HealthController {
 
     private final HealthService healthService;
+    private final CodefSyncService codefSyncService;
 
-    public HealthController(HealthService healthService) {
+    public HealthController(HealthService healthService, CodefSyncService codefSyncService) {
         this.healthService = healthService;
+        this.codefSyncService = codefSyncService;
     }
 
     /**
@@ -43,16 +47,17 @@ public class HealthController {
      * Get medical records
      */
     @GetMapping("/medical-records")
-    public ResponseEntity<List<MedicalRecord>> getMedicalRecords(
+    public ResponseEntity<List<MedicalRecordDto>> getMedicalRecords(
             @RequestParam Long userId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/medical-records - userId: {}", userId);
         try {
-            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(1);
+            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(3);
             LocalDate end = endDate != null ? endDate : LocalDate.now();
 
-            List<MedicalRecord> records = healthService.getMedicalRecords(userId, start, end);
+            List<MedicalRecordDto> records = healthService.getMedicalRecords(userId, start, end)
+                    .stream().map(MedicalRecordDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(records);
         } catch (Exception e) {
             log.error("Error getting medical records: {}", e.getMessage(), e);
@@ -64,16 +69,17 @@ public class HealthController {
      * Get checkup results
      */
     @GetMapping("/checkup-results")
-    public ResponseEntity<List<CheckupResult>> getCheckupResults(
+    public ResponseEntity<List<CheckupResultDto>> getCheckupResults(
             @RequestParam Long userId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/checkup-results - userId: {}", userId);
         try {
-            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(2);
+            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(3);
             LocalDate end = endDate != null ? endDate : LocalDate.now();
 
-            List<CheckupResult> results = healthService.getCheckupResults(userId, start, end);
+            List<CheckupResultDto> results = healthService.getCheckupResults(userId, start, end)
+                    .stream().map(CheckupResultDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(results);
         } catch (Exception e) {
             log.error("Error getting checkup results: {}", e.getMessage(), e);
@@ -111,6 +117,152 @@ public class HealthController {
         } catch (Exception e) {
             log.error("Error getting health risk level: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * CODEF 건강 데이터 동기화 1단계: 건강검진(NHIS) + 진료정보(HIRA) 1차 요청
+     */
+    @PostMapping("/sync/step1")
+    public ResponseEntity<Map<String, Object>> syncStep1(@RequestBody Map<String, Object> body) {
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) return ResponseEntity.badRequest().body(Map.of("message", "userId가 필요합니다."));
+        Long userId = Long.parseLong(userIdObj.toString());
+        log.info("POST /api/health/sync/step1 - userId: {}", userId);
+        try {
+            CodefSyncService.SyncStep1Response resp = codefSyncService.syncStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.get("telecom"),
+                    (String) body.get("loginTypeLevel")
+            );
+            return ResponseEntity.ok(Map.of(
+                    "sessionKey",      resp.getSessionKey(),
+                    "loginTypeLevel",  resp.getLoginTypeLevel(),
+                    "requiresTwoWay",  resp.isRequiresTwoWay()
+            ));
+        } catch (Exception e) {
+            log.error("건강 데이터 동기화 1차 실패: {}", e.getMessage(), e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류가 발생했습니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    /**
+     * CODEF 건강 데이터 동기화 2단계: 인증 확인 + DB 저장
+     */
+    @PostMapping("/sync/step2")
+    public ResponseEntity<Map<String, Object>> syncStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/step2");
+        try {
+            String sessionKey = (String) body.get("sessionKey");
+            CodefSyncService.SyncStep2Result result = codefSyncService.syncStep2(sessionKey, "");
+            return ResponseEntity.ok(Map.of(
+                    "message",          "건강 데이터 동기화가 완료되었습니다.",
+                    "savedCheckups",    result.getSavedCheckups(),
+                    "savedMedicals",    result.getSavedMedicals(),
+                    "savedMedications", result.getSavedMedications()
+            ));
+        } catch (Exception e) {
+            log.error("건강 데이터 동기화 2차 실패: {}", e.getMessage(), e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류가 발생했습니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    // ── 건강검진(NHIS) 단독 ──────────────────────────────────────────────
+
+    @PostMapping("/sync/checkup/step1")
+    public ResponseEntity<Map<String, Object>> syncCheckupStep1(@RequestBody Map<String, Object> body) {
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) {
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", "userId가 필요합니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+        Long userId = Long.parseLong(userIdObj.toString());
+        log.info("POST /api/health/sync/checkup/step1 - userId: {}", userId);
+        try {
+            String sessionKey = codefSyncService.syncCheckupStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.get("telecom"),
+                    (String) body.get("loginTypeLevel")
+            );
+            return ResponseEntity.ok(Map.of("sessionKey", sessionKey));
+        } catch (Exception e) {
+            log.error("건강검진 1차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    @PostMapping("/sync/checkup/step2")
+    public ResponseEntity<Map<String, Object>> syncCheckupStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/checkup/step2");
+        try {
+            int saved = codefSyncService.syncCheckupStep2((String) body.get("sessionKey"));
+            return ResponseEntity.ok(Map.of("message", "건강검진 동기화 완료", "savedCheckups", saved));
+        } catch (Exception e) {
+            log.error("건강검진 2차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    // ── 진료정보(HIRA) 단독 ──────────────────────────────────────────────
+
+    @PostMapping("/sync/medical/step1")
+    public ResponseEntity<Map<String, Object>> syncMedicalStep1(@RequestBody Map<String, Object> body) {
+        Object userIdObj = body.get("userId");
+        if (userIdObj == null) {
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", "userId가 필요합니다.");
+            return ResponseEntity.badRequest().body(err);
+        }
+        Long userId = Long.parseLong(userIdObj.toString());
+        log.info("POST /api/health/sync/medical/step1 - userId: {}", userId);
+        try {
+            String sessionKey = codefSyncService.syncMedicalStep1(
+                    userId,
+                    (String) body.get("userName"),
+                    (String) body.get("phoneNo"),
+                    (String) body.get("identity13"),
+                    (String) body.get("telecom"),
+                    (String) body.get("loginTypeLevel")
+            );
+            return ResponseEntity.ok(Map.of("sessionKey", sessionKey));
+        } catch (Exception e) {
+            log.error("진료정보 1차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    @PostMapping("/sync/medical/step2")
+    public ResponseEntity<Map<String, Object>> syncMedicalStep2(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/health/sync/medical/step2");
+        try {
+            int[] counts = codefSyncService.syncMedicalStep2((String) body.get("sessionKey"));
+            return ResponseEntity.ok(Map.of(
+                    "message",          "진료 기록 동기화 완료",
+                    "savedMedicals",    counts[0],
+                    "savedMedications", counts[1]
+            ));
+        } catch (Exception e) {
+            log.error("진료정보 2차 실패: {}", e.getMessage(), e);
+            HashMap<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
+            return ResponseEntity.badRequest().body(err);
         }
     }
 

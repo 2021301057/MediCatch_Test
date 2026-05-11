@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
-import { recommendAPI } from '../api/services';
+import { recommendAPI, analysisAPI } from '../api/services';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -62,9 +62,16 @@ const InsurancePlan = () => {
     const fetchPlan = async () => {
       setLoading(true);
       try {
-        const data = await recommendAPI.getCoveragePlan();
-        if (data?.gaps)             setGaps(data.gaps);
-        if (data?.recommendations)  setRecommendations(data.recommendations);
+        const [gapData, recData] = await Promise.allSettled([
+          analysisAPI.getCoverageGap(),
+          recommendAPI.getProducts(),
+        ]);
+        if (gapData.status === 'fulfilled' && Array.isArray(gapData.value) && gapData.value.length) {
+          setGaps(gapData.value);
+        }
+        if (recData.status === 'fulfilled' && Array.isArray(recData.value) && recData.value.length) {
+          setRecommendations(recData.value);
+        }
       } catch (error) {
         console.error('Failed to fetch plan:', error);
       } finally {
@@ -76,7 +83,7 @@ const InsurancePlan = () => {
 
   const score = 73;
   const currentPremium = 297000;
-  const addPremium = recommendations.reduce((s, r) => s + r.monthlyPremium, 0);
+  const addPremium = recommendations.reduce((s, r) => s + (r.monthlyPremium || 0), 0);
   const optimizedPremium = currentPremium + addPremium;
 
   return (
@@ -115,13 +122,8 @@ const InsurancePlan = () => {
           <div style={{ fontSize: 12.5, marginTop: 8, opacity: 0.9 }}>
             현재 보장 수준 · 보장 공백 {gaps.filter((g) => g.gap > 0).length}개 발견
           </div>
-          <div className="mc-pbar" style={{
-            marginTop: 14, background: 'rgba(255,255,255,0.2)',
-          }}>
-            <div
-              className="mc-pbar-fill"
-              style={{ width: `${score}%`, background: '#fff' }}
-            />
+          <div className="mc-pbar" style={{ marginTop: 14, background: 'rgba(255,255,255,0.2)' }}>
+            <div className="mc-pbar-fill" style={{ width: `${score}%`, background: '#fff' }}/>
           </div>
         </div>
 
@@ -245,11 +247,11 @@ const InsurancePlan = () => {
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   fontWeight: 800, fontSize: 14, letterSpacing: '-0.4px',
                 }}>
-                  {rec.company.charAt(0)}
+                  {rec.company?.charAt(0) || '보'}
                 </div>
                 <div>
-                  <div className="mc-card-title">{rec.product}</div>
-                  <div className="mc-card-sub">{rec.company}</div>
+                  <div className="mc-card-title">{rec.product || rec.productName}</div>
+                  <div className="mc-card-sub">{rec.company || rec.companyName}</div>
                 </div>
               </div>
               <div style={{
@@ -263,13 +265,13 @@ const InsurancePlan = () => {
               <div className="mc-alert mc-alert-blue">
                 <div>
                   <div className="mc-alert-title">추천 이유</div>
-                  <div className="mc-alert-body">{rec.reason}</div>
+                  <div className="mc-alert-body">{rec.reason || rec.description}</div>
                 </div>
               </div>
               <button
                 className="mc-btn mc-btn-primary mc-btn-block"
                 style={{ marginTop: 12 }}
-                onClick={() => navigate(`/chat?query=${encodeURIComponent(rec.product)}`)}
+                onClick={() => navigate(`/chat?query=${encodeURIComponent(rec.product || rec.productName || '')}`)}
               >
                 <Ic d={P.arrow} size={12}/> 자세히 보기
               </button>

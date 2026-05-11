@@ -1,13 +1,37 @@
-**/build/
-**/target/
-**/.gradle/
-**/out/
-**/node_modules/
-**/dist/
-frontend/build/
+# 환경변수 (CODEF API 키 절대 커밋 금지!)
+.env
+*.env
+application-local.yml
+application-prod.yml
+
+# Java/Spring
+*.class
+*.jar
+*.war
+/backend/build/
+/backend/target/
+.gradle/
+/backend/.gradle/
+
+# IntelliJ IDEA
 .idea/
 *.iml
+*.iws
+out/
+
+# VS Code
 .vscode/
+
+# Node/React
+node_modules/
+/frontend/dist/
+/frontend/build/
+/frontend/.env.local
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
 *.log
-*.class
+logs/

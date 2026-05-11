@@ -3,6 +3,20 @@ spring:
     name: gateway-service
   cloud:
     gateway:
+      httpclient:
+        response-timeout: 180s
+        connect-timeout: 10000
+      default-filters:
+        - name: Retry
+          args:
+            retries: 3
+            statuses: SERVICE_UNAVAILABLE, BAD_GATEWAY
+            methods: GET, POST, DELETE
+            backoff:
+              firstBackoff: 100ms
+              maxBackoff: 1000ms
+              factor: 2
+              basedOnPreviousValue: false
       routes:
         # User Service Routes
         - id: user-service
@@ -19,6 +33,9 @@ spring:
             - Path=/api/health/**
           filters:
             - JwtAuthenticationFilter
+          metadata:
+            response-timeout: 180000
+            connect-timeout: 10000
 
         # Insurance Service Routes
         - id: insurance-service
@@ -27,6 +44,9 @@ spring:
             - Path=/api/insurance/**
           filters:
             - JwtAuthenticationFilter
+          metadata:
+            response-timeout: 120000
+            connect-timeout: 10000
 
         # Analysis Service Routes
         - id: analysis-service
@@ -49,6 +69,11 @@ spring:
           enabled: true
           lower-case-service-id: true
 
+    loadbalancer:
+      cache:
+        ttl: 5s
+        capacity: 256
+
 server:
   port: 8000
   servlet:
@@ -61,11 +86,12 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5
   instance:
     instance-id: ${spring.application.name}:${random.value}
     prefer-ip-address: true
-    lease-renewal-interval-in-seconds: 10
-    lease-expiration-duration-in-seconds: 30
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
 
 management:
   endpoints:

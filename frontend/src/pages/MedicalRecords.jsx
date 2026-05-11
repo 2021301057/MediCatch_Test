@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { healthAPI } from '../api/services';
+import useAuthStore from '../store/authStore';
+import CodefSyncModal from '../components/CodefSyncModal';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -36,12 +38,13 @@ const FILTERS = ['전체', '청구가능', '청구완료'];
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
 
 const MedicalRecords = () => {
+  const { user } = useAuthStore();
   const [records, setRecords] = useState(MOCK_RECORDS);
   const [filterStatus, setFilterStatus] = useState('전체');
   const [showClaimModal, setShowClaimModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     const fetchRecords = async () => {
@@ -71,15 +74,10 @@ const MedicalRecords = () => {
     setShowClaimModal(true);
   };
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await healthAPI.syncFromCodef();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setTimeout(() => setSyncing(false), 900);
-    }
+  const handleSyncSuccess = () => {
+    healthAPI.getMedicalRecords()
+      .then((data) => { if (Array.isArray(data) && data.length) setRecords(data); })
+      .catch(() => {});
   };
 
   return (
@@ -88,17 +86,6 @@ const MedicalRecords = () => {
         <div>
           <div className="mc-page-title">의료 기록 & 청구</div>
           <div className="mc-page-subtitle">진료 내역을 확인하고 놓친 보험 청구 기회를 확인하세요.</div>
-        </div>
-        <div className="mc-page-top-right">
-          <button className="mc-btn" onClick={handleSync} disabled={syncing}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              animation: syncing ? 'spin 0.9s linear infinite' : 'none',
-            }}>
-              <Ic d={P.sync} size={12}/>
-            </span>
-            {' '}CODEF 동기화
-          </button>
         </div>
       </div>
 
@@ -249,6 +236,14 @@ const MedicalRecords = () => {
       )}
 
       {/* 청구 절차 모달 */}
+      {showSyncModal && (
+        <CodefSyncModal
+          userId={user?.userId}
+          onClose={() => setShowSyncModal(false)}
+          onSuccess={handleSyncSuccess}
+        />
+      )}
+
       {showClaimModal && selectedRecord && (
         <div className="mc-modal-backdrop" onClick={() => setShowClaimModal(false)}>
           <div className="mc-modal" onClick={(e) => e.stopPropagation()}>

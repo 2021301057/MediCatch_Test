@@ -70,7 +70,7 @@ const CheckupRecords = () => {
     const fetchCheckups = async () => {
       setLoading(true);
       try {
-        const data = await healthAPI.getCheckupRecords();
+        const data = await healthAPI.getCheckupResults();
         if (Array.isArray(data) && data.length) setCheckups(data);
       } catch (error) {
         console.error('Failed to fetch checkups:', error);
@@ -98,9 +98,7 @@ const CheckupRecords = () => {
       <div className="mc-two-col" style={{ gridTemplateColumns: '360px 1fr' }}>
         <div className={`mc-card mc-card-body ${isYounger ? 'mc-card-accent-success' : 'mc-card-accent-warning'}`}>
           <div className="mc-field-label">건강나이</div>
-          <div style={{
-            display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6,
-          }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
             <div style={{
               fontSize: 36, fontWeight: 800, letterSpacing: '-0.5px',
               color: isYounger ? '#3A7A62' : '#8A7040',

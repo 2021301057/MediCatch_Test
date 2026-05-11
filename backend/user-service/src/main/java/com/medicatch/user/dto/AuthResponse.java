@@ -14,16 +14,19 @@ public class AuthResponse {
     private Long userId;
     private String email;
     private String name;
+    private String codefId;
     private String accessToken;
     private String refreshToken;
-    private long expiresIn;  // in milliseconds
-    private String tokenType;  // "Bearer"
+    private long expiresIn;
+    private String tokenType;
 
-    public static AuthResponse of(Long userId, String email, String name, String accessToken, String refreshToken, long expiresIn) {
+    public static AuthResponse of(Long userId, String email, String name, String codefId,
+                                   String accessToken, String refreshToken, long expiresIn) {
         return AuthResponse.builder()
                 .userId(userId)
                 .email(email)
                 .name(name)
+                .codefId(codefId)
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .expiresIn(expiresIn)

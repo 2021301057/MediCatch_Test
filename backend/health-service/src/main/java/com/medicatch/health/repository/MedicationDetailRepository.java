@@ -15,4 +15,6 @@ public interface MedicationDetailRepository extends JpaRepository<MedicationDeta
     List<MedicationDetail> findByUserIdOrderByPrescribedDateDesc(Long userId);
 
     List<MedicationDetail> findByUserIdAndPrescribedDateBetween(Long userId, LocalDate startDate, LocalDate endDate);
+
+    void deleteByUserId(Long userId);
 }

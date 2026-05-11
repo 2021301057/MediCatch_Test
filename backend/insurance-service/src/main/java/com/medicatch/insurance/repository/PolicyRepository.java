@@ -11,8 +11,10 @@ import java.util.Optional;
 public interface PolicyRepository extends JpaRepository<Policy, Long> {
 
     List<Policy> findByUserIdAndIsActive(Long userId, boolean isActive);
+    List<Policy> findByUserId(Long userId);
+    List<Policy> findByCodefId(String codefId);
+    List<Policy> findByCodefIdAndIsActive(String codefId, boolean isActive);
+    void deleteByCodefId(String codefId);
 
     Optional<Policy> findByPolicyNumber(String policyNumber);
-
-    List<Policy> findByUserId(Long userId);
 }

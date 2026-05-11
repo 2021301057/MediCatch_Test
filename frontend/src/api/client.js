@@ -4,16 +4,23 @@ const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/ap
 
 const api = axios.create({ baseURL: BASE_URL, timeout: 10000 });
 
-// 요청마다 JWT 자동 첨부
+// 요청마다 JWT + userId 자동 첨부
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // GET 요청에 userId, codefId 자동 포함
+  if (config.method === 'get') {
+    const userId = localStorage.getItem('userId');
+    const codefId = localStorage.getItem('codefId');
+    config.params = { ...(userId ? { userId } : {}), ...(codefId ? { codefId } : {}), ...config.params };
+  }
   return config;
 });
 
 // 401 → 자동 토큰 갱신
 api.interceptors.response.use(
-  res => res,
+  res => res.data,
   async err => {
     if (err.response?.status === 401) {
       try {

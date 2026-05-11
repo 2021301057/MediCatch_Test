@@ -1,12 +1,16 @@
 import { create } from 'zustand';
 
+const savedUserId = localStorage.getItem('userId');
+
 const useAuthStore = create((set) => ({
-  user: null,
+  user: savedUserId ? { userId: Number(savedUserId) } : null,
   isAuthenticated: !!localStorage.getItem('accessToken'),
 
   login: (user, accessToken, refreshToken) => {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    if (user?.userId) localStorage.setItem('userId', String(user.userId));
+    if (user?.codefId) localStorage.setItem('codefId', user.codefId);
     set({ user, isAuthenticated: true });
   },
 
@@ -15,7 +19,10 @@ const useAuthStore = create((set) => ({
     set({ user: null, isAuthenticated: false });
   },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    if (user?.userId) localStorage.setItem('userId', String(user.userId));
+    set({ user });
+  },
 }));
 
 export default useAuthStore;

@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/common/Navbar';
+import FloatingHealthChat from './components/FloatingHealthChat';
 import useAuthStore from './store/authStore';
 import { authAPI } from './api/services';
 
@@ -13,11 +14,30 @@ import InsuranceList    from './pages/InsuranceList';
 import MedicalRecords   from './pages/MedicalRecords';
 import InsurancePlan    from './pages/InsurancePlan';
 import HealthReport     from './pages/HealthReport';
-import HealthChat       from './pages/HealthChat';
 
 function Layout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuthStore();
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatQuery, setChatQuery] = useState('');
+  const lastContentPath = useRef('/');
   const isLogin = location.pathname === '/login';
+
+  useEffect(() => {
+    if (isLogin) return;
+
+    if (location.pathname === '/chat') {
+      const params = new URLSearchParams(location.search);
+      setChatQuery(params.get('q') || params.get('query') || '');
+      setChatOpen(true);
+      navigate(lastContentPath.current || '/', { replace: true });
+      return;
+    }
+
+    lastContentPath.current = `${location.pathname}${location.search}${location.hash}`;
+  }, [isLogin, location, navigate]);
+
   if (isLogin) return children;
   return (
     <>
@@ -25,6 +45,14 @@ function Layout({ children }) {
       <main style={{ minHeight: '100vh' }}>
         {children}
       </main>
+      {isAuthenticated && (
+        <FloatingHealthChat
+          open={chatOpen}
+          onOpen={() => setChatOpen(true)}
+          onClose={() => setChatOpen(false)}
+          initialQuery={chatQuery}
+        />
+      )}
     </>
   );
 }
@@ -39,7 +67,7 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      authAPI.profile().then(r => setUser(r.data)).catch(() => {});
+      authAPI.profile().then(r => setUser(r)).catch(() => {});
     }
   }, []);
 
@@ -55,7 +83,7 @@ export default function App() {
           <Route path="/medical-records" element={<PrivateRoute><MedicalRecords /></PrivateRoute>} />
           <Route path="/insurance-plan"  element={<PrivateRoute><InsurancePlan /></PrivateRoute>} />
           <Route path="/health-report"   element={<PrivateRoute><HealthReport /></PrivateRoute>} />
-          <Route path="/chat"            element={<PrivateRoute><HealthChat /></PrivateRoute>} />
+          <Route path="/chat"            element={<PrivateRoute><Navigate to="/" replace /></PrivateRoute>} />
           <Route path="*"                element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

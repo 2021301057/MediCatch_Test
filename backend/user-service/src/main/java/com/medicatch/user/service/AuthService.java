@@ -7,6 +7,7 @@ import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
 import com.medicatch.user.dto.SignupStep2Request;
 import com.medicatch.user.dto.SignupStep3Request;
+import com.medicatch.user.dto.SignupStep4Request;
 import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.repository.UserRepository;
@@ -16,11 +17,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 @Slf4j
 @Service
 @Transactional
 public class AuthService {
+
+    private static final Set<String> ALLOWED_EMAIL_DOMAINS = Set.of(
+            "naver.com", "hanmail.net", "daum.net", "nate.com", "korea.kr",
+            "kcredit.or.kr", "korea.com", "yahoo.com", "goe.go.kr", "chol.com",
+            "sen.go.kr", "gyo6.net", "jnu.ac.kr", "kakao.com"
+    );
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -36,17 +44,26 @@ public class AuthService {
     }
 
     /**
-     * 회원가입 1단계: 유효성 검사 → CODEF 1차 요청 (PASS/SMS 인증 트리거)
+     * 회원가입 1단계: 유효성 검사 → 아이디 가용성 확인 → CODEF PASS/SMS 트리거
      */
     public SignupStep1Response signupStep1(SignupRequest request) {
         log.info("회원가입 step1 시작 - email: {}", request.getEmail());
 
         if (!request.getPassword().equals(request.getPasswordConfirm())) {
-            throw new SignupFieldException("password", "비밀번호가 일치하지 않습니다.");
+            throw new SignupFieldException("passwordConfirm", "비밀번호가 일치하지 않습니다.");
         }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email already exists");
         }
+
+        // 이메일 도메인 검증
+        validateEmailDomain(request.getEmail());
+
+        // 아이디 형식 검증 (영문 시작, 영문+숫자 6~12자)
+        validateCodefId(request.getId());
+
+        // 비밀번호 복잡도 검증
+        validatePassword(request.getPassword(), request.getId());
 
         // 주민등록번호에서 생년월일·성별 파생
         LocalDate birthDate;
@@ -85,50 +102,31 @@ public class AuthService {
     }
 
     /**
-     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인) → DB 저장 → JWT 발급
+     * 회원가입 2단계: CODEF 2차 요청 (PASS/SMS 인증 확인)
      */
-    public AuthResponse signupStep2(SignupStep2Request request) {
+    public void signupStep2(SignupStep2Request request) {
         log.info("회원가입 step2 시작 - sessionKey: {}", request.getSessionKey());
         codefService.registerStep2(request.getSessionKey(), request.getSmsAuthNo());
-
-        CodefService.SignupSessionData sessionData =
-                codefService.completeRegistration(request.getSessionKey());
-
-        User.Gender gender = User.Gender.valueOf(sessionData.getGender());
-
-        User user = User.builder()
-                .email(sessionData.getEmail())
-                .passwordHash(sessionData.getBcryptHash())
-                .name(sessionData.getName())
-                .birthDate(sessionData.getBirthDate())
-                .gender(gender)
-                .codefId(sessionData.getCodefId())
-                .build();
-
-        User savedUser = userRepository.save(user);
-        log.info("회원가입 완료 - userId: {}, codefId: {}", savedUser.getId(), savedUser.getCodefId());
-
-        String accessToken = jwtTokenProvider.generateAccessToken(savedUser.getId(), savedUser.getEmail());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(savedUser.getId());
-
-        return AuthResponse.of(
-                savedUser.getId(),
-                savedUser.getEmail(),
-                savedUser.getName(),
-                accessToken,
-                refreshToken,
-                jwtTokenProvider.getAccessTokenExpiry()
-        );
+        log.info("회원가입 step2 완료 - sessionKey: {}", request.getSessionKey());
     }
 
     /**
-     * 회원가입 3단계: CODEF 3차 요청 (이메일 인증) → DB 저장 → JWT 발급
+     * 회원가입 3단계: CODEF 3차 요청 (이메일 발송 트리거)
      */
-    public AuthResponse signupStep3(SignupStep3Request request) {
+    public void signupStep3(SignupStep3Request request) {
         log.info("회원가입 step3 시작 - sessionKey: {}", request.getSessionKey());
+        codefService.registerStep3(request.getSessionKey());
+        log.info("회원가입 step3 완료 (이메일 발송) - sessionKey: {}", request.getSessionKey());
+    }
+
+    /**
+     * 회원가입 4단계: CODEF 4차 요청 (이메일 인증 확인) → DB 저장 → JWT 발급
+     */
+    public AuthResponse signupStep4(SignupStep4Request request) {
+        log.info("회원가입 step4 시작 - sessionKey: {}", request.getSessionKey());
 
         CodefService.SignupSessionData sessionData =
-                codefService.registerStep3(request.getSessionKey(), request.getEmailAuthNo());
+                codefService.registerStep4(request.getSessionKey(), request.getEmailAuthNo());
 
         User.Gender gender = User.Gender.valueOf(sessionData.getGender());
 
@@ -144,13 +142,14 @@ public class AuthService {
         User savedUser = userRepository.save(user);
         log.info("회원가입 완료 - userId: {}, codefId: {}", savedUser.getId(), savedUser.getCodefId());
 
-        String accessToken = jwtTokenProvider.generateAccessToken(savedUser.getId(), savedUser.getEmail());
+        String accessToken  = jwtTokenProvider.generateAccessToken(savedUser.getId(), savedUser.getEmail());
         String refreshToken = jwtTokenProvider.generateRefreshToken(savedUser.getId());
 
         return AuthResponse.of(
                 savedUser.getId(),
                 savedUser.getEmail(),
                 savedUser.getName(),
+                savedUser.getCodefId(),
                 accessToken,
                 refreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -161,29 +160,29 @@ public class AuthService {
      * 로그인
      */
     public AuthResponse login(LoginRequest request) {
-        String loginId = request.getLoginId();
-        log.info("로그인 시작 - loginId: {}", loginId);
+        log.info("로그인 시작 - codefId: {}", request.getCodefId());
 
-        User user = userRepository.findByCodefId(loginId)
+        User user = userRepository.findByCodefId(request.getCodefId())
                 .orElseThrow(() -> {
-                    log.warn("로그인 실패: 사용자 없음 - loginId: {}", loginId);
+                    log.warn("로그인 실패: 사용자 없음 - codefId: {}", request.getCodefId());
                     return new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.warn("로그인 실패: 비밀번호 불일치 - loginId: {}", loginId);
+            log.warn("로그인 실패: 비밀번호 불일치 - codefId: {}", request.getCodefId());
             throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        log.info("로그인 성공 - userId: {}, loginId: {}", user.getId(), loginId);
+        log.info("로그인 성공 - userId: {}", user.getId());
 
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
+        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
         return AuthResponse.of(
                 user.getId(),
                 user.getEmail(),
                 user.getName(),
+                user.getCodefId(),
                 accessToken,
                 refreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -211,13 +210,14 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
+        String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
         return AuthResponse.of(
                 user.getId(),
                 user.getEmail(),
                 user.getName(),
+                user.getCodefId(),
                 newAccessToken,
                 newRefreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -231,5 +231,60 @@ public class AuthService {
     public User getUserById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    // ── 유효성 검증 ───────────────────────────────────────────────────
+
+    private void validateEmailDomain(String email) {
+        String[] parts = email.split("@");
+        if (parts.length != 2 || !ALLOWED_EMAIL_DOMAINS.contains(parts[1].toLowerCase())) {
+            throw new SignupFieldException("email",
+                    "사용 가능한 이메일 도메인이 아닙니다. (naver.com, daum.net, kakao.com 등)");
+        }
+    }
+
+    private void validateCodefId(String id) {
+        if (!id.matches("^[a-zA-Z][a-zA-Z0-9]{5,11}$")) {
+            throw new SignupFieldException("id",
+                    "아이디는 영문으로 시작하는 영문+숫자 6~12자여야 합니다. 특수문자는 사용할 수 없습니다.");
+        }
+    }
+
+    private void validatePassword(String password, String codefId) {
+        if (password.length() < 9 || password.length() > 20) {
+            throw new SignupFieldException("password", "비밀번호는 9자 이상 20자 이하여야 합니다.");
+        }
+        if (!password.matches(".*[a-zA-Z].*")) {
+            throw new SignupFieldException("password", "비밀번호에 영문자가 포함되어야 합니다.");
+        }
+        if (!password.matches(".*[0-9].*")) {
+            throw new SignupFieldException("password", "비밀번호에 숫자가 포함되어야 합니다.");
+        }
+        if (!password.matches(".*[!@#$%^&*?_~\\[\\]+='|(){}:;\"<>,/\\\\-].*")) {
+            throw new SignupFieldException("password",
+                    "비밀번호에 특수문자(!@#$%^&*?_~ 등)가 포함되어야 합니다.");
+        }
+        // 동일 문자 3자 이상 연속 금지
+        for (int i = 0; i < password.length() - 2; i++) {
+            if (password.charAt(i) == password.charAt(i + 1)
+                    && password.charAt(i) == password.charAt(i + 2)) {
+                throw new SignupFieldException("password",
+                        "동일한 문자/숫자를 3자 이상 연속으로 사용할 수 없습니다.");
+            }
+        }
+        // 연속 문자/숫자 3자 이상 금지 (오름차순/내림차순)
+        for (int i = 0; i < password.length() - 2; i++) {
+            int d1 = password.charAt(i + 1) - password.charAt(i);
+            int d2 = password.charAt(i + 2) - password.charAt(i + 1);
+            if ((d1 == 1 && d2 == 1) || (d1 == -1 && d2 == -1)) {
+                throw new SignupFieldException("password",
+                        "연속되는 문자 또는 숫자를 3자 이상 사용할 수 없습니다.");
+            }
+        }
+        // 아이디와 동일한 비밀번호 금지
+        if (codefId != null && !codefId.isBlank()
+                && password.toLowerCase().contains(codefId.toLowerCase())) {
+            throw new SignupFieldException("password", "비밀번호에 아이디를 포함할 수 없습니다.");
+        }
     }
 }

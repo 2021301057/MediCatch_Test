@@ -22,8 +22,11 @@ public class Policy {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column
     private Long userId;
+
+    @Column
+    private String codefId;
 
     @Column(nullable = false)
     private String policyNumber;
@@ -34,14 +37,17 @@ public class Policy {
     @Column(nullable = false)
     private String insuranceType;  // "NATIONAL_HEALTH", "SUPPLEMENTARY", "ACCIDENT"
 
-    @Column(nullable = false)
+    @Column
     private LocalDate startDate;
 
-    @Column(nullable = false)
+    @Column
     private LocalDate endDate;
 
     @Column(nullable = false)
     private boolean isActive;
+
+    @Column(columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean hasSupplementaryCoverage;
 
     @Column
     private Double monthlyPremium;

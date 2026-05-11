@@ -12,7 +12,4 @@ public class SignupStep3Request {
 
     @NotBlank(message = "Session key is required")
     private String sessionKey;
-
-    @NotBlank(message = "이메일 인증번호를 입력해주세요")
-    private String emailAuthNo;
 }

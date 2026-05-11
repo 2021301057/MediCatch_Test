@@ -6,19 +6,22 @@ export const authAPI = {
   signupStep1:  (data) => api.post('/auth/signup/step1', data),
   signupStep2:  (data) => api.post('/auth/signup/step2', data),
   signupStep3:  (data) => api.post('/auth/signup/step3', data),
+  signupStep4:  (data) => api.post('/auth/signup/step4', data),
   refresh:      (token) => api.post('/auth/refresh', { refreshToken: token }),
   profile:      () => api.get('/auth/profile'),
 };
 
 // ── Health ────────────────────────────────────────
 export const healthAPI = {
-  getMedicalRecords: (params) => api.get('/health/medical-records', { params }),
-  getMedications:    (recordId) => api.get(`/health/medical-records/${recordId}/medications`),
+  getMedicalRecords: () => api.get('/health/medical-records'),
+  getMedications:    () => api.get('/health/medications'),
   getCheckupResults: () => api.get('/health/checkup-results'),
-  getCheckupByYear:  (year) => api.get(`/health/checkup-results/${year}`),
   getDiseasePredictions: () => api.get('/health/disease-predictions'),
   getCheckupTargets: () => api.get('/health/checkup-targets'),
-  syncFromCodef:     () => api.post('/health/sync'),
+  syncCheckupStep1: (data) => api.post('/health/sync/checkup/step1', data, { timeout: 120000 }),
+  syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
+  syncMedicalStep1: (data) => api.post('/health/sync/medical/step1', data, { timeout: 120000 }),
+  syncMedicalStep2: (data) => api.post('/health/sync/medical/step2', data, { timeout: 120000 }),
 };
 
 // ── Insurance ─────────────────────────────────────
@@ -26,7 +29,7 @@ export const insuranceAPI = {
   getPolicies:   () => api.get('/insurance/policies'),
   getCoverage:   (policyId) => api.get(`/insurance/policies/${policyId}/coverage`),
   getSummary:    () => api.get('/insurance/summary'),
-  syncFromCodef: () => api.post('/insurance/sync'),
+  sync:          (data) => api.post('/insurance/sync', data, { timeout: 60000 }),
 };
 
 // ── Analysis ──────────────────────────────────────

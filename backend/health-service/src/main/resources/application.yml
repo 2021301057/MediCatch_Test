@@ -1,6 +1,8 @@
 spring:
   application:
     name: health-service
+  config:
+    import: optional:file:.env[.properties]
   datasource:
     url: jdbc:mysql://localhost:3306/medicatch_health?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8
     username: root
@@ -22,19 +24,23 @@ server:
     context-path: /
 
 codef:
-  api-url: https://api.codef.io/v1
-  client-id: ${CODEF_CLIENT_ID:YOUR_CODEF_CLIENT_ID}
-  client-secret: ${CODEF_CLIENT_SECRET:YOUR_CODEF_CLIENT_SECRET}
+  api-client-id: ${CODEF_API_CLIENT_ID:YOUR_API_CLIENT_ID}
+  api-client-secret: ${CODEF_API_CLIENT_SECRET:YOUR_API_CLIENT_SECRET}
+  demo-client-id: ${CODEF_DEMO_CLIENT_ID:YOUR_DEMO_CLIENT_ID}
+  demo-client-secret: ${CODEF_DEMO_CLIENT_SECRET:YOUR_DEMO_CLIENT_SECRET}
+  public-key: ${CODEF_PUBLIC_KEY:}
+  use-demo: ${CODEF_USE_DEMO:true}
 
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5
   instance:
     instance-id: ${spring.application.name}:${random.value}
     prefer-ip-address: true
-    lease-renewal-interval-in-seconds: 10
-    lease-expiration-duration-in-seconds: 30
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
 
 management:
   endpoints:
