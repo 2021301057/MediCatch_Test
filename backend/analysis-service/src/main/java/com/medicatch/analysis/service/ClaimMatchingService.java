@@ -450,11 +450,35 @@ public class ClaimMatchingService {
     private TreatClass classify(String code, String department) {
         if ("$".equals(code)) return TreatClass.PHARMACY;
         String upper = code != null ? code.toUpperCase() : "";
-        if (upper.startsWith("AK")) return TreatClass.DENTAL;
         if (upper.startsWith("AS") || upper.startsWith("AT")) return TreatClass.INJURY;
+        if (upper.startsWith("AK")) {
+            int k = parseKCategory(upper);
+            if (k >= 0 && k <= 8) return TreatClass.DENTAL;
+            if (k >= 9 && k <= 14 && isDentalDepartment(department)) return TreatClass.DENTAL;
+        }
         if (department != null && (department.contains("한방") || department.contains("침구")))
             return TreatClass.ORIENTAL;
         return TreatClass.DISEASE;
+    }
+
+    // AK코드에서 K 카테고리 번호 추출 (AK021 → 2, AK0119 → 1, AK14xx → 14, AK25 → 25)
+    private int parseKCategory(String upper) {
+        StringBuilder digits = new StringBuilder();
+        for (int i = 2; i < upper.length(); i++) {
+            char c = upper.charAt(i);
+            if (Character.isDigit(c)) digits.append(c);
+            else break;
+        }
+        if (digits.length() == 0) return -1;
+        String s = digits.length() >= 2 ? digits.substring(0, 2) : digits.toString();
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return -1; }
+    }
+
+    private boolean isDentalDepartment(String department) {
+        if (department == null) return false;
+        return department.contains("치과") || department.contains("치주")
+            || department.contains("구강") || department.contains("교정")
+            || department.contains("보철");
     }
 
     private boolean isOutpatient(String t) { return "외래".equals(t) || "약국".equals(t); }
