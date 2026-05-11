@@ -100,7 +100,7 @@ public class ClaimMatchingService {
                                              List<ClaimPaymentInfo> paidPayments) {
 
         String     diseaseCode    = resolveDiseaseCode(record);
-        TreatClass tc             = classify(diseaseCode, record.getDepartment());
+        TreatClass tc             = classify(diseaseCode, record.getDiagnosis());
         String     treatType      = record.getTreatmentType();
         Double     outOfPocket    = record.getPatientPayment();
         Double     nonCovered     = record.getNonCoveredAmount();
@@ -447,17 +447,15 @@ public class ClaimMatchingService {
 
     // ── 분류 ────────────────────────────────────────────────────────────────
 
-    private TreatClass classify(String code, String department) {
+    private TreatClass classify(String code, String diagnosis) {
         if ("$".equals(code)) return TreatClass.PHARMACY;
+        if (diagnosis != null && diagnosis.contains("(한방)")) return TreatClass.ORIENTAL;
         String upper = code != null ? code.toUpperCase() : "";
         if (upper.startsWith("AS") || upper.startsWith("AT")) return TreatClass.INJURY;
         if (upper.startsWith("AK")) {
             int k = parseKCategory(upper);
             if (k >= 0 && k <= 8) return TreatClass.DENTAL;
-            if (k >= 9 && k <= 14 && isDentalDepartment(department)) return TreatClass.DENTAL;
         }
-        if (department != null && (department.contains("한방") || department.contains("침구")))
-            return TreatClass.ORIENTAL;
         return TreatClass.DISEASE;
     }
 
@@ -472,13 +470,6 @@ public class ClaimMatchingService {
         if (digits.length() == 0) return -1;
         String s = digits.length() >= 2 ? digits.substring(0, 2) : digits.toString();
         try { return Integer.parseInt(s); } catch (NumberFormatException e) { return -1; }
-    }
-
-    private boolean isDentalDepartment(String department) {
-        if (department == null) return false;
-        return department.contains("치과") || department.contains("치주")
-            || department.contains("구강") || department.contains("교정")
-            || department.contains("보철");
     }
 
     private boolean isOutpatient(String t) { return "외래".equals(t) || "약국".equals(t); }
