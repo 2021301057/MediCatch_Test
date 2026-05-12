@@ -174,7 +174,8 @@ public class ClaimMatchingService {
         if (claimable) {
             double base = (outOfPocket != null ? outOfPocket : 0.0)
                         * publicChargeRatio(gen);
-            claimAmt = base + eligibleNonCovered(nonCovered, gen, tc);
+            double grossClaimAmt = base + eligibleNonCovered(nonCovered, gen, tc);
+            claimAmt = Math.max(0.0, grossClaimAmt - outpatientDeductible(gen, treatType, nonCovered));
         }
         return builder
                 .hasClaimOpportunity(claimable)
@@ -213,6 +214,16 @@ public class ClaimMatchingService {
             case "2"            -> 0.9;
             case "3", "3k", "4" -> 0.8;
             default             -> 1.0;
+        };
+    }
+
+    private double outpatientDeductible(String gen, String treatType, Double nonCovered) {
+        if (!isOutpatient(treatType)) return 0.0;
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h" -> 5_000.0;
+            case "4" -> nonCovered != null && nonCovered > 0 ? 30_000.0 : 10_000.0;
+            case "2", "3", "3k" -> 10_000.0;
+            default -> 10_000.0;
         };
     }
 
