@@ -242,10 +242,10 @@ public class ClaimMatchingService {
 
     private double outpatientFixedDeductible(String gen, double nonCoveredExpense) {
         return switch (gen != null ? gen : "") {
-            case "1d", "1h" -> 5_000.0;
-            case "4" -> nonCoveredExpense > 0 ? 30_000.0 : 10_000.0;
-            case "2", "3", "3k" -> 10_000.0;
-            default -> 10_000.0;
+            case "1d", "1h" -> 5000.0;
+            case "4" -> nonCoveredExpense > 0 ? 30000.0 : 10000.0;
+            case "2", "3", "3k" -> 10000.0;
+            default -> 10000.0;
         };
     }
 
