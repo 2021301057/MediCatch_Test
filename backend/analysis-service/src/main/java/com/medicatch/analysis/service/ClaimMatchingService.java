@@ -172,9 +172,9 @@ public class ClaimMatchingService {
         boolean claimable = CONFIRMED.equals(best.confidence) || LIKELY.equals(best.confidence);
         double claimAmt = 0.0;
         if (claimable) {
-            double base = (outOfPocket != null ? outOfPocket : 0.0)
-                        * publicChargeRatio(gen);
-            claimAmt = base + eligibleNonCovered(nonCovered, gen, tc);
+            double publicCharge = outOfPocket != null ? outOfPocket : 0.0;
+            double nonCoveredExpense = eligibleNonCoveredExpense(nonCovered, tc);
+            claimAmt = calculateClaimAmount(publicCharge, nonCoveredExpense, gen, treatType);
         }
         return builder
                 .hasClaimOpportunity(claimable)
@@ -192,14 +192,14 @@ public class ClaimMatchingService {
      * 1d/1h: 비급여 100%, 2/3세대: 80%, 3k/4세대: 70%
      */
     private double eligibleNonCovered(Double nonCovered, String gen, TreatClass tc) {
+        double expense = eligibleNonCoveredExpense(nonCovered, tc);
+        return expense * (1 - nonCoveredSelfPayRatio(gen));
+    }
+
+    private double eligibleNonCoveredExpense(Double nonCovered, TreatClass tc) {
         if (nonCovered == null || nonCovered <= 0) return 0.0;
         if (tc == TreatClass.DENTAL || tc == TreatClass.PHARMACY) return 0.0;
-        return switch (gen != null ? gen : "") {
-            case "1d", "1h" -> nonCovered;
-            case "2", "3"   -> nonCovered * 0.8;
-            case "3k", "4"  -> nonCovered * 0.7;
-            default         -> nonCovered * 0.8;
-        };
+        return nonCovered;
     }
 
     /**
@@ -213,6 +213,52 @@ public class ClaimMatchingService {
             case "2"            -> 0.9;
             case "3", "3k", "4" -> 0.8;
             default             -> 1.0;
+        };
+    }
+
+    private double calculateClaimAmount(double publicCharge, double nonCoveredExpense,
+                                        String gen, String treatType) {
+        if (!isOutpatient(treatType)) {
+            return publicCharge * publicChargeRatio(gen)
+                    + nonCoveredExpense * (1 - nonCoveredSelfPayRatio(gen));
+        }
+
+        double medicalExpense = publicCharge + nonCoveredExpense;
+        if (medicalExpense <= 0) return 0.0;
+
+        double fixedDeductible = outpatientFixedDeductible(gen, nonCoveredExpense);
+        if (isFirstGeneration(gen)) {
+            return Math.max(0.0, medicalExpense - fixedDeductible);
+        }
+
+        double selfPayAmount = publicCharge * publicSelfPayRatio(gen)
+                + nonCoveredExpense * nonCoveredSelfPayRatio(gen);
+        return Math.max(0.0, medicalExpense - Math.max(fixedDeductible, selfPayAmount));
+    }
+
+    private boolean isFirstGeneration(String gen) {
+        return "1d".equals(gen) || "1h".equals(gen);
+    }
+
+    private double outpatientFixedDeductible(String gen, double nonCoveredExpense) {
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h" -> 5_000.0;
+            case "4" -> nonCoveredExpense > 0 ? 30_000.0 : 10_000.0;
+            case "2", "3", "3k" -> 10_000.0;
+            default -> 10_000.0;
+        };
+    }
+
+    private double publicSelfPayRatio(String gen) {
+        return 1 - publicChargeRatio(gen);
+    }
+
+    private double nonCoveredSelfPayRatio(String gen) {
+        return switch (gen != null ? gen : "") {
+            case "1d", "1h" -> 0.0;
+            case "2", "3" -> 0.2;
+            case "3k", "4" -> 0.3;
+            default -> 0.2;
         };
     }
 
