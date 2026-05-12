@@ -343,14 +343,12 @@ public class CodefSyncService {
             if (dateStr == null || dateStr.isBlank() || hospital == null || hospital.isBlank()) continue;
 
             String diseaseCode = str(item.get("resDiseaseCode"));
-            String diseaseName = strOrDefault(item.get("resDiseaseName"), "기타");
             records.add(MedicalRecord.builder()
                     .userId(userId)
                     .visitDate(parseDate8(dateStr))
                     .hospital(hospital)
                     .department(strOrDefault(item.get("resDepartment"), "미상"))
-                    .diagnosis(diseaseName)
-                    .diseaseName(diseaseName)
+                    .diagnosis(strOrDefault(item.get("resDiseaseName"), "기타"))
                     .diseaseCode(diseaseCode)
                     .treatmentDetails(str(item.get("resTreatType")))
                     .medicalCost(parseDouble(item.get("resTotalAmount")))
