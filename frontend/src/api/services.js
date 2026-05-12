@@ -22,6 +22,8 @@ export const healthAPI = {
   syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
   syncMedicalStep1: (data) => api.post('/health/sync/medical/step1', data, { timeout: 120000 }),
   syncMedicalStep2: (data) => api.post('/health/sync/medical/step2', data, { timeout: 120000 }),
+  syncYeartaxStep1: (data) => api.post('/health/sync/yeartax/step1', data, { timeout: 120000 }),
+  syncYeartaxStep2: (data) => api.post('/health/sync/yeartax/step2', data, { timeout: 300000 }),
 };
 
 // ── Insurance ─────────────────────────────────────

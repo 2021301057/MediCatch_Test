@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import { healthAPI, insuranceAPI } from '../api/services';
+// 현재 연도 기준 연말정산 조회 범위 표시
+const NTS_YEARS = (() => {
+  const cur = new Date().getFullYear();
+  return Array.from({ length: cur - 2022 }, (_, i) => String(2023 + i));
+})();
 
 const TELECOM_OPTIONS = [
   { value: '0', label: 'SKT / SKT 알뜰폰' },
@@ -18,15 +23,17 @@ const AUTH_LEVEL_OPTIONS = [
   { value: '10', label: 'NH인증서',    icon: '🌾' },
 ];
 
-// 화면 단계: form → checkup-auth → medical-ready → medical-auth → done
-const PROGRESS = ['정보 입력', '건강검진 인증', '진료 인증', '완료'];
+// 화면 단계: form → checkup-auth → medical-ready → medical-auth → yeartax-ready → yeartax-auth → done
+const PROGRESS = ['정보 입력', '건강검진·보험 인증', '진료 인증', '연말정산 인증', '완료'];
 
 const progressIndex = {
-  'form':          0,
-  'checkup-auth':  1,
-  'medical-ready': 2,
-  'medical-auth':  2,
-  'done':          3,
+  'form':           0,
+  'checkup-auth':   1,
+  'medical-ready':  2,
+  'medical-auth':   2,
+  'yeartax-ready':  3,
+  'yeartax-auth':   3,
+  'done':           4,
 };
 
 export default function CodefSyncModal({ userId, onClose, onSuccess }) {
@@ -40,10 +47,13 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     telecom: '0', loginTypeLevel: '5',
   });
 
-  const [checkupSessionKey, setCheckupSessionKey] = useState('');
-  const [medicalSessionKey, setMedicalSessionKey] = useState('');
-  const [checkupResult,     setCheckupResult]     = useState(null);
-  const [medicalResult,     setMedicalResult]     = useState(null);
+  const [checkupSessionKey,  setCheckupSessionKey]  = useState('');
+  const [medicalSessionKey,  setMedicalSessionKey]  = useState('');
+  const [yeartaxSessionKey,  setYeartaxSessionKey]  = useState('');
+  const [checkupResult,      setCheckupResult]      = useState(null);
+  const [insuranceResult,    setInsuranceResult]    = useState(null);
+  const [medicalResult,      setMedicalResult]      = useState(null);
+  const [yeartaxResult,      setYeartaxResult]      = useState(null);
 
   const handle = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
   const auth   = AUTH_LEVEL_OPTIONS.find(o => o.value === form.loginTypeLevel);
@@ -58,7 +68,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
 
     setLoading(true);
     try {
-      const [, data] = await Promise.all([
+      const [insData, data] = await Promise.all([
         insuranceAPI.sync({ codefId: form.codefId, codefPassword: form.codefPassword }),
         healthAPI.syncCheckupStep1({
           userId,
@@ -68,6 +78,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         }),
       ]);
       localStorage.setItem('codefId', form.codefId);
+      setInsuranceResult(insData);
       setCheckupSessionKey(data.sessionKey);
       setScreen('checkup-auth');
     } catch (err) {
@@ -119,6 +130,41 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     try {
       const data = await healthAPI.syncMedicalStep2({ sessionKey: medicalSessionKey });
       setMedicalResult(data);
+      setScreen('yeartax-ready');
+    } catch (err) {
+      setError(err.response?.data?.message || '인증에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 5단계: 연말정산 연동 시작 ─────────────────────────────────────────
+  const handleStartYeartax = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await healthAPI.syncYeartaxStep1({
+        userId,
+        userName: form.userName, phoneNo: form.phoneNo, identity13: cleanId,
+        telecom: form.loginTypeLevel === '5' ? form.telecom : '',
+        loginTypeLevel: form.loginTypeLevel,
+      });
+      setYeartaxSessionKey(data.sessionKey);
+      setScreen('yeartax-auth');
+    } catch (err) {
+      setError(err.response?.data?.message || '요청 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 6단계: 연말정산 2차 인증 ──────────────────────────────────────────
+  const handleConfirmYeartax = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await healthAPI.syncYeartaxStep2({ sessionKey: yeartaxSessionKey });
+      setYeartaxResult(data);
       setScreen('done');
     } catch (err) {
       setError(err.response?.data?.message || '인증에 실패했습니다. 다시 시도해주세요.');
@@ -220,7 +266,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
             </div>
 
             <button type="submit" disabled={loading} style={s.primaryBtn}>
-              {loading ? '⏳ 연동 요청 중...' : '1단계: 건강 데이터 연동 시작 →'}
+              {loading ? '⏳ 연동 요청 중...' : '1단계: 건강검진·보험 연동 시작 →'}
             </button>
           </form>
         )}
@@ -243,7 +289,8 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         {screen === 'medical-ready' && (
           <div style={s.body}>
             <ResultBox title="✅ 건강검진 + 보험 연동 완료">
-              건강검진 결과 <b>{checkupResult?.savedCheckups ?? 0}건</b> 저장됐습니다.
+              건강검진 결과 <b>{checkupResult?.savedCheckups ?? 0}건</b>,{' '}
+              보험 계약 <b>{insuranceResult?.savedPolicies ?? 0}건</b> 저장됐습니다.
             </ResultBox>
             <InfoBox>
               이어서 진료 기록(HIRA) 연동을 시작합니다.<br />
@@ -269,7 +316,43 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
           </div>
         )}
 
-        {/* ── 화면 5: 완료 ── */}
+        {/* ── 화면 5: 연말정산 연동 준비 ── */}
+        {screen === 'yeartax-ready' && (
+          <div style={s.body}>
+            <ResultBox title="✅ 진료 기록 연동 완료">
+              진료 기록 <b>{medicalResult?.savedMedicals ?? 0}건</b>,{' '}
+              처방 약품 <b>{medicalResult?.savedMedications ?? 0}건</b> 저장됐습니다.
+            </ResultBox>
+            <InfoBox>
+              이어서 연말정산 간소화 소득세액공제자료(NTS) 연동을 시작합니다.<br />
+              <b>{NTS_YEARS.join(', ')}년도</b> 의료비 자료를 한 번에 조회합니다.<br />
+              {auth?.label} 앱으로 인증 요청이 전송됩니다.
+            </InfoBox>
+            <button onClick={handleStartYeartax} disabled={loading} style={s.primaryBtn}>
+              {loading ? '⏳ 연동 요청 중...' : '5단계: 연말정산 데이터 연동 시작 →'}
+            </button>
+            <button onClick={() => setScreen('done')} disabled={loading} style={s.skipBtn}>
+              건너뛰기 (연말정산 데이터 없음)
+            </button>
+          </div>
+        )}
+
+        {/* ── 화면 6: 연말정산 2차 인증 ── */}
+        {screen === 'yeartax-auth' && (
+          <div style={s.body}>
+            <AuthNotice auth={auth} />
+            <InfoBox>
+              국세청(NTS) 연말정산 간소화 소득세액공제자료 인증을 진행 중입니다.<br />
+              {NTS_YEARS.join(', ')}년도({NTS_YEARS.length}건) 의료비 자료를 동시에 처리합니다.<br />
+              {auth?.label} 앱에서 인증 요청을 승인한 후 아래 버튼을 눌러주세요.
+            </InfoBox>
+            <button onClick={handleConfirmYeartax} disabled={loading} style={s.primaryBtn}>
+              {loading ? '⏳ 처리 중...' : '6단계: 인증 완료 →'}
+            </button>
+          </div>
+        )}
+
+        {/* ── 화면 7: 완료 ── */}
         {screen === 'done' && (
           <div style={s.body}>
             <div style={s.doneBox}>
@@ -279,8 +362,12 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
               </div>
               <div style={s.resultGrid}>
                 <ResultRow icon="🏥" label="건강검진 결과"  value={`${checkupResult?.savedCheckups ?? 0}건`} />
+                <ResultRow icon="📑" label="보험 계약"       value={`${insuranceResult?.savedPolicies ?? 0}건`} />
                 <ResultRow icon="📋" label="진료 기록"       value={`${medicalResult?.savedMedicals ?? 0}건`} />
                 <ResultRow icon="💊" label="처방 약품"       value={`${medicalResult?.savedMedications ?? 0}건`} />
+                {yeartaxResult != null && (
+                  <ResultRow icon="📊" label="비급여 업데이트" value={`${yeartaxResult.updatedNonCovered ?? 0}건`} />
+                )}
               </div>
             </div>
             <button onClick={() => { onSuccess?.(); onClose(); }} style={s.primaryBtn}>
@@ -437,5 +524,10 @@ const s = {
     color: '#fff', border: 'none', borderRadius: 12,
     fontSize: 15, fontWeight: 700, cursor: 'pointer',
     boxShadow: '0 4px 14px rgba(29,78,216,0.3)',
+  },
+  skipBtn: {
+    padding: '11px', background: 'none',
+    color: '#94a3b8', border: '1.5px solid #e2e8f0', borderRadius: 12,
+    fontSize: 13, fontWeight: 600, cursor: 'pointer',
   },
 };
