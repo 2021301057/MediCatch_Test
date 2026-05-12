@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS medical_records (
     hospital VARCHAR(200) NOT NULL,
     department VARCHAR(100) NOT NULL,
     diagnosis VARCHAR(255) NOT NULL,
+    disease_name VARCHAR(255) NOT NULL DEFAULT '기타',
     treatment_details LONGTEXT,
     medication_prescribed VARCHAR(500),
     medical_cost DECIMAL(10,2),

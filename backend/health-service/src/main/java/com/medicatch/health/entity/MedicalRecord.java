@@ -36,6 +36,9 @@ public class MedicalRecord {
     @Column(nullable = false)
     private String diagnosis;
 
+    @Column(name = "disease_name", nullable = false)
+    private String diseaseName;
+
     @Column(columnDefinition = "LONGTEXT")
     private String treatmentDetails;
 
@@ -72,6 +75,12 @@ public class MedicalRecord {
 
     @PrePersist
     protected void onCreate() {
+        if (diseaseName == null || diseaseName.isBlank()) {
+            diseaseName = diagnosis != null && !diagnosis.isBlank() ? diagnosis : "기타";
+        }
+        if (diagnosis == null || diagnosis.isBlank()) {
+            diagnosis = diseaseName;
+        }
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
