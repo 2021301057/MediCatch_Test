@@ -20,9 +20,8 @@ const useAuthStore = create((set) => ({
   },
 
   setUser: (user) => {
-    const id = user?.userId ?? user?.id;
-    if (id) localStorage.setItem('userId', String(id));
-    set({ user: user ? { ...user, userId: id } : null });
+    if (user?.userId) localStorage.setItem('userId', String(user.userId));
+    set({ user });
   },
 }));
 

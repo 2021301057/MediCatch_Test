@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { path: '/medical-records',  label: '진료 기록 & 청구', count: 2 },
   { path: '/insurance-plan',   label: '보험 추천 & 공백' },
   { path: '/health-report',    label: '건강 통합 리포트' },
-  { path: '/chat',             label: '건강 AI 채팅' },
 ];
 
 const Icon = ({ children, size = 13 }) => (
@@ -26,10 +25,20 @@ export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [hasHealthData, setHasHealthData] = useState(() => (
+    localStorage.getItem('healthDataLoaded') === 'true'
+  ));
+
+  const shouldShowSyncGuide = !hasHealthData && !user?.codefConnectionCount;
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleSyncSuccess = () => {
+    localStorage.setItem('healthDataLoaded', 'true');
+    setHasHealthData(true);
   };
 
   return (
@@ -64,15 +73,16 @@ export default function Navbar() {
 
         {/* 우측 액션 */}
         <div className="mc-nav-right">
-          <button className="mc-btn" onClick={() => setShowSyncModal(true)} title="CODEF 데이터 갱신">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
-              strokeLinecap="round" strokeLinejoin="round"
-              style={{ width: 12, height: 12, flexShrink: 0 }}>
-              <path d="M2 8a6 6 0 1 1 1.5 4" />
-              <path d="M2 12V8h4" />
-            </svg>
-            CODEF 갱신
-          </button>
+          <div className="mc-sync-cta-wrap">
+            {shouldShowSyncGuide && (
+              <div className="mc-sync-guide-bubble">
+                건강정보를 보려면 데이터를 불러오세요 :)
+              </div>
+            )}
+            <button className="mc-btn mc-sync-cta" onClick={() => setShowSyncModal(true)} title="내 건강 데이터 불러오기">
+              내 건강 불러오기
+            </button>
+          </div>
           <button className="mc-btn mc-btn-icon-only" title="알림">
             <Icon size={13}>
               <path d="M8 2a4 4 0 0 1 4 4v3l1.5 2h-11L4 9V6a4 4 0 0 1 4-4z"/>
@@ -90,6 +100,7 @@ export default function Navbar() {
       <CodefSyncModal
         userId={user?.userId}
         onClose={() => setShowSyncModal(false)}
+        onSuccess={handleSyncSuccess}
       />
     )}
     </>

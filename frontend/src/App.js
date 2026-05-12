@@ -63,20 +63,13 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
-  const { setUser, logout, isAuthenticated } = useAuthStore();
-  const [authChecked, setAuthChecked] = useState(false);
+  const { setUser, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     if (isAuthenticated) {
-      authAPI.profile()
-        .then(r => { setUser(r); setAuthChecked(true); })
-        .catch(() => { logout(); setAuthChecked(true); });
-    } else {
-      setAuthChecked(true);
+      authAPI.profile().then(r => setUser(r)).catch(() => {});
     }
   }, []);
-
-  if (!authChecked) return null;
 
   return (
     <BrowserRouter>

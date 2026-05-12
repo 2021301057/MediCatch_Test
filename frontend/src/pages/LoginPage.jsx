@@ -114,6 +114,15 @@ export default function LoginPage() {
       login(data, data.accessToken, data.refreshToken);
       navigate('/');
     } catch (err) {
+      if (isNetworkError(err)) {
+        const demoUser = findDemoUser(form.id, form.password);
+        if (demoUser) {
+          const data = makeDemoAuth(demoUser);
+          login(data, data.accessToken, data.refreshToken);
+          navigate('/');
+          return;
+        }
+      }
       setError(err.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
     } finally {
       setLoading(false);

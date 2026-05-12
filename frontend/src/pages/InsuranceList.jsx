@@ -46,12 +46,31 @@ const COVERAGE_PIE_DATA = [
   { name: '종신보험',   value: 130 },
   { name: '치아보험',   value: 2 },
 ];
-const PIE_COLORS = ['#2F6FE8', '#8A7040', '#70AE98'];
+const PIE_COLORS = ['#7EA6F2', '#B69A62', '#9BCDB8'];
 
 const FILTERS = ['전체', '실손', '생명', '손해'];
 const TYPE_MAP = { SUPPLEMENTARY: '실손', LIFE: '생명', NON_LIFE: '손해' };
 
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, value }) => {
+  const RADIAN = Math.PI / 180;
+  const radius = outerRadius + (value < 8 ? 38 : 28);
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      className="mc-pie-label"
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+    >
+      <tspan x={x} dy="-0.35em">{name}</tspan>
+      <tspan x={x} dy="1.2em">{value}%</tspan>
+    </text>
+  );
+};
 const supplementaryBadgeStyle = {
   fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
   background: '#EBF0FC', color: '#2F6FE8', border: '1px solid #C4D4F7',
@@ -111,7 +130,7 @@ const InsuranceList = () => {
       </div>
 
       {/* 요약 통계 */}
-      <div className="mc-stats-strip">
+      <div className="mc-stats-strip mc-stats-strip-3">
         <div className="mc-stat">
           <div className="mc-stat-label">총 월 보험료</div>
           <div className="mc-stat-value">{formatKRW(totalPremium)}</div>
@@ -122,7 +141,7 @@ const InsuranceList = () => {
           <div className="mc-stat-value">{policies.length}개</div>
           <div className="mc-stat-sub">활성 계약</div>
         </div>
-        <div className="mc-stat mc-stat-pill mc-stat-pill-blue">
+        <div className="mc-stat mc-stat-pill-blue">
           <div className="mc-stat-label">총 보장금액</div>
           <div className="mc-stat-value">{formatKRW(totalCoverage)}</div>
           <div className="mc-stat-sub">보장 한도 합계</div>
@@ -135,16 +154,19 @@ const InsuranceList = () => {
           <div className="mc-sec-head">
             <span className="mc-sec-title">보장 범주 구성</span>
           </div>
-          <div className="mc-card mc-card-body">
-            <div className="mc-chart-wrap">
-              <ResponsiveContainer width="100%" height={220}>
+          <div className="mc-card mc-card-body mc-coverage-card">
+            <div className="mc-chart-wrap mc-coverage-chart">
+              <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie
                     data={COVERAGE_PIE_DATA}
                     cx="50%" cy="50%"
-                    innerRadius={45} outerRadius={80}
-                    paddingAngle={2}
+                    innerRadius={54} outerRadius={78}
+                    paddingAngle={4}
+                    cornerRadius={4}
                     dataKey="value"
+                    label={renderPieLabel}
+                    labelLine={{ stroke: '#B5BDCA', strokeWidth: 1 }}
                   >
                     {PIE_COLORS.map((c, i) => (
                       <Cell key={i} fill={c} stroke="#fff" strokeWidth={2}/>
@@ -159,20 +181,6 @@ const InsuranceList = () => {
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
-            <div className="mc-stack-xs" style={{ marginTop: 8 }}>
-              {COVERAGE_PIE_DATA.map((item, i) => (
-                <div key={item.name} className="mc-kv">
-                  <span className="mc-kv-key" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{
-                      display: 'inline-block', width: 10, height: 10, borderRadius: 2,
-                      background: PIE_COLORS[i],
-                    }}/>
-                    {item.name}
-                  </span>
-                  <span className="mc-kv-val">{item.value}%</span>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -193,7 +201,7 @@ const InsuranceList = () => {
                 </button>
               ))}
             </div>
-            <div className="mc-alert mc-alert-blue" style={{ marginTop: 16 }}>
+            <div className="mc-alert mc-alert-blue mc-filter-summary" style={{ marginTop: 16 }}>
               <div>
                 <div className="mc-alert-title">총 {filteredPolicies.length}건 · 월 {formatKRW(
                   filteredPolicies.reduce((s, p) => s + (p.monthlyPremium || 0), 0),
@@ -235,7 +243,7 @@ const InsuranceList = () => {
                     {policy.companyName.charAt(0)}
                   </div>
                   <div>
-                    <div className="mc-card-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    <div className="mc-card-title mc-policy-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
                       {policy.productName}
                       {policy.hasSupplementaryCoverage && policy.policyType !== 'SUPPLEMENTARY' && (
                         <span style={supplementaryBadgeStyle}>실손보장 포함</span>
@@ -263,13 +271,13 @@ const InsuranceList = () => {
 
               <div className="mc-card-body">
                 <div className="mc-grid-2">
-                  <div className="mc-kv">
-                    <span className="mc-kv-key">월 보험료</span>
-                    <span className="mc-kv-val">{formatKRW(policy.monthlyPremium)}</span>
+                  <div className="mc-kv mc-policy-kv">
+                    <span className="mc-kv-key mc-policy-premium-key">월 보험료</span>
+                    <span className="mc-kv-val mc-policy-premium-val">{formatKRW(policy.monthlyPremium)}</span>
                   </div>
-                  <div className="mc-kv">
-                    <span className="mc-kv-key">만료일</span>
-                    <span className="mc-kv-val">{policy.endDate}</span>
+                  <div className="mc-kv mc-policy-kv">
+                    <span className="mc-kv-key mc-policy-expiry-key">만료일</span>
+                    <span className="mc-kv-val mc-policy-date-val">{policy.endDate}</span>
                   </div>
                 </div>
 

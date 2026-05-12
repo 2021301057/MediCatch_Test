@@ -148,24 +148,37 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
 
   return (
     <div className={isPopup ? 'mc-chat-embed' : 'mc-page fade-in'}>
-      <div className="mc-page-top" style={isPopup ? { display: 'none' } : undefined}>
-        <div>
-          <div className="mc-page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Ic d={P.chat} size={16}/> 건강 AI 채팅
+      {!isPopup && (
+        <div className="mc-page-top">
+          <div>
+            <div className="mc-page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Ic d={P.chat} size={16}/> 건강 AI 채팅
+            </div>
+            <div className="mc-page-subtitle">내 건강·보험 데이터 기반 AI 어시스턴트</div>
           </div>
-          <div className="mc-page-subtitle">내 건강·보험 데이터 기반 AI 어시스턴트</div>
+          <div className="mc-page-top-right" style={{ gap: 8 }}>
+            <span className={`mc-tag ${modeLabel.cls}`}>
+              <Ic d={P.spark} size={10}/> {modeLabel.text}
+            </span>
+            <button className="mc-btn" onClick={clearHistory}>
+              <Ic d={P.trash} size={12}/> 대화 초기화
+            </button>
+          </div>
         </div>
-        <div className="mc-page-top-right" style={{ gap: 8 }}>
-          <span className={`mc-tag ${modeLabel.cls}`}>
-            <Ic d={P.spark} size={10}/> {modeLabel.text}
-          </span>
-          <button className="mc-btn" onClick={clearHistory}>
-            <Ic d={P.trash} size={12}/> 대화 초기화
-          </button>
-        </div>
-      </div>
+      )}
 
       <div className="mc-chat-shell">
+        {isPopup && (
+          <div className="mc-chat-popup-toolbar">
+            <span className={`mc-tag ${modeLabel.cls}`}>
+              <Ic d={P.spark} size={10}/> {modeLabel.text}
+            </span>
+            <button className="mc-btn" onClick={clearHistory}>
+              <Ic d={P.trash} size={12}/> 초기화
+            </button>
+          </div>
+        )}
+
         {/* 빠른 질문 */}
         <div className="mc-chat-quick">
           <div className="mc-chat-quick-label">자주 묻는 질문</div>
