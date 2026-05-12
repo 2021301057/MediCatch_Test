@@ -10,7 +10,6 @@ const NAV_ITEMS = [
   { path: '/medical-records',   icon: '📋', label: '진료 기록 & 청구' },
   { path: '/insurance-plan',    icon: '📊', label: '보험 추천 & 공백' },
   { path: '/health-report',     icon: '📈', label: '건강 통합 리포트' },
-  { path: '/chat',              icon: '💬', label: '건강 채팅',        badge: 'AI' },
 ];
 
 export default function Sidebar() {

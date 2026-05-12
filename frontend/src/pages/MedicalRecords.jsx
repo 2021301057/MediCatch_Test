@@ -252,6 +252,16 @@ const MedicalRecords = () => {
               <div className="mc-alert-body">
                 세대별 약관 차이로 보장 여부가 불확실합니다 · {checkGroups.length}건
               </div>
+
+              {r.hasClaimOpportunity && (
+                <button
+                  className="mc-btn mc-btn-primary"
+                  style={{ marginTop: 14 }}
+                  onClick={() => handleClaimClick(r)}
+                >
+                  <Ic d={P.arrow} size={12}/> 청구하기 ({formatKRW(r.claimAmount)})
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -504,6 +514,9 @@ const MedicalRecords = () => {
                   </button>
                 )}
               </div>
+              <button className="mc-modal-close" onClick={() => setShowClaimModal(false)}>
+                <Ic d={P.close} size={12}/>
+              </button>
             </div>
           );
         })}

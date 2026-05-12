@@ -3,6 +3,51 @@ import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 
+const DEMO_USERS_KEY = 'medicatchDemoUsers';
+
+const isNetworkError = (err) => !err.response;
+
+const loadDemoUsers = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DEMO_USERS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const saveDemoUser = (form, cleanIdentity) => {
+  const users = loadDemoUsers();
+  if (users.some((u) => u.email === form.email || u.codefId === form.id)) {
+    throw new Error('DUPLICATE_DEMO_USER');
+  }
+
+  const user = {
+    userId: Date.now(),
+    email: form.email,
+    name: form.name,
+    codefId: form.id,
+    password: form.password,
+    birthDate: cleanIdentity
+      ? `${cleanIdentity[6] === '3' || cleanIdentity[6] === '4' ? '20' : '19'}${cleanIdentity.slice(0, 2)}-${cleanIdentity.slice(2, 4)}-${cleanIdentity.slice(4, 6)}`
+      : '',
+  };
+  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify([...users, user]));
+  return user;
+};
+
+const findDemoUser = (codefId, password) => (
+  loadDemoUsers().find((u) => u.codefId === codefId && u.password === password)
+);
+
+const makeDemoAuth = (user) => ({
+  userId: user.userId,
+  email: user.email,
+  name: user.name,
+  codefId: user.codefId,
+  accessToken: `demo-access-${user.userId}`,
+  refreshToken: `demo-refresh-${user.userId}`,
+});
+
 export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
@@ -157,6 +202,24 @@ export default function LoginPage() {
       setSessionKey(data.sessionKey);
       setSignupStep(2);
     } catch (err) {
+      if (isNetworkError(err)) {
+        try {
+          const demoUser = saveDemoUser(form, cleanIdentity);
+          const data = makeDemoAuth(demoUser);
+          setSuccessMessage('백엔드 연결 없이 데모 계정으로 가입되었습니다.');
+          setTimeout(() => {
+            login(data, data.accessToken, data.refreshToken);
+            navigate('/');
+          }, 700);
+          return;
+        } catch (demoErr) {
+          if (demoErr.message === 'DUPLICATE_DEMO_USER') {
+            setDuplicateEmail(form.email);
+            return;
+          }
+        }
+      }
+
       const msg = err.response?.data?.message || '';
       const fe = err.response?.data?.fieldErrors;
 
