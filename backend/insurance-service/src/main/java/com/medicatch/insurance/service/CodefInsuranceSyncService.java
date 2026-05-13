@@ -394,7 +394,7 @@ public class CodefInsuranceSyncService {
             }
 
             String contractStatus = str(item.get("resContractStatus"));
-            boolean isActive = "정상".equals(contractStatus) || "정".equals(contractStatus)
+            boolean isActive = isActiveStatus(contractStatus)
                     || (contractStatus == null && endDate != null && endDate.isAfter(LocalDate.now()));
 
             String premiumStr = str(item.get("resPremium"));
@@ -444,15 +444,15 @@ public class CodefInsuranceSyncService {
             String name = str(cov.get("resCoverageName"));
             if (name == null || name.isBlank()) continue;
 
-            // 해지된 보장 항목은 저장하지 않음
+            // 현재 유효한 보장 항목만 저장
             String covStatus = str(cov.get("resCoverageStatus"));
-            if ("해지".equals(covStatus)) continue;
+            if (!isActiveStatus(covStatus)) continue;
 
             items.add(CoverageItem.builder()
                     .itemName(name)
                     .category(resolveCoverageCategory(name))
                     .maxBenefitAmount(parseDouble(cov.get("resCoverageAmount")))
-                    .isCovered(!"해지".equals(covStatus))
+                    .isCovered(true)
                     .conditions(str(cov.get("resAgreementType")))
                     .priority(priority++)
                     .build());
@@ -526,6 +526,10 @@ public class CodefInsuranceSyncService {
     private boolean isAnnualPayment(String paymentCycle) {
         if (paymentCycle == null) return false;
         return paymentCycle.contains("년") || paymentCycle.contains("연");
+    }
+
+    private boolean isActiveStatus(String status) {
+        return "정상".equals(status) || "계약부활".equals(status);
     }
 
     private LocalDate parseDate8(String s) {
