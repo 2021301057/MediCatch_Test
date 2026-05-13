@@ -72,7 +72,7 @@ const emptyCardStyle = {
   padding: '34px 18px',
 };
 
-const COVERAGE_CATEGORY_ORDER = ['실손', '진단', '수술', '입원', '통원', '항암·치료', '사망·후유장해', '위로금', '기타'];
+const COVERAGE_CATEGORY_ORDER = ['실손', '진단', '수술', '입원', '통원', '항암·치료', '사망·후유장해', '기타'];
 
 const getPrimaryTypeLabel = (policy) => TYPE_MAP[policy.policyType] || '기타';
 const getPolicyTypeLabel = (policy) => {
@@ -99,7 +99,6 @@ const getCoverageCategory = (item) => {
   if (text.includes('통원')) return '통원';
   if (text.includes('항암') || text.includes('방사선') || text.includes('양성자') || text.includes('치료비')) return '항암·치료';
   if (text.includes('사망') || text.includes('후유장해') || text.includes('후유 장애')) return '사망·후유장해';
-  if (text.includes('위로금') || text.includes('보상금')) return '위로금';
   return '기타';
 };
 
