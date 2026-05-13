@@ -72,6 +72,8 @@ const emptyCardStyle = {
   padding: '34px 18px',
 };
 
+const COVERAGE_CATEGORY_ORDER = ['실손', '진단', '수술', '입원', '사망·후유장해', '기타'];
+
 const getPrimaryTypeLabel = (policy) => TYPE_MAP[policy.policyType] || '기타';
 const getPolicyTypeLabel = (policy) => {
   const primary = getPrimaryTypeLabel(policy);
@@ -85,6 +87,43 @@ const matchesFilter = (policy, filterType) => {
   if (filterType === '전체') return true;
   if (filterType === '실손') return policy.policyType === 'SUPPLEMENTARY' || policy.hasSupplementaryCoverage;
   return getPrimaryTypeLabel(policy) === filterType;
+};
+
+const getCoverageText = (item) => `${item.name || item.itemName || ''} ${item.agreementType || ''}`.toLowerCase();
+const getCoverageCategory = (item) => {
+  const text = getCoverageText(item);
+  if (text.includes('실손') || text.includes('의료비') || text.includes('통원')) return '실손';
+  if (text.includes('진단')) return '진단';
+  if (text.includes('수술')) return '수술';
+  if (text.includes('입원')) return '입원';
+  if (text.includes('사망') || text.includes('후유장해') || text.includes('후유 장애')) return '사망·후유장해';
+  return '기타';
+};
+
+const getCoverageAmount = (item) => item.amount ?? item.maxBenefitAmount;
+const formatCoverageAmount = (item) => {
+  const amount = Number(getCoverageAmount(item) || 0);
+  return amount > 0 ? formatKRW(amount) : '정보 없음';
+};
+
+const groupCoverageItems = (items = []) => {
+  const grouped = items.reduce((acc, item) => {
+    const category = getCoverageCategory(item);
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(item);
+    return acc;
+  }, {});
+
+  return COVERAGE_CATEGORY_ORDER
+    .filter((category) => grouped[category]?.length)
+    .map((category) => ({
+      category,
+      items: grouped[category].sort((a, b) => {
+        const amountDiff = Number(getCoverageAmount(b) || 0) - Number(getCoverageAmount(a) || 0);
+        if (amountDiff !== 0) return amountDiff;
+        return (a.name || a.itemName || '').localeCompare(b.name || b.itemName || '', 'ko-KR');
+      }),
+    }));
 };
 
 const InsuranceList = () => {
@@ -248,6 +287,7 @@ const InsuranceList = () => {
       <div className="mc-stack-sm">
         {filteredPolicies.map((policy) => {
           const open = expandedPolicy === policy.id;
+          const coverageGroups = groupCoverageItems(policy.coverageItems || []);
           return (
             <div key={policy.id} className="mc-card">
               <div
@@ -305,8 +345,10 @@ const InsuranceList = () => {
 
                 {open && (
                   <div style={{ marginTop: 14 }}>
-                    <div className="mc-field-label" style={{ marginBottom: 8 }}>보장 내역</div>
-                    {(policy.coverageItems || []).length > 0 ? (
+                    <div className="mc-field-label" style={{ marginBottom: 8 }}>
+                      보장 내역 · {(policy.coverageItems || []).length}건
+                    </div>
+                    {coverageGroups.length > 0 ? (
                       <table className="mc-tbl">
                         <thead>
                           <tr>
@@ -316,19 +358,38 @@ const InsuranceList = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {(policy.coverageItems || []).map((item, idx) => (
-                            <tr key={idx}>
-                              <td style={{ fontWeight: 600 }}>{item.name || item.itemName || '-'}</td>
-                              <td style={{ textAlign: 'right', color: 'var(--blue)', fontWeight: 700 }}>
-                                {formatKRW(item.amount || item.maxBenefitAmount)}
+                          {coverageGroups.flatMap((group) => [
+                            <tr key={`group-${group.category}`}>
+                              <td colSpan={3} style={{
+                                background: '#F6F8FC',
+                                color: 'var(--text-2)',
+                                fontWeight: 800,
+                                fontSize: 12,
+                              }}>
+                                {group.category} · {group.items.length}건
                               </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <span className={`mc-tag ${item.isCovered !== false ? 'mc-tag-success' : 'mc-tag-neutral'}`}>
-                                  {item.isCovered !== false ? '보장중' : '예외'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                            </tr>,
+                            ...group.items.map((item, idx) => (
+                              <tr key={`${group.category}-${idx}`}>
+                                <td>
+                                  <div style={{ fontWeight: 700 }}>{item.name || item.itemName || '-'}</div>
+                                  {item.agreementType && (
+                                    <div style={{ marginTop: 3, color: 'var(--text-3)', fontSize: 12 }}>
+                                      {item.agreementType}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'right', color: 'var(--blue)', fontWeight: 700 }}>
+                                  {formatCoverageAmount(item)}
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <span className={`mc-tag ${item.isCovered !== false ? 'mc-tag-success' : 'mc-tag-neutral'}`}>
+                                    {item.isCovered !== false ? '보장중' : '예외'}
+                                  </span>
+                                </td>
+                              </tr>
+                            )),
+                          ])}
                         </tbody>
                       </table>
                     ) : (
