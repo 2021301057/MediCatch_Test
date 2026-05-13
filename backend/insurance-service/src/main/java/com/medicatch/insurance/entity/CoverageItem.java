@@ -35,9 +35,6 @@ public class CoverageItem {
     private Double maxBenefitAmount;  // Maximum benefit amount
 
     @Column
-    private Double avgGroupCoverageAmount;  // Average group coverage amount from CODEF statistics
-
-    @Column
     private Double deductible;  // Deductible amount
 
     @Column

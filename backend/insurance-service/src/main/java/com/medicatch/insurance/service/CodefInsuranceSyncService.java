@@ -2,9 +2,11 @@ package com.medicatch.insurance.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medicatch.insurance.entity.ClaimPayment;
+import com.medicatch.insurance.entity.CoverageComparison;
 import com.medicatch.insurance.entity.CoverageItem;
 import com.medicatch.insurance.entity.Policy;
 import com.medicatch.insurance.repository.ClaimPaymentRepository;
+import com.medicatch.insurance.repository.CoverageComparisonRepository;
 import com.medicatch.insurance.repository.PolicyRepository;
 import io.codef.api.EasyCodef;
 import io.codef.api.EasyCodefServiceType;
@@ -40,13 +42,16 @@ public class CodefInsuranceSyncService {
     private final ObjectMapper objectMapper;
     private final PolicyRepository policyRepository;
     private final ClaimPaymentRepository claimPaymentRepository;
+    private final CoverageComparisonRepository coverageComparisonRepository;
 
     public CodefInsuranceSyncService(ObjectMapper objectMapper,
                                      PolicyRepository policyRepository,
-                                     ClaimPaymentRepository claimPaymentRepository) {
+                                     ClaimPaymentRepository claimPaymentRepository,
+                                     CoverageComparisonRepository coverageComparisonRepository) {
         this.objectMapper = objectMapper;
         this.policyRepository = policyRepository;
         this.claimPaymentRepository = claimPaymentRepository;
+        this.coverageComparisonRepository = coverageComparisonRepository;
     }
 
     @Transactional
@@ -93,12 +98,11 @@ public class CodefInsuranceSyncService {
         policyRepository.deleteByCodefId(codefId);
 
         List<Policy> toSave = new ArrayList<>();
-        CoverageAverageStats flatRateAverageStats = parseFlatRateAverageStats(data);
 
         // 실손보장형 → SUPPLEMENTARY
         toSave.addAll(parseContracts(userId, codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
         // 정액형 보장은 화면에서 "건강"으로 표시
-        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "HEALTH", flatRateAverageStats));
+        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "HEALTH"));
         // 저축성
         toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "SAVINGS"));
         // 자동차
@@ -163,8 +167,35 @@ public class CodefInsuranceSyncService {
         log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, unique.size());
 
         saveClaimPayments(userId, codefId, data);
+        saveCoverageComparisons(userId, codefId, data);
 
         return unique.size();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void saveCoverageComparisons(Long userId, String codefId, Map<String, Object> data) {
+        coverageComparisonRepository.deleteByCodefId(codefId);
+
+        List<Map<String, Object>> list =
+                (List<Map<String, Object>>) data.getOrDefault("resFlatRateStatisticsList", List.of());
+
+        List<CoverageComparison> comparisons = new ArrayList<>();
+        for (Map<String, Object> item : list) {
+            String coverageName = str(item.get("resCoverageName"));
+            if (coverageName == null) continue;
+
+            comparisons.add(CoverageComparison.builder()
+                    .userId(userId)
+                    .codefId(codefId)
+                    .coverageName(coverageName)
+                    .coverageCode(str(item.get("resCoverageCode")))
+                    .selfCoverageAmount(parseStatisticsAmount(item.get("resSelfCoverageAmt")))
+                    .avgGroupCoverageAmount(parseStatisticsAmount(item.get("resAvgGroupCoverageAmt")))
+                    .build());
+        }
+
+        coverageComparisonRepository.saveAll(comparisons);
+        log.info("보장 비교 통계 저장 완료 - codefId: {}, comparisons: {}", codefId, comparisons.size());
     }
 
     @SuppressWarnings("unchecked")
@@ -344,18 +375,12 @@ public class CodefInsuranceSyncService {
 
     private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
                                          String key, String insuranceType) {
-        return parseContracts(userId, codefId, data, key, item -> insuranceType, new CoverageAverageStats());
-    }
-
-    private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
-                                         String key, String insuranceType, CoverageAverageStats averageStats) {
-        return parseContracts(userId, codefId, data, key, item -> insuranceType, averageStats);
+        return parseContracts(userId, codefId, data, key, item -> insuranceType);
     }
 
     @SuppressWarnings("unchecked")
     private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
-                                         String key, java.util.function.Function<Map<String, Object>, String> typeResolver,
-                                         CoverageAverageStats averageStats) {
+                                         String key, java.util.function.Function<Map<String, Object>, String> typeResolver) {
         List<Map<String, Object>> list =
                 (List<Map<String, Object>>) data.getOrDefault(key, List.of());
         List<Policy> policies = new ArrayList<>();
@@ -411,7 +436,7 @@ public class CodefInsuranceSyncService {
             Double monthly = calculateMonthlyPremium(premiumAmount, paymentCycle);
             Double annual = calculateAnnualPremium(premiumAmount, monthly, paymentCycle);
 
-            List<CoverageItem> coverageItems = parseCoverageItems(item, averageStats);
+            List<CoverageItem> coverageItems = parseCoverageItems(item);
 
             Policy policy = Policy.builder()
                     .userId(userId)
@@ -441,7 +466,7 @@ public class CodefInsuranceSyncService {
     }
 
     @SuppressWarnings("unchecked")
-    private List<CoverageItem> parseCoverageItems(Map<String, Object> contractItem, CoverageAverageStats averageStats) {
+    private List<CoverageItem> parseCoverageItems(Map<String, Object> contractItem) {
         List<Map<String, Object>> covList =
                 (List<Map<String, Object>>) contractItem.getOrDefault("resCoverageLists", List.of());
         List<CoverageItem> items = new ArrayList<>();
@@ -459,7 +484,6 @@ public class CodefInsuranceSyncService {
                     .itemName(name)
                     .category(resolveCoverageCategory(name))
                     .maxBenefitAmount(parseDouble(cov.get("resCoverageAmount")))
-                    .avgGroupCoverageAmount(findAvgGroupCoverageAmount(cov, averageStats))
                     .isCovered(true)
                     .conditions(str(cov.get("resAgreementType")))
                     .priority(priority++)
@@ -475,59 +499,6 @@ public class CodefInsuranceSyncService {
         if (lower.contains("수술"))  return "SURGERY";
         if (lower.contains("약"))    return "MEDICATION";
         return "OUTPATIENT";
-    }
-
-    @SuppressWarnings("unchecked")
-    private CoverageAverageStats parseFlatRateAverageStats(Map<String, Object> data) {
-        CoverageAverageStats stats = new CoverageAverageStats();
-        List<Map<String, Object>> list =
-                (List<Map<String, Object>>) data.getOrDefault("resFlatRateStatisticsList", List.of());
-
-        for (Map<String, Object> item : list) {
-            Double avgAmount = parseStatisticsAmount(item.get("resAvgGroupCoverageAmt"));
-            if (avgAmount == null) continue;
-
-            String codeKey = normalizeKey(str(item.get("resCoverageCode")));
-            if (codeKey != null) {
-                stats.byCode.put(codeKey, avgAmount);
-            }
-
-            String nameKey = normalizeKey(str(item.get("resCoverageName")));
-            if (nameKey != null) {
-                stats.byName.put(nameKey, avgAmount);
-            }
-        }
-        return stats;
-    }
-
-    private Double findAvgGroupCoverageAmount(Map<String, Object> coverage, CoverageAverageStats stats) {
-        if (stats == null) return null;
-
-        String codeKey = normalizeKey(str(coverage.get("resCoverageCode")));
-        if (codeKey != null && stats.byCode.containsKey(codeKey)) {
-            return stats.byCode.get(codeKey);
-        }
-
-        Double byAgreementType = findAverageByName(str(coverage.get("resAgreementType")), stats);
-        if (byAgreementType != null) return byAgreementType;
-
-        return findAverageByName(str(coverage.get("resCoverageName")), stats);
-    }
-
-    private Double findAverageByName(String value, CoverageAverageStats stats) {
-        String nameKey = normalizeKey(value);
-        if (nameKey == null) return null;
-        if (stats.byName.containsKey(nameKey)) {
-            return stats.byName.get(nameKey);
-        }
-
-        for (Map.Entry<String, Double> entry : stats.byName.entrySet()) {
-            String statKey = entry.getKey();
-            if (nameKey.contains(statKey) || statKey.contains(nameKey)) {
-                return entry.getValue();
-            }
-        }
-        return null;
     }
 
     private Double parseStatisticsAmount(Object value) {
@@ -616,8 +587,4 @@ public class CodefInsuranceSyncService {
         }
     }
 
-    private static class CoverageAverageStats {
-        private final Map<String, Double> byCode = new HashMap<>();
-        private final Map<String, Double> byName = new HashMap<>();
-    }
 }

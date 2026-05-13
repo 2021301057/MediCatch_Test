@@ -52,7 +52,6 @@ const normalizePolicy = (row) => {
     policy.coverage_items = policy.coverage_items.map((item) => withAliases(item, {
       item_name: 'name',
       max_benefit_amount: 'amount',
-      avg_group_coverage_amount: 'avgGroupCoverageAmount',
       is_covered: 'isCovered',
     }));
     policy.coverageItems = policy.coverage_items;
@@ -103,6 +102,13 @@ export const insuranceAPI = {
   getPolicies:   () => api.get('/insurance/policies')
     .then((rows) => Array.isArray(rows) ? rows.map(normalizePolicy) : rows),
   getCoverage:   (policyId) => api.get(`/insurance/policies/${policyId}/coverage`),
+  getCoverageComparison: () => api.get('/insurance/coverage-comparison')
+    .then((rows) => Array.isArray(rows) ? rows.map((row) => withAliases(row, {
+      coverage_name: 'coverageName',
+      coverage_code: 'coverageCode',
+      self_coverage_amount: 'selfCoverageAmount',
+      avg_group_coverage_amount: 'avgGroupCoverageAmount',
+    })) : rows),
   getSummary:    () => api.get('/insurance/summary'),
   sync:          (data) => api.post('/insurance/sync', withSyncRequestAliases(data), { timeout: 60000 }),
 };

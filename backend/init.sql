@@ -142,7 +142,6 @@ CREATE TABLE IF NOT EXISTS coverage_items (
     category VARCHAR(50) NOT NULL,
     coverage_rate DECIMAL(5,2),
     max_benefit_amount DECIMAL(10,2),
-    avg_group_coverage_amount DECIMAL(15,2),
     deductible DECIMAL(10,2),
     copay DECIMAL(10,2),
     conditions LONGTEXT,
@@ -152,6 +151,21 @@ CREATE TABLE IF NOT EXISTS coverage_items (
     FOREIGN KEY (policy_id) REFERENCES policies(id),
     INDEX idx_policy_id (policy_id),
     INDEX idx_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Coverage Comparison table
+CREATE TABLE IF NOT EXISTS coverage_comparison (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    codef_id VARCHAR(255),
+    coverage_name VARCHAR(255) NOT NULL,
+    coverage_code VARCHAR(50),
+    self_coverage_amount DECIMAL(15,2),
+    avg_group_coverage_amount DECIMAL(15,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_codef_id (codef_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================

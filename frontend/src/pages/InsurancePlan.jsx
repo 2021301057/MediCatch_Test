@@ -223,11 +223,7 @@ const getCoverageKey = (item) => {
   return rule?.key || null;
 };
 
-const getAvgGroupCoverageAmount = (item) => toNumber(
-  item?.avgGroupCoverageAmount ?? item?.avg_group_coverage_amount
-);
-
-const analyzeCoverageGaps = (policies) => {
+const analyzeCoverageGaps = (policies, comparisons = []) => {
   const activePolicies = policies.filter(isActivePolicy);
   const totals = COVERAGE_STANDARDS.reduce((acc, standard) => ({
     ...acc,
@@ -250,22 +246,37 @@ const analyzeCoverageGaps = (policies) => {
 
     items.forEach((item) => {
       const key = getCoverageKey(item);
-      if (!key || !totals[key]) return;
+      if (key !== 'actualLoss' || !totals[key]) return;
 
-      const amount = toNumber(item.amount ?? item.max_benefit_amount);
-      const avgGroupAmount = getAvgGroupCoverageAmount(item);
-      totals[key].current += amount;
-      if (avgGroupAmount > 0) {
-        totals[key].comparison += avgGroupAmount;
-        totals[key].hasAverageData = true;
-      }
       totals[key].hasCoverage = true;
       totals[key].matchedItems.push({
         name: item.name || item.itemName || '보장명 정보 없음',
-        amount,
-        avgGroupAmount,
         policyName: policy.productName || policy.policy_details || '보험명 정보 없음',
       });
+    });
+  });
+
+  comparisons.forEach((comparison) => {
+    const key = getCoverageKey({
+      name: comparison.coverageName,
+      agreementType: comparison.coverageName,
+    });
+    if (!key || !totals[key]) return;
+
+    const selfAmount = toNumber(comparison.selfCoverageAmount ?? comparison.self_coverage_amount);
+    const avgGroupAmount = toNumber(comparison.avgGroupCoverageAmount ?? comparison.avg_group_coverage_amount);
+
+    totals[key].current += selfAmount;
+    if (avgGroupAmount > 0) {
+      totals[key].comparison += avgGroupAmount;
+      totals[key].hasAverageData = true;
+    }
+    totals[key].hasCoverage = totals[key].hasCoverage || selfAmount > 0;
+    totals[key].matchedItems.push({
+      name: comparison.coverageName || '보장 통계명 정보 없음',
+      amount: selfAmount,
+      avgGroupAmount,
+      policyName: 'CODEF 보장 통계',
     });
   });
 
@@ -324,30 +335,36 @@ const calculateCoverageScore = (gaps) => {
 const InsurancePlan = () => {
   const navigate = useNavigate();
   const [policies, setPolicies] = useState([]);
+  const [coverageComparisons, setCoverageComparisons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchPolicies = async () => {
+    const fetchPlanData = async () => {
       setLoading(true);
       setError('');
       try {
-        const rows = await insuranceAPI.getPolicies();
-        setPolicies(Array.isArray(rows) ? rows : []);
+        const [policyRows, comparisonRows] = await Promise.all([
+          insuranceAPI.getPolicies(),
+          insuranceAPI.getCoverageComparison(),
+        ]);
+        setPolicies(Array.isArray(policyRows) ? policyRows : []);
+        setCoverageComparisons(Array.isArray(comparisonRows) ? comparisonRows : []);
       } catch (err) {
-        console.error('Failed to fetch policies:', err);
+        console.error('Failed to fetch insurance plan data:', err);
         setPolicies([]);
+        setCoverageComparisons([]);
         setError('보험 정보를 불러오지 못했습니다.');
       } finally {
         setLoading(false);
       }
     };
-    fetchPolicies();
+    fetchPlanData();
   }, []);
 
   const activePolicies = policies.filter(isActivePolicy);
   const coverageItems = activePolicies.flatMap(getCoverageItems);
-  const coverageGaps = analyzeCoverageGaps(policies);
+  const coverageGaps = analyzeCoverageGaps(policies, coverageComparisons);
   const coreGaps = coverageGaps.filter((gap) => gap.group === 'core');
   const referenceGaps = coverageGaps.filter((gap) => gap.group === 'reference' && gap.hasCoverage);
   const coverageScore = calculateCoverageScore(coverageGaps);

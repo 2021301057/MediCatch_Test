@@ -1,9 +1,11 @@
 package com.medicatch.insurance.controller;
 
+import com.medicatch.insurance.dto.CoverageComparisonDto;
 import com.medicatch.insurance.dto.PolicyDto;
 import com.medicatch.insurance.entity.ClaimPayment;
 import com.medicatch.insurance.entity.CoverageItem;
 import com.medicatch.insurance.repository.ClaimPaymentRepository;
+import com.medicatch.insurance.repository.CoverageComparisonRepository;
 import com.medicatch.insurance.service.CodefInsuranceSyncService;
 import com.medicatch.insurance.service.InsuranceService;
 import lombok.extern.slf4j.Slf4j;
@@ -23,13 +25,16 @@ public class InsuranceController {
     private final InsuranceService insuranceService;
     private final CodefInsuranceSyncService codefSyncService;
     private final ClaimPaymentRepository claimPaymentRepository;
+    private final CoverageComparisonRepository coverageComparisonRepository;
 
     public InsuranceController(InsuranceService insuranceService,
                                 CodefInsuranceSyncService codefSyncService,
-                                ClaimPaymentRepository claimPaymentRepository) {
+                                ClaimPaymentRepository claimPaymentRepository,
+                                CoverageComparisonRepository coverageComparisonRepository) {
         this.insuranceService = insuranceService;
         this.codefSyncService = codefSyncService;
         this.claimPaymentRepository = claimPaymentRepository;
+        this.coverageComparisonRepository = coverageComparisonRepository;
     }
 
     /**
@@ -138,6 +143,31 @@ public class InsuranceController {
             return ResponseEntity.ok(summary);
         } catch (Exception e) {
             log.error("Error getting insurance summary: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Get flat-rate coverage comparison statistics for user
+     */
+    @GetMapping("/coverage-comparison")
+    public ResponseEntity<List<CoverageComparisonDto>> getCoverageComparison(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam) {
+        String raw = userIdHeader != null ? userIdHeader : userIdParam;
+        if (raw == null || raw.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Long userId = Long.parseLong(raw);
+        log.info("GET /api/insurance/coverage-comparison - userId: {}", userId);
+        try {
+            List<CoverageComparisonDto> comparisons = coverageComparisonRepository.findByUserId(userId)
+                    .stream()
+                    .map(CoverageComparisonDto::from)
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(comparisons);
+        } catch (Exception e) {
+            log.error("Error getting coverage comparison: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }
