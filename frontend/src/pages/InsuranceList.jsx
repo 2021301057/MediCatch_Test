@@ -167,13 +167,13 @@ const InsuranceList = () => {
   const filteredPolicies = policies.filter((policy) => matchesFilter(policy, filterType));
 
   const coveragePieData = useMemo(() => {
-    const counts = policies.reduce((acc, policy) => {
-      const label = getPrimaryTypeLabel(policy);
+    const counts = policies.flatMap((policy) => policy.coverageItems || []).reduce((acc, item) => {
+      const label = getCoverageCategory(item);
       acc[label] = (acc[label] || 0) + 1;
       return acc;
     }, {});
 
-    return ['실손', '건강', '저축', '자동차', '재물', '기타']
+    return COVERAGE_CATEGORY_ORDER
       .map((name) => ({ name, value: counts[name] || 0 }))
       .filter((item) => item.value > 0);
   }, [policies]);
@@ -224,7 +224,7 @@ const InsuranceList = () => {
       <div className="mc-two-col" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div>
           <div className="mc-sec-head">
-            <span className="mc-sec-title">보험 유형 구성</span>
+            <span className="mc-sec-title">보장 항목 구성</span>
           </div>
           <div className="mc-card mc-card-body mc-coverage-card">
             {coveragePieData.length > 0 ? (
