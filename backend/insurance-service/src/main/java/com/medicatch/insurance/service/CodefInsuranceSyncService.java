@@ -93,11 +93,12 @@ public class CodefInsuranceSyncService {
         policyRepository.deleteByCodefId(codefId);
 
         List<Policy> toSave = new ArrayList<>();
+        CoverageAverageStats flatRateAverageStats = parseFlatRateAverageStats(data);
 
         // 실손보장형 → SUPPLEMENTARY
         toSave.addAll(parseContracts(userId, codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
         // 정액형 보장은 화면에서 "건강"으로 표시
-        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "HEALTH"));
+        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "HEALTH", flatRateAverageStats));
         // 저축성
         toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "SAVINGS"));
         // 자동차
@@ -343,12 +344,18 @@ public class CodefInsuranceSyncService {
 
     private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
                                          String key, String insuranceType) {
-        return parseContracts(userId, codefId, data, key, item -> insuranceType);
+        return parseContracts(userId, codefId, data, key, item -> insuranceType, new CoverageAverageStats());
+    }
+
+    private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
+                                         String key, String insuranceType, CoverageAverageStats averageStats) {
+        return parseContracts(userId, codefId, data, key, item -> insuranceType, averageStats);
     }
 
     @SuppressWarnings("unchecked")
     private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
-                                         String key, java.util.function.Function<Map<String, Object>, String> typeResolver) {
+                                         String key, java.util.function.Function<Map<String, Object>, String> typeResolver,
+                                         CoverageAverageStats averageStats) {
         List<Map<String, Object>> list =
                 (List<Map<String, Object>>) data.getOrDefault(key, List.of());
         List<Policy> policies = new ArrayList<>();
@@ -404,7 +411,7 @@ public class CodefInsuranceSyncService {
             Double monthly = calculateMonthlyPremium(premiumAmount, paymentCycle);
             Double annual = calculateAnnualPremium(premiumAmount, monthly, paymentCycle);
 
-            List<CoverageItem> coverageItems = parseCoverageItems(item);
+            List<CoverageItem> coverageItems = parseCoverageItems(item, averageStats);
 
             Policy policy = Policy.builder()
                     .userId(userId)
@@ -434,7 +441,7 @@ public class CodefInsuranceSyncService {
     }
 
     @SuppressWarnings("unchecked")
-    private List<CoverageItem> parseCoverageItems(Map<String, Object> contractItem) {
+    private List<CoverageItem> parseCoverageItems(Map<String, Object> contractItem, CoverageAverageStats averageStats) {
         List<Map<String, Object>> covList =
                 (List<Map<String, Object>>) contractItem.getOrDefault("resCoverageLists", List.of());
         List<CoverageItem> items = new ArrayList<>();
@@ -452,6 +459,7 @@ public class CodefInsuranceSyncService {
                     .itemName(name)
                     .category(resolveCoverageCategory(name))
                     .maxBenefitAmount(parseDouble(cov.get("resCoverageAmount")))
+                    .avgGroupCoverageAmount(findAvgGroupCoverageAmount(cov, averageStats))
                     .isCovered(true)
                     .conditions(str(cov.get("resAgreementType")))
                     .priority(priority++)
@@ -467,6 +475,64 @@ public class CodefInsuranceSyncService {
         if (lower.contains("수술"))  return "SURGERY";
         if (lower.contains("약"))    return "MEDICATION";
         return "OUTPATIENT";
+    }
+
+    @SuppressWarnings("unchecked")
+    private CoverageAverageStats parseFlatRateAverageStats(Map<String, Object> data) {
+        CoverageAverageStats stats = new CoverageAverageStats();
+        List<Map<String, Object>> list =
+                (List<Map<String, Object>>) data.getOrDefault("resFlatRateStatisticsList", List.of());
+
+        for (Map<String, Object> item : list) {
+            Double avgAmount = parseStatisticsAmount(item.get("resAvgGroupCoverageAmt"));
+            if (avgAmount == null) continue;
+
+            String codeKey = normalizeKey(str(item.get("resCoverageCode")));
+            if (codeKey != null) {
+                stats.byCode.put(codeKey, avgAmount);
+            }
+
+            String nameKey = normalizeKey(str(item.get("resCoverageName")));
+            if (nameKey != null) {
+                stats.byName.put(nameKey, avgAmount);
+            }
+        }
+        return stats;
+    }
+
+    private Double findAvgGroupCoverageAmount(Map<String, Object> coverage, CoverageAverageStats stats) {
+        if (stats == null) return null;
+
+        String codeKey = normalizeKey(str(coverage.get("resCoverageCode")));
+        if (codeKey != null && stats.byCode.containsKey(codeKey)) {
+            return stats.byCode.get(codeKey);
+        }
+
+        Double byAgreementType = findAverageByName(str(coverage.get("resAgreementType")), stats);
+        if (byAgreementType != null) return byAgreementType;
+
+        return findAverageByName(str(coverage.get("resCoverageName")), stats);
+    }
+
+    private Double findAverageByName(String value, CoverageAverageStats stats) {
+        String nameKey = normalizeKey(value);
+        if (nameKey == null) return null;
+        if (stats.byName.containsKey(nameKey)) {
+            return stats.byName.get(nameKey);
+        }
+
+        for (Map.Entry<String, Double> entry : stats.byName.entrySet()) {
+            String statKey = entry.getKey();
+            if (nameKey.contains(statKey) || statKey.contains(nameKey)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private Double parseStatisticsAmount(Object value) {
+        Double amount = parseDouble(value);
+        return amount != null ? amount * 1000.0 : null;
     }
 
     private EasyCodef createCodef() {
@@ -548,5 +614,10 @@ public class CodefInsuranceSyncService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static class CoverageAverageStats {
+        private final Map<String, Double> byCode = new HashMap<>();
+        private final Map<String, Double> byName = new HashMap<>();
     }
 }
