@@ -34,7 +34,7 @@ const COVERAGE_STANDARDS = [
     type: 'presence',
     aggregation: 'presence',
     weight: 25,
-    recommended: 1,
+    fallbackComparison: 1,
     description: '실손형 계약 또는 실손의료비 담보 보유 여부를 확인합니다.',
   },
   {
@@ -44,8 +44,7 @@ const COVERAGE_STANDARDS = [
     type: 'amount',
     aggregation: 'sum',
     weight: 20,
-    recommended: 30000000,
-    description: '일반 암진단 담보를 중심으로 집계합니다. 유사암/고액암/특정암은 참고 항목으로 분리합니다.',
+    description: '일반 암진단 담보를 중심으로 집계하고 평균그룹 보장금액과 비교합니다. 유사암/고액암/특정암은 참고 항목으로 분리합니다.',
   },
   {
     key: 'cerebrovascular',
@@ -54,8 +53,7 @@ const COVERAGE_STANDARDS = [
     type: 'amount',
     aggregation: 'sum',
     weight: 15,
-    recommended: 20000000,
-    description: '뇌혈관질환 진단 관련 담보를 기준으로 집계합니다.',
+    description: '뇌혈관질환 진단 관련 담보를 평균그룹 보장금액과 비교합니다.',
   },
   {
     key: 'ischemicHeart',
@@ -64,8 +62,7 @@ const COVERAGE_STANDARDS = [
     type: 'amount',
     aggregation: 'sum',
     weight: 15,
-    recommended: 20000000,
-    description: '허혈성심장질환 진단 관련 담보를 기준으로 집계합니다.',
+    description: '허혈성심장질환 진단 관련 담보를 평균그룹 보장금액과 비교합니다.',
   },
   {
     key: 'diseaseHospitalDaily',
@@ -74,8 +71,7 @@ const COVERAGE_STANDARDS = [
     type: 'amount',
     aggregation: 'sum',
     weight: 10,
-    recommended: 50000,
-    description: '일반 질병입원일당 담보만 집계합니다. 암/상해/중환자실 입원일당은 참고 항목입니다.',
+    description: '일반 질병입원일당 담보만 집계하고 평균그룹 보장금액과 비교합니다. 암/상해/중환자실 입원일당은 참고 항목입니다.',
   },
   {
     key: 'diseaseSurgery',
@@ -84,8 +80,7 @@ const COVERAGE_STANDARDS = [
     type: 'amount',
     aggregation: 'sum',
     weight: 15,
-    recommended: 5000000,
-    description: '일반 질병수술비 담보를 중심으로 집계합니다. 암/상해/특정질병/기타수술은 참고 항목입니다.',
+    description: '일반 질병수술비 담보를 중심으로 평균그룹 보장금액과 비교합니다. 암/상해/특정질병/기타수술은 참고 항목입니다.',
   },
   {
     key: 'specialCancerDiagnosis',
@@ -93,7 +88,6 @@ const COVERAGE_STANDARDS = [
     group: 'reference',
     type: 'amount',
     aggregation: 'sum',
-    recommended: 0,
     description: '유사암, 고액암, 특정암처럼 일반암과 성격이 다른 진단 담보입니다.',
   },
   {
@@ -102,7 +96,6 @@ const COVERAGE_STANDARDS = [
     group: 'reference',
     type: 'amount',
     aggregation: 'sum',
-    recommended: 0,
     description: '암/상해/중환자실/특정질병 입원일당처럼 조건이 다른 입원 담보입니다.',
   },
   {
@@ -111,7 +104,6 @@ const COVERAGE_STANDARDS = [
     group: 'reference',
     type: 'amount',
     aggregation: 'sum',
-    recommended: 0,
     description: '암/상해/특정질병/기타수술처럼 조건이 다른 수술 담보입니다.',
   },
   {
@@ -120,7 +112,6 @@ const COVERAGE_STANDARDS = [
     group: 'reference',
     type: 'amount',
     aggregation: 'sum',
-    recommended: 0,
     description: '사망 및 후유장해 담보입니다. 건강 보장 점수에는 반영하지 않고 참고로만 표시합니다.',
   },
 ];
@@ -176,8 +167,9 @@ const COVERAGE_RULES = [
 
 const GAP_STATUS = {
   GOOD: { label: '기준 이상 확인', tag: 'mc-tag-success', bar: 'success' },
-  LOW: { label: '낮을 수 있음', tag: 'mc-tag-warning', bar: 'warning' },
+  LOW: { label: '평균보다 낮음', tag: 'mc-tag-warning', bar: 'warning' },
   MISSING: { label: '확인되지 않음', tag: 'mc-tag-danger', bar: 'danger' },
+  UNKNOWN: { label: '평균 데이터 없음', tag: 'mc-tag-neutral', bar: 'blue' },
   REFERENCE: { label: '참고', tag: 'mc-tag-blue', bar: 'blue' },
 };
 
@@ -231,14 +223,20 @@ const getCoverageKey = (item) => {
   return rule?.key || null;
 };
 
+const getAvgGroupCoverageAmount = (item) => toNumber(
+  item?.avgGroupCoverageAmount ?? item?.avg_group_coverage_amount
+);
+
 const analyzeCoverageGaps = (policies) => {
   const activePolicies = policies.filter(isActivePolicy);
   const totals = COVERAGE_STANDARDS.reduce((acc, standard) => ({
     ...acc,
     [standard.key]: {
       current: 0,
+      comparison: 0,
       matchedItems: [],
       hasCoverage: false,
+      hasAverageData: standard.type === 'presence',
     },
   }), {});
 
@@ -255,11 +253,17 @@ const analyzeCoverageGaps = (policies) => {
       if (!key || !totals[key]) return;
 
       const amount = toNumber(item.amount ?? item.max_benefit_amount);
+      const avgGroupAmount = getAvgGroupCoverageAmount(item);
       totals[key].current += amount;
+      if (avgGroupAmount > 0) {
+        totals[key].comparison += avgGroupAmount;
+        totals[key].hasAverageData = true;
+      }
       totals[key].hasCoverage = true;
       totals[key].matchedItems.push({
         name: item.name || item.itemName || '보장명 정보 없음',
         amount,
+        avgGroupAmount,
         policyName: policy.productName || policy.policy_details || '보험명 정보 없음',
       });
     });
@@ -269,34 +273,44 @@ const analyzeCoverageGaps = (policies) => {
     const current = standard.type === 'presence'
       ? (totals[standard.key].hasCoverage ? 1 : 0)
       : totals[standard.key].current;
-    const gap = Math.max(standard.recommended - current, 0);
+    const comparison = standard.type === 'presence'
+      ? (standard.fallbackComparison || 1)
+      : totals[standard.key].comparison;
+    const hasComparison = standard.type === 'presence' || totals[standard.key].hasAverageData;
+    const gap = hasComparison ? Math.max(comparison - current, 0) : 0;
     const status = standard.group === 'reference'
       ? 'REFERENCE'
       : current <= 0
         ? 'MISSING'
-        : gap > 0
-          ? 'LOW'
-          : 'GOOD';
+        : !hasComparison
+          ? 'UNKNOWN'
+          : gap > 0
+            ? 'LOW'
+            : 'GOOD';
     const percent = standard.type === 'presence'
       ? (current ? 100 : 0)
-      : standard.recommended > 0
-        ? Math.min((current / standard.recommended) * 100, 100)
+      : hasComparison && comparison > 0
+        ? Math.min((current / comparison) * 100, 100)
         : current > 0 ? 100 : 0;
 
     return {
       ...standard,
       current,
+      comparison,
       gap,
       status,
       percent,
       matchedItems: totals[standard.key].matchedItems,
       hasCoverage: totals[standard.key].hasCoverage,
+      hasComparison,
     };
   });
 };
 
 const calculateCoverageScore = (gaps) => {
-  const coreGaps = gaps.filter((gap) => gap.group === 'core');
+  const coreGaps = gaps.filter((gap) => (
+    gap.group === 'core' && (gap.type === 'presence' || gap.hasComparison || gap.status === 'MISSING')
+  ));
   const totalWeight = coreGaps.reduce((sum, gap) => sum + (gap.weight || 0), 0);
   if (!totalWeight) return 0;
 
@@ -349,7 +363,7 @@ const InsurancePlan = () => {
         <div>
           <div className="mc-page-title">보장 공백 점검</div>
           <div className="mc-page-subtitle">
-            현재 조회된 보험 내역을 기준으로 핵심 보장 공백을 보수적으로 점검합니다.
+            현재 조회된 보험 내역을 평균그룹 보장금액과 비교해 핵심 보장 공백을 점검합니다.
           </div>
         </div>
         <div className="mc-page-top-right">
@@ -379,7 +393,7 @@ const InsurancePlan = () => {
             <span style={{ fontSize: 22, fontWeight: 600, marginLeft: 4 }}>/ 100</span>
           </div>
           <div style={{ fontSize: 12.5, marginTop: 8, opacity: 0.9 }}>
-            핵심 항목 기준 · 확인 필요 {gapCount}개
+            평균 비교 가능 항목 기준 · 확인 필요 {gapCount}개
           </div>
           <div className="mc-pbar" style={{ marginTop: 14, background: 'rgba(255,255,255,0.2)' }}>
             <div className="mc-pbar-fill" style={{ width: `${coverageScore}%`, background: '#fff' }}/>
@@ -399,7 +413,7 @@ const InsurancePlan = () => {
             <div className="mc-stat-value" style={{ marginTop: 4 }}>
               {missingCount}개
             </div>
-            <div className="mc-stat-sub">주요 기준표 항목 중 미확인</div>
+            <div className="mc-stat-sub">핵심 비교 항목 중 미확인</div>
           </div>
           <div className="mc-card mc-card-body mc-card-accent-blue" style={{ gridColumn: 'span 2' }}>
             <div className="mc-field-label">월 보험료 합계</div>
@@ -448,14 +462,16 @@ const InsurancePlan = () => {
                       {isPresence ? (gap.hasCoverage ? '가입 확인' : '확인되지 않음') : formatWon(gap.current)}
                     </strong>
                     <span style={{ margin: '0 6px', color: 'var(--text-3)' }}>→</span>
-                    기준{' '}
+                    평균그룹{' '}
                     <strong style={{ color: 'var(--blue)' }}>
-                      {isPresence ? '가입 여부' : formatWon(gap.recommended)}
+                      {isPresence
+                        ? '가입 여부'
+                        : gap.hasComparison ? formatWon(gap.comparison) : '데이터 없음'}
                     </strong>
                   </div>
                   {!isPresence && gap.gap > 0 && (
                     <div style={{ fontSize: 13, fontWeight: 800, color: '#8A7040', whiteSpace: 'nowrap' }}>
-                      차이 {formatWon(gap.gap)}
+                      평균 대비 차이 {formatWon(gap.gap)}
                     </div>
                   )}
                 </div>
@@ -496,6 +512,12 @@ const InsurancePlan = () => {
                   </div>
                   <div className="mc-card-sub">
                     확인 금액 <strong style={{ color: 'var(--text-1)' }}>{formatWon(gap.current)}</strong>
+                    {gap.hasComparison && gap.comparison > 0 && (
+                      <>
+                        <span style={{ margin: '0 6px', color: 'var(--text-3)' }}>·</span>
+                        평균그룹 <strong style={{ color: 'var(--blue)' }}>{formatWon(gap.comparison)}</strong>
+                      </>
+                    )}
                   </div>
                   {gap.matchedItems.length > 0 && (
                     <div className="mc-card-sub" style={{ marginTop: 8 }}>
@@ -592,7 +614,7 @@ const InsurancePlan = () => {
           <div>
             <div className="mc-alert-title">분석 기준</div>
             <div className="mc-alert-body">
-              이 결과는 현재 조회된 보험 데이터와 내부 기준표를 비교한 참고용 점검입니다. 실제 가입 권유나 상품 추천은 포함하지 않습니다.
+              이 결과는 현재 조회된 보험 데이터와 CODEF 평균그룹 보장금액을 비교한 참고용 점검입니다. 평균 데이터가 없는 항목은 별도로 표시하며, 실제 가입 권유나 상품 추천은 포함하지 않습니다.
             </div>
           </div>
         </div>
