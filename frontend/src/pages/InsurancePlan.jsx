@@ -30,51 +30,98 @@ const COVERAGE_STANDARDS = [
   {
     key: 'actualLoss',
     label: '실손의료비',
+    group: 'core',
     type: 'presence',
+    aggregation: 'presence',
+    weight: 25,
     recommended: 1,
     description: '실손형 계약 또는 실손의료비 담보 보유 여부를 확인합니다.',
   },
   {
-    key: 'cancerDiagnosis',
-    label: '암진단비',
+    key: 'generalCancerDiagnosis',
+    label: '일반암 진단비',
+    group: 'core',
     type: 'amount',
+    aggregation: 'sum',
+    weight: 20,
     recommended: 30000000,
-    description: '암진단, 고액암진단, 유사암진단 담보를 기준으로 집계합니다.',
+    description: '일반 암진단 담보를 중심으로 집계합니다. 유사암/고액암/특정암은 참고 항목으로 분리합니다.',
   },
   {
     key: 'cerebrovascular',
     label: '뇌혈관질환 진단비',
+    group: 'core',
     type: 'amount',
+    aggregation: 'sum',
+    weight: 15,
     recommended: 20000000,
     description: '뇌혈관질환 진단 관련 담보를 기준으로 집계합니다.',
   },
   {
     key: 'ischemicHeart',
     label: '허혈성심장질환 진단비',
+    group: 'core',
     type: 'amount',
+    aggregation: 'sum',
+    weight: 15,
     recommended: 20000000,
     description: '허혈성심장질환 진단 관련 담보를 기준으로 집계합니다.',
   },
   {
-    key: 'hospitalDaily',
-    label: '입원일당',
+    key: 'diseaseHospitalDaily',
+    label: '질병입원일당',
+    group: 'core',
     type: 'amount',
+    aggregation: 'sum',
+    weight: 10,
     recommended: 50000,
-    description: '질병/상해/암 입원일당 담보를 기준으로 집계합니다.',
+    description: '일반 질병입원일당 담보만 집계합니다. 암/상해/중환자실 입원일당은 참고 항목입니다.',
   },
   {
-    key: 'surgery',
-    label: '수술비',
+    key: 'diseaseSurgery',
+    label: '질병수술비',
+    group: 'core',
     type: 'amount',
+    aggregation: 'sum',
+    weight: 15,
     recommended: 5000000,
-    description: '질병/상해/암/기타 수술비 담보를 기준으로 집계합니다.',
+    description: '일반 질병수술비 담보를 중심으로 집계합니다. 암/상해/특정질병/기타수술은 참고 항목입니다.',
+  },
+  {
+    key: 'specialCancerDiagnosis',
+    label: '암 특화 진단비',
+    group: 'reference',
+    type: 'amount',
+    aggregation: 'sum',
+    recommended: 0,
+    description: '유사암, 고액암, 특정암처럼 일반암과 성격이 다른 진단 담보입니다.',
+  },
+  {
+    key: 'specialHospitalDaily',
+    label: '특수 입원일당',
+    group: 'reference',
+    type: 'amount',
+    aggregation: 'sum',
+    recommended: 0,
+    description: '암/상해/중환자실/특정질병 입원일당처럼 조건이 다른 입원 담보입니다.',
+  },
+  {
+    key: 'specialSurgery',
+    label: '특수 수술비',
+    group: 'reference',
+    type: 'amount',
+    aggregation: 'sum',
+    recommended: 0,
+    description: '암/상해/특정질병/기타수술처럼 조건이 다른 수술 담보입니다.',
   },
   {
     key: 'deathDisability',
     label: '사망·후유장해',
+    group: 'reference',
     type: 'amount',
-    recommended: 50000000,
-    description: '사망 및 후유장해 담보를 기준으로 집계합니다.',
+    aggregation: 'sum',
+    recommended: 0,
+    description: '사망 및 후유장해 담보입니다. 건강 보장 점수에는 반영하지 않고 참고로만 표시합니다.',
   },
 ];
 
@@ -93,18 +140,33 @@ const COVERAGE_RULES = [
     include: ['허혈성심장', '급성심근경색', '심혈관'],
   },
   {
-    key: 'cancerDiagnosis',
-    include: ['암진단', '암 진단', '고액암진단', '유사암진단', '소액암진단', '특정암진단'],
+    key: 'specialCancerDiagnosis',
+    include: ['고액암진단', '유사암진단', '소액암진단', '특정암진단', '고액암 진단', '유사암 진단'],
     exclude: ['수술', '입원', '통원', '항암', '방사선', '치료'],
   },
   {
-    key: 'hospitalDaily',
-    include: ['입원일당', '입원비'],
+    key: 'generalCancerDiagnosis',
+    include: ['암진단', '암 진단'],
+    exclude: ['수술', '입원', '통원', '항암', '방사선', '치료'],
+  },
+  {
+    key: 'specialHospitalDaily',
+    include: ['암입원일당', '상해입원일당', '중환자실입원일당', '특정질병입원일당', '암 입원일당', '상해 입원일당', '중환자실 입원일당'],
     exclude: ['수술'],
   },
   {
-    key: 'surgery',
-    include: ['수술'],
+    key: 'diseaseHospitalDaily',
+    include: ['질병입원일당', '질병 입원일당', '질병입원비'],
+    exclude: ['수술', '중환자실', '특정질병', '암', '상해'],
+  },
+  {
+    key: 'specialSurgery',
+    include: ['암수술', '상해수술', '특정질병수술', '기타수술', '특정암수술', '질병종수술', '암 수술', '상해 수술'],
+  },
+  {
+    key: 'diseaseSurgery',
+    include: ['질병수술', '질병 수술', '질병입원수술', '질병 입원 수술'],
+    exclude: ['특정질병', '종수술', '암', '상해', '기타'],
   },
   {
     key: 'deathDisability',
@@ -113,9 +175,10 @@ const COVERAGE_RULES = [
 ];
 
 const GAP_STATUS = {
-  GOOD: { label: '충족', tag: 'mc-tag-success', bar: 'success' },
+  GOOD: { label: '기준 이상 확인', tag: 'mc-tag-success', bar: 'success' },
   LOW: { label: '낮을 수 있음', tag: 'mc-tag-warning', bar: 'warning' },
   MISSING: { label: '확인되지 않음', tag: 'mc-tag-danger', bar: 'danger' },
+  REFERENCE: { label: '참고', tag: 'mc-tag-blue', bar: 'blue' },
 };
 
 const toNumber = (value) => {
@@ -207,14 +270,18 @@ const analyzeCoverageGaps = (policies) => {
       ? (totals[standard.key].hasCoverage ? 1 : 0)
       : totals[standard.key].current;
     const gap = Math.max(standard.recommended - current, 0);
-    const status = current <= 0
-      ? 'MISSING'
-      : gap > 0
-        ? 'LOW'
-        : 'GOOD';
+    const status = standard.group === 'reference'
+      ? 'REFERENCE'
+      : current <= 0
+        ? 'MISSING'
+        : gap > 0
+          ? 'LOW'
+          : 'GOOD';
     const percent = standard.type === 'presence'
       ? (current ? 100 : 0)
-      : Math.min((current / standard.recommended) * 100, 100);
+      : standard.recommended > 0
+        ? Math.min((current / standard.recommended) * 100, 100)
+        : current > 0 ? 100 : 0;
 
     return {
       ...standard,
@@ -229,9 +296,15 @@ const analyzeCoverageGaps = (policies) => {
 };
 
 const calculateCoverageScore = (gaps) => {
-  if (!gaps.length) return 0;
-  const total = gaps.reduce((sum, gap) => sum + gap.percent, 0);
-  return Math.round(total / gaps.length);
+  const coreGaps = gaps.filter((gap) => gap.group === 'core');
+  const totalWeight = coreGaps.reduce((sum, gap) => sum + (gap.weight || 0), 0);
+  if (!totalWeight) return 0;
+
+  const weightedScore = coreGaps.reduce((sum, gap) => (
+    sum + (gap.percent * (gap.weight || 0))
+  ), 0);
+
+  return Math.round(weightedScore / totalWeight);
 };
 
 const InsurancePlan = () => {
@@ -261,9 +334,11 @@ const InsurancePlan = () => {
   const activePolicies = policies.filter(isActivePolicy);
   const coverageItems = activePolicies.flatMap(getCoverageItems);
   const coverageGaps = analyzeCoverageGaps(policies);
+  const coreGaps = coverageGaps.filter((gap) => gap.group === 'core');
+  const referenceGaps = coverageGaps.filter((gap) => gap.group === 'reference' && gap.hasCoverage);
   const coverageScore = calculateCoverageScore(coverageGaps);
-  const gapCount = coverageGaps.filter((gap) => gap.status !== 'GOOD').length;
-  const missingCount = coverageGaps.filter((gap) => gap.status === 'MISSING').length;
+  const gapCount = coreGaps.filter((gap) => gap.status !== 'GOOD').length;
+  const missingCount = coreGaps.filter((gap) => gap.status === 'MISSING').length;
   const monthlyPremium = activePolicies.reduce((sum, policy) => (
     sum + toNumber(policy.monthlyPremium ?? policy.monthly_premium)
   ), 0);
@@ -274,7 +349,7 @@ const InsurancePlan = () => {
         <div>
           <div className="mc-page-title">보장 공백 점검</div>
           <div className="mc-page-subtitle">
-            현재 조회된 보험 내역을 기준으로 보장 공백 분석을 준비합니다.
+            현재 조회된 보험 내역을 기준으로 핵심 보장 공백을 보수적으로 점검합니다.
           </div>
         </div>
         <div className="mc-page-top-right">
@@ -294,7 +369,7 @@ const InsurancePlan = () => {
             fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
             textTransform: 'uppercase', opacity: 0.85,
           }}>
-            <Ic d={P.shield} size={12}/> Coverage Check
+            <Ic d={P.shield} size={12}/> 핵심 보장 점수
           </div>
           <div style={{
             fontSize: 44, fontWeight: 800,
@@ -304,7 +379,7 @@ const InsurancePlan = () => {
             <span style={{ fontSize: 22, fontWeight: 600, marginLeft: 4 }}>/ 100</span>
           </div>
           <div style={{ fontSize: 12.5, marginTop: 8, opacity: 0.9 }}>
-            현재 조회된 보험 기준 · 확인 필요 {gapCount}개
+            핵심 항목 기준 · 확인 필요 {gapCount}개
           </div>
           <div className="mc-pbar" style={{ marginTop: 14, background: 'rgba(255,255,255,0.2)' }}>
             <div className="mc-pbar-fill" style={{ width: `${coverageScore}%`, background: '#fff' }}/>
@@ -337,12 +412,12 @@ const InsurancePlan = () => {
       </div>
 
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
-        <span className="mc-sec-title">보장 공백 상세</span>
+        <span className="mc-sec-title">핵심 보장 공백 상세</span>
       </div>
 
       {!loading && !error && activePolicies.length > 0 && (
         <div className="mc-stack-sm">
-          {coverageGaps.map((gap) => {
+          {coreGaps.map((gap) => {
             const statusInfo = GAP_STATUS[gap.status];
             const isPresence = gap.type === 'presence';
             return (
@@ -394,6 +469,45 @@ const InsurancePlan = () => {
             );
           })}
         </div>
+      )}
+
+      {!loading && !error && activePolicies.length > 0 && referenceGaps.length > 0 && (
+        <>
+          <div className="mc-sec-head" style={{ marginTop: 18 }}>
+            <span className="mc-sec-title">참고 보장 항목</span>
+          </div>
+          <div className="mc-stack-sm">
+            {referenceGaps.map((gap) => {
+              const statusInfo = GAP_STATUS[gap.status];
+              return (
+                <div key={gap.key} className="mc-card mc-card-body">
+                  <div className="mc-row-between" style={{ marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)' }}>
+                        {gap.label}
+                      </div>
+                      <div className="mc-card-sub" style={{ marginTop: 3 }}>
+                        {gap.description}
+                      </div>
+                    </div>
+                    <span className={`mc-tag ${statusInfo.tag}`}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
+                  <div className="mc-card-sub">
+                    확인 금액 <strong style={{ color: 'var(--text-1)' }}>{formatWon(gap.current)}</strong>
+                  </div>
+                  {gap.matchedItems.length > 0 && (
+                    <div className="mc-card-sub" style={{ marginTop: 8 }}>
+                      확인된 담보: {gap.matchedItems.slice(0, 3).map((item) => item.name).join(', ')}
+                      {gap.matchedItems.length > 3 ? ` 외 ${gap.matchedItems.length - 3}건` : ''}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
