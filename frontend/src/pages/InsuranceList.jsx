@@ -18,12 +18,21 @@ const P = {
   shield:  (<path d="M8 1.5l5.5 2v4.5C13.5 11.5 8 14.5 8 14.5S2.5 11.5 2.5 8V3.5L8 1.5z"/>),
 };
 
-const PIE_COLORS = ['#7EA6F2', '#B69A62', '#9BCDB8'];
-
-const FILTERS = ['전체', '실손', '생명', '손해'];
-const TYPE_MAP = { SUPPLEMENTARY: '실손', LIFE: '생명', NON_LIFE: '손해' };
+const PIE_COLORS = ['#7EA6F2', '#B69A62', '#9BCDB8', '#E8B86D', '#8EC5D6'];
+const FILTERS = ['전체', '실손', '건강', '저축', '자동차', '재물'];
+const TYPE_MAP = {
+  SUPPLEMENTARY: '실손',
+  HEALTH: '건강',
+  SAVINGS: '저축',
+  CAR: '자동차',
+  PROPERTY: '재물',
+  LIFE: '건강',
+  NON_LIFE: '건강',
+};
 
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+const hasPremium = (policy) => Number(policy.monthlyPremium || 0) > 0;
+const formatPremium = (policy) => (hasPremium(policy) ? formatKRW(policy.monthlyPremium) : '정보 없음');
 
 const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, value }) => {
   const RADIAN = Math.PI / 180;
@@ -57,9 +66,19 @@ const emptyCardStyle = {
   padding: '34px 18px',
 };
 
+const getPrimaryTypeLabel = (policy) => TYPE_MAP[policy.policyType] || '기타';
 const getPolicyTypeLabel = (policy) => {
-  if (policy.policyType === 'SUPPLEMENTARY' || policy.hasSupplementaryCoverage) return '실손';
-  return TYPE_MAP[policy.policyType] || '기타';
+  const primary = getPrimaryTypeLabel(policy);
+  if (policy.hasSupplementaryCoverage && policy.policyType !== 'SUPPLEMENTARY') {
+    return `${primary} · 실손 포함`;
+  }
+  return primary;
+};
+
+const matchesFilter = (policy, filterType) => {
+  if (filterType === '전체') return true;
+  if (filterType === '실손') return policy.policyType === 'SUPPLEMENTARY' || policy.hasSupplementaryCoverage;
+  return getPrimaryTypeLabel(policy) === filterType;
 };
 
 const InsuranceList = () => {
@@ -90,23 +109,16 @@ const InsuranceList = () => {
     loadPolicies();
   }, []);
 
-  const filteredPolicies = filterType === '전체'
-    ? policies
-    : policies.filter((policy) => {
-        if (filterType === '실손') return policy.policyType === 'SUPPLEMENTARY' || policy.hasSupplementaryCoverage;
-        if (filterType === '생명') return policy.policyType === 'LIFE';
-        if (filterType === '손해') return policy.policyType === 'NON_LIFE';
-        return false;
-      });
+  const filteredPolicies = policies.filter((policy) => matchesFilter(policy, filterType));
 
   const coveragePieData = useMemo(() => {
     const counts = policies.reduce((acc, policy) => {
-      const label = getPolicyTypeLabel(policy);
+      const label = getPrimaryTypeLabel(policy);
       acc[label] = (acc[label] || 0) + 1;
       return acc;
     }, {});
 
-    return ['실손', '생명', '손해', '기타']
+    return ['실손', '건강', '저축', '자동차', '재물', '기타']
       .map((name) => ({ name, value: counts[name] || 0 }))
       .filter((item) => item.value > 0);
   }, [policies]);
@@ -157,7 +169,7 @@ const InsuranceList = () => {
       <div className="mc-two-col" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div>
           <div className="mc-sec-head">
-            <span className="mc-sec-title">보장 범주 구성</span>
+            <span className="mc-sec-title">보험 유형 구성</span>
           </div>
           <div className="mc-card mc-card-body mc-coverage-card">
             {coveragePieData.length > 0 ? (
@@ -225,9 +237,6 @@ const InsuranceList = () => {
 
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
         <span className="mc-sec-title">가입 보험 · {filteredPolicies.length}건</span>
-        <button className="mc-sec-link">
-          <Ic d={P.plus} size={10}/> 새 보험 추가
-        </button>
       </div>
 
       <div className="mc-stack-sm">
@@ -280,7 +289,7 @@ const InsuranceList = () => {
                 <div className="mc-grid-2">
                   <div className="mc-kv mc-policy-kv">
                     <span className="mc-kv-key mc-policy-premium-key">월 보험료</span>
-                    <span className="mc-kv-val mc-policy-premium-val">{formatKRW(policy.monthlyPremium)}</span>
+                    <span className="mc-kv-val mc-policy-premium-val">{formatPremium(policy)}</span>
                   </div>
                   <div className="mc-kv mc-policy-kv">
                     <span className="mc-kv-key mc-policy-expiry-key">만료일</span>

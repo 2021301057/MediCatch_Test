@@ -96,15 +96,14 @@ public class CodefInsuranceSyncService {
 
         // 실손보장형 → SUPPLEMENTARY
         toSave.addAll(parseContracts(userId, codefId, data, "resActualLossContractList", "SUPPLEMENTARY"));
-        // 정액형: 회사명으로 손보(NON_LIFE) / 생보(LIFE) 구분
-        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList",
-                item -> isNonLifeCompany(strOrDefault(item.get("resCompanyNm"), "")) ? "NON_LIFE" : "LIFE"));
-        // 저축성 → 생보
-        toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "LIFE"));
-        // 자동차 → 손해
-        toSave.addAll(parseContracts(userId, codefId, data, "resCarContractList", "NON_LIFE"));
-        // 화재특종 → 손해
-        toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
+        // 정액형 보장은 화면에서 "건강"으로 표시
+        toSave.addAll(parseContracts(userId, codefId, data, "resFlatRateContractList", "HEALTH"));
+        // 저축성
+        toSave.addAll(parseContracts(userId, codefId, data, "resSavingsContractList", "SAVINGS"));
+        // 자동차
+        toSave.addAll(parseContracts(userId, codefId, data, "resCarContractList", "CAR"));
+        // 화재특종/재물성
+        toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "PROPERTY"));
 
         // 어떤 리스트에 속했는지 기록
         Set<String> supplementaryKeys = new java.util.HashSet<>();
