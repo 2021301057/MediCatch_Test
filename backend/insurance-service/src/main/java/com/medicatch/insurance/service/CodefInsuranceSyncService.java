@@ -107,36 +107,38 @@ public class CodefInsuranceSyncService {
         toSave.addAll(parseContracts(userId, codefId, data, "resPropertyContractList", "NON_LIFE"));
 
         // 어떤 리스트에 속했는지 기록
-        Set<String> supplementaryNumbers = new java.util.HashSet<>();
-        Set<String> otherTypeNumbers = new java.util.HashSet<>();
+        Set<String> supplementaryKeys = new java.util.HashSet<>();
+        Set<String> otherTypeKeys = new java.util.HashSet<>();
         for (Policy p : toSave) {
-            if ("SUPPLEMENTARY".equals(p.getInsuranceType())) supplementaryNumbers.add(p.getPolicyNumber());
-            else otherTypeNumbers.add(p.getPolicyNumber());
+            Set<String> keys = "SUPPLEMENTARY".equals(p.getInsuranceType()) ? supplementaryKeys : otherTypeKeys;
+            String numberKey = policyNumberKey(p);
+            String identityKey = policyIdentityKey(p);
+            if (numberKey != null) keys.add(numberKey);
+            if (identityKey != null) keys.add(identityKey);
         }
 
         // policyNumber 기준 중복 병합 (보험료 있는 버전 우선)
         Map<String, Policy> deduped = new java.util.LinkedHashMap<>();
+        Map<String, String> numberIndex = new java.util.HashMap<>();
+        Map<String, String> identityIndex = new java.util.HashMap<>();
         for (Policy p : toSave) {
-            Policy existing = deduped.get(p.getPolicyNumber());
-            if (existing == null) {
-                deduped.put(p.getPolicyNumber(), p);
+            String existingKey = findExistingPolicyKey(p, numberIndex, identityIndex);
+            if (existingKey == null) {
+                String primaryKey = Optional.ofNullable(policyNumberKey(p)).orElse(policyIdentityKey(p));
+                if (primaryKey == null) continue;
+                deduped.put(primaryKey, p);
+                indexPolicy(p, primaryKey, numberIndex, identityIndex);
+                continue;
+            }
+
+            Policy existing = deduped.get(existingKey);
+            if (shouldPreferPolicy(p, existing)) {
+                mergePolicy(p, existing);
+                deduped.put(existingKey, p);
+                indexPolicy(p, existingKey, numberIndex, identityIndex);
             } else {
-                boolean newHasPremium = p.getMonthlyPremium() != null;
-                boolean existingHasPremium = existing.getMonthlyPremium() != null;
-                if (newHasPremium && !existingHasPremium) {
-                    deduped.put(p.getPolicyNumber(), p);
-                } else {
-                    if (existing.getStartDate() == null && p.getStartDate() != null)
-                        existing.setStartDate(p.getStartDate());
-                    if (existing.getEndDate() == null && p.getEndDate() != null)
-                        existing.setEndDate(p.getEndDate());
-                    if ((existing.getCoverageItems() == null || existing.getCoverageItems().isEmpty())
-                            && p.getCoverageItems() != null && !p.getCoverageItems().isEmpty()) {
-                        List<CoverageItem> items = new ArrayList<>(p.getCoverageItems());
-                        items.forEach(ci -> ci.setPolicy(existing));
-                        existing.setCoverageItems(items);
-                    }
-                }
+                mergePolicy(existing, p);
+                indexPolicy(existing, existingKey, numberIndex, identityIndex);
             }
         }
 
@@ -144,8 +146,12 @@ public class CodefInsuranceSyncService {
         // - 실손 리스트에만 있는 경우: SUPPLEMENTARY
         // - 실손 + 다른 리스트 동시 존재(복합 상품): 다른 리스트 타입 유지 + hasSupplementaryCoverage = true
         deduped.values().forEach(p -> {
-            boolean inSupplementary = supplementaryNumbers.contains(p.getPolicyNumber());
-            boolean inOther = otherTypeNumbers.contains(p.getPolicyNumber());
+            String numberKey = policyNumberKey(p);
+            String identityKey = policyIdentityKey(p);
+            boolean inSupplementary = (numberKey != null && supplementaryKeys.contains(numberKey))
+                    || (identityKey != null && supplementaryKeys.contains(identityKey));
+            boolean inOther = (numberKey != null && otherTypeKeys.contains(numberKey))
+                    || (identityKey != null && otherTypeKeys.contains(identityKey));
             if (inSupplementary && !inOther) {
                 p.setInsuranceType("SUPPLEMENTARY");
             }
@@ -213,6 +219,120 @@ public class CodefInsuranceSyncService {
         if (companyName == null) return false;
         String lower = companyName.toLowerCase();
         return lower.contains("화재") || lower.contains("손보") || lower.contains("해상") || lower.contains("손해");
+    }
+
+    private String findExistingPolicyKey(Policy policy, Map<String, String> numberIndex,
+                                         Map<String, String> identityIndex) {
+        String numberKey = policyNumberKey(policy);
+        if (numberKey != null && numberIndex.containsKey(numberKey)) {
+            return numberIndex.get(numberKey);
+        }
+
+        String identityKey = policyIdentityKey(policy);
+        if (identityKey != null && identityIndex.containsKey(identityKey)) {
+            return identityIndex.get(identityKey);
+        }
+
+        return null;
+    }
+
+    private void indexPolicy(Policy policy, String primaryKey, Map<String, String> numberIndex,
+                             Map<String, String> identityIndex) {
+        String numberKey = policyNumberKey(policy);
+        String identityKey = policyIdentityKey(policy);
+        if (numberKey != null) numberIndex.put(numberKey, primaryKey);
+        if (identityKey != null) identityIndex.put(identityKey, primaryKey);
+    }
+
+    private boolean shouldPreferPolicy(Policy candidate, Policy current) {
+        boolean candidateHasPremium = candidate.getMonthlyPremium() != null && candidate.getMonthlyPremium() > 0;
+        boolean currentHasPremium = current.getMonthlyPremium() != null && current.getMonthlyPremium() > 0;
+        if (candidateHasPremium != currentHasPremium) return candidateHasPremium;
+
+        boolean candidateIsSupplementary = "SUPPLEMENTARY".equals(candidate.getInsuranceType());
+        boolean currentIsSupplementary = "SUPPLEMENTARY".equals(current.getInsuranceType());
+        if (candidateIsSupplementary != currentIsSupplementary) return !candidateIsSupplementary;
+
+        return false;
+    }
+
+    private void mergePolicy(Policy target, Policy source) {
+        if (target.getStartDate() == null && source.getStartDate() != null)
+            target.setStartDate(source.getStartDate());
+        if (target.getEndDate() == null && source.getEndDate() != null)
+            target.setEndDate(source.getEndDate());
+        if ((target.getMonthlyPremium() == null || target.getMonthlyPremium() <= 0)
+                && source.getMonthlyPremium() != null && source.getMonthlyPremium() > 0) {
+            target.setMonthlyPremium(source.getMonthlyPremium());
+            target.setAnnualPremium(source.getAnnualPremium());
+        }
+        if ((target.getPolicyDetails() == null || target.getPolicyDetails().isBlank())
+                && source.getPolicyDetails() != null) {
+            target.setPolicyDetails(source.getPolicyDetails());
+        }
+        target.setActive(target.isActive() || source.isActive());
+        target.setHasSupplementaryCoverage(target.isHasSupplementaryCoverage()
+                || source.isHasSupplementaryCoverage()
+                || "SUPPLEMENTARY".equals(source.getInsuranceType()));
+        mergeCoverageItems(target, source.getCoverageItems());
+    }
+
+    private void mergeCoverageItems(Policy target, List<CoverageItem> sourceItems) {
+        if (sourceItems == null || sourceItems.isEmpty()) return;
+
+        List<CoverageItem> targetItems = target.getCoverageItems();
+        if (targetItems == null) {
+            targetItems = new ArrayList<>();
+            target.setCoverageItems(targetItems);
+        }
+
+        Set<String> existingKeys = new HashSet<>();
+        for (CoverageItem item : targetItems) {
+            existingKeys.add(coverageItemKey(item));
+        }
+
+        int nextPriority = targetItems.stream()
+                .map(CoverageItem::getPriority)
+                .filter(Objects::nonNull)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+
+        for (CoverageItem item : sourceItems) {
+            String key = coverageItemKey(item);
+            if (existingKeys.contains(key)) continue;
+            item.setPolicy(target);
+            if (item.getPriority() == null) item.setPriority(nextPriority++);
+            targetItems.add(item);
+            existingKeys.add(key);
+        }
+    }
+
+    private String coverageItemKey(CoverageItem item) {
+        return normalizeKey(item.getItemName()) + "|"
+                + normalizeKey(item.getConditions()) + "|"
+                + (item.getMaxBenefitAmount() != null ? item.getMaxBenefitAmount() : "");
+    }
+
+    private String policyNumberKey(Policy policy) {
+        return keyWithPrefix("N", policy.getPolicyNumber());
+    }
+
+    private String policyIdentityKey(Policy policy) {
+        String company = normalizeKey(policy.getInsurerName());
+        String product = normalizeKey(policy.getPolicyDetails());
+        if (company == null || product == null) return null;
+        return "I:" + company + "|" + product;
+    }
+
+    private String keyWithPrefix(String prefix, String value) {
+        String normalized = normalizeKey(value);
+        return normalized == null ? null : prefix + ":" + normalized;
+    }
+
+    private String normalizeKey(String value) {
+        if (value == null) return null;
+        String normalized = value.replaceAll("\\s+", "").trim().toLowerCase();
+        return normalized.isBlank() ? null : normalized;
     }
 
     private List<Policy> parseContracts(Long userId, String codefId, Map<String, Object> data,
