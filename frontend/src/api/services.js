@@ -52,6 +52,7 @@ const normalizePolicy = (row) => {
     policy.coverage_items = policy.coverage_items.map((item) => withAliases(item, {
       item_name: 'name',
       max_benefit_amount: 'amount',
+      avg_group_coverage_amount: 'avgGroupCoverageAmount',
       is_covered: 'isCovered',
     }));
     policy.coverageItems = policy.coverage_items;

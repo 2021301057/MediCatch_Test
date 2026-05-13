@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS coverage_items (
     category VARCHAR(50) NOT NULL,
     coverage_rate DECIMAL(5,2),
     max_benefit_amount DECIMAL(10,2),
+    avg_group_coverage_amount DECIMAL(15,2),
     deductible DECIMAL(10,2),
     copay DECIMAL(10,2),
     conditions LONGTEXT,

@@ -36,6 +36,7 @@ public class PolicyDto {
         private String name;
         private String category;
         private Double amount;
+        private Double avgGroupCoverageAmount;
         @JsonProperty("isCovered")
         private boolean isCovered;
         private String agreementType;
@@ -48,6 +49,7 @@ public class PolicyDto {
                                 .name(ci.getItemName())
                                 .category(ci.getCategory())
                                 .amount(ci.getMaxBenefitAmount())
+                                .avgGroupCoverageAmount(ci.getAvgGroupCoverageAmount())
                                 .isCovered(ci.isCovered())
                                 .agreementType(ci.getConditions())
                                 .build())
