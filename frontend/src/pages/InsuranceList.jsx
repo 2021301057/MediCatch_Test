@@ -97,9 +97,9 @@ const getCoverageCategory = (item) => {
   if (text.includes('수술')) return '수술';
   if (text.includes('입원')) return '입원';
   if (text.includes('통원')) return '통원';
+  if (text.includes('위로금') || text.includes('보상금')) return '위로금';
   if (text.includes('항암') || text.includes('방사선') || text.includes('양성자') || text.includes('치료비')) return '항암·치료';
   if (text.includes('사망') || text.includes('후유장해') || text.includes('후유 장애')) return '사망·후유장해';
-  if (text.includes('위로금') || text.includes('보상금')) return '위로금';
   return '기타';
 };
 
