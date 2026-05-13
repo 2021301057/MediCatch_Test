@@ -72,7 +72,7 @@ const emptyCardStyle = {
   padding: '34px 18px',
 };
 
-const COVERAGE_CATEGORY_ORDER = ['실손', '진단', '수술', '입원', '사망·후유장해', '기타'];
+const COVERAGE_CATEGORY_ORDER = ['실손', '진단', '수술', '입원', '통원', '사망·후유장해', '기타'];
 
 const getPrimaryTypeLabel = (policy) => TYPE_MAP[policy.policyType] || '기타';
 const getPolicyTypeLabel = (policy) => {
@@ -92,10 +92,11 @@ const matchesFilter = (policy, filterType) => {
 const getCoverageText = (item) => `${item.name || item.itemName || ''} ${item.agreementType || ''}`.toLowerCase();
 const getCoverageCategory = (item) => {
   const text = getCoverageText(item);
-  if (text.includes('실손') || text.includes('의료비') || text.includes('통원')) return '실손';
+  if (text.includes('실손') || text.includes('의료비')) return '실손';
   if (text.includes('진단')) return '진단';
   if (text.includes('수술')) return '수술';
   if (text.includes('입원')) return '입원';
+  if (text.includes('통원')) return '통원';
   if (text.includes('사망') || text.includes('후유장해') || text.includes('후유 장애')) return '사망·후유장해';
   return '기타';
 };
