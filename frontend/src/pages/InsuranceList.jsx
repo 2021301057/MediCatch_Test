@@ -73,6 +73,16 @@ const emptyCardStyle = {
 };
 
 const COVERAGE_CATEGORY_ORDER = ['실손', '진단', '수술', '입원', '통원', '항암·치료', '사망·후유장해', '위로금', '기타'];
+const COVERAGE_CATEGORY_RULES = [
+  { category: '실손', include: ['실손', '의료비'] },
+  { category: '진단', include: ['진단'] },
+  { category: '수술', include: ['수술'] },
+  { category: '입원', include: ['입원'] },
+  { category: '통원', include: ['통원'] },
+  { category: '위로금', include: ['위로금', '보상금'] },
+  { category: '항암·치료', include: ['항암', '방사선', '양성자', '치료비'], exclude: ['위로금', '보상금'] },
+  { category: '사망·후유장해', include: ['사망', '후유장해', '후유 장애'] },
+];
 
 const getPrimaryTypeLabel = (policy) => TYPE_MAP[policy.policyType] || '기타';
 const getPolicyTypeLabel = (policy) => {
@@ -92,15 +102,12 @@ const matchesFilter = (policy, filterType) => {
 const getCoverageText = (item) => `${item.name || item.itemName || ''} ${item.agreementType || ''}`.toLowerCase();
 const getCoverageCategory = (item) => {
   const text = getCoverageText(item);
-  if (text.includes('실손') || text.includes('의료비')) return '실손';
-  if (text.includes('진단')) return '진단';
-  if (text.includes('수술')) return '수술';
-  if (text.includes('입원')) return '입원';
-  if (text.includes('통원')) return '통원';
-  if (text.includes('위로금') || text.includes('보상금')) return '위로금';
-  if (text.includes('항암') || text.includes('방사선') || text.includes('양성자') || text.includes('치료비')) return '항암·치료';
-  if (text.includes('사망') || text.includes('후유장해') || text.includes('후유 장애')) return '사망·후유장해';
-  return '기타';
+  const matchedRule = COVERAGE_CATEGORY_RULES.find((rule) => {
+    const included = rule.include.some((keyword) => text.includes(keyword));
+    const excluded = rule.exclude?.some((keyword) => text.includes(keyword));
+    return included && !excluded;
+  });
+  return matchedRule?.category || '기타';
 };
 
 const getCoverageAmount = (item) => item.amount ?? item.maxBenefitAmount;
