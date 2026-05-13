@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { insuranceAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
@@ -18,43 +18,16 @@ const P = {
   shield:  (<path d="M8 1.5l5.5 2v4.5C13.5 11.5 8 14.5 8 14.5S2.5 11.5 2.5 8V3.5L8 1.5z"/>),
 };
 
-const MOCK_POLICIES = [
-  { id: 1, companyName: '삼성생명', productName: '삼성생명 실손보험 (3세대)', policyType: 'SUPPLEMENTARY',
-    monthlyPremium: 85000, endDate: '2045-03-15', contractStatus: 'ACTIVE',
-    hasSupplementaryCoverage: false,
-    coverageItems: [
-      { name: '실손의료비', amount: 50000000, isCovered: true },
-      { name: '입원의료비', amount: 30000000, isCovered: true },
-    ] },
-  { id: 2, companyName: '한화생명', productName: '한화생명 종신보험', policyType: 'LIFE',
-    monthlyPremium: 180000, endDate: '2060-07-01', contractStatus: 'ACTIVE',
-    hasSupplementaryCoverage: false,
-    coverageItems: [
-      { name: '사망보험금', amount: 100000000, isCovered: true },
-      { name: '암진단금',   amount: 30000000,  isCovered: true },
-    ] },
-  { id: 3, companyName: '현대해상', productName: '현대해상 치아보험', policyType: 'NON_LIFE',
-    monthlyPremium: 32000, endDate: '2030-12-31', contractStatus: 'ACTIVE',
-    hasSupplementaryCoverage: false,
-    coverageItems: [
-      { name: '치과치료비', amount: 2000000, isCovered: true },
-    ] },
-];
-
-const COVERAGE_PIE_DATA = [
-  { name: '실손의료비', value: 80 },
-  { name: '종신보험',   value: 130 },
-  { name: '치아보험',   value: 2 },
-];
 const PIE_COLORS = ['#7EA6F2', '#B69A62', '#9BCDB8'];
 
 const FILTERS = ['전체', '실손', '생명', '손해'];
 const TYPE_MAP = { SUPPLEMENTARY: '실손', LIFE: '생명', NON_LIFE: '손해' };
 
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
+
 const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, value }) => {
   const RADIAN = Math.PI / 180;
-  const radius = outerRadius + (value < 8 ? 38 : 28);
+  const radius = outerRadius + 28;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
@@ -67,69 +40,102 @@ const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, value }) => {
       dominantBaseline="central"
     >
       <tspan x={x} dy="-0.35em">{name}</tspan>
-      <tspan x={x} dy="1.2em">{value}%</tspan>
+      <tspan x={x} dy="1.2em">{value}건</tspan>
     </text>
   );
 };
+
 const supplementaryBadgeStyle = {
   fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
   background: '#EBF0FC', color: '#2F6FE8', border: '1px solid #C4D4F7',
   marginLeft: 6, whiteSpace: 'nowrap',
 };
 
+const emptyCardStyle = {
+  textAlign: 'center',
+  color: 'var(--text-3)',
+  padding: '34px 18px',
+};
+
+const getPolicyTypeLabel = (policy) => {
+  if (policy.policyType === 'SUPPLEMENTARY' || policy.hasSupplementaryCoverage) return '실손';
+  return TYPE_MAP[policy.policyType] || '기타';
+};
+
 const InsuranceList = () => {
   const { user } = useAuthStore();
-  const [policies, setPolicies] = useState(MOCK_POLICIES);
+  const [policies, setPolicies] = useState([]);
   const [expandedPolicy, setExpandedPolicy] = useState(null);
   const [filterType, setFilterType] = useState('전체');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [showSyncModal, setShowSyncModal] = useState(false);
 
+  const loadPolicies = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await insuranceAPI.getPolicies();
+      setPolicies(Array.isArray(data) ? data : []);
+    } catch (fetchError) {
+      console.error('Failed to fetch policies:', fetchError);
+      setPolicies([]);
+      setError('보험 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchPolicies = async () => {
-      setLoading(true);
-      try {
-        const data = await insuranceAPI.getPolicies();
-        if (Array.isArray(data) && data.length) setPolicies(data);
-      } catch (error) {
-        console.error('Failed to fetch policies:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPolicies();
+    loadPolicies();
   }, []);
 
   const filteredPolicies = filterType === '전체'
     ? policies
-    : policies.filter((p) => {
-        if (filterType === '실손') return p.policyType === 'SUPPLEMENTARY' || p.hasSupplementaryCoverage;
-        if (filterType === '생명') return p.policyType === 'LIFE';
-        if (filterType === '손해') return p.policyType === 'NON_LIFE';
+    : policies.filter((policy) => {
+        if (filterType === '실손') return policy.policyType === 'SUPPLEMENTARY' || policy.hasSupplementaryCoverage;
+        if (filterType === '생명') return policy.policyType === 'LIFE';
+        if (filterType === '손해') return policy.policyType === 'NON_LIFE';
         return false;
       });
+
+  const coveragePieData = useMemo(() => {
+    const counts = policies.reduce((acc, policy) => {
+      const label = getPolicyTypeLabel(policy);
+      acc[label] = (acc[label] || 0) + 1;
+      return acc;
+    }, {});
+
+    return ['실손', '생명', '손해', '기타']
+      .map((name) => ({ name, value: counts[name] || 0 }))
+      .filter((item) => item.value > 0);
+  }, [policies]);
 
   const totalPremium = policies.reduce((sum, p) => sum + (p.monthlyPremium || 0), 0);
   const totalCoverage = policies.reduce(
     (sum, p) => sum + (p.coverageItems || []).reduce((s, item) => s + (item.amount || 0), 0), 0,
   );
+  const filteredPremium = filteredPolicies.reduce((sum, p) => sum + (p.monthlyPremium || 0), 0);
 
   const handleSyncSuccess = () => {
-    insuranceAPI.getPolicies()
-      .then((data) => { if (Array.isArray(data) && data.length) setPolicies(data); })
-      .catch(() => {});
+    setShowSyncModal(false);
+    loadPolicies();
   };
+
+  const hasPolicies = policies.length > 0;
+  const showInitialLoading = loading && !hasPolicies;
+  const showEmptyPolicies = !loading && !error && !hasPolicies;
+  const showEmptyFilter = !loading && !error && hasPolicies && filteredPolicies.length === 0;
 
   return (
     <div className="mc-page fade-in">
       <div className="mc-page-top">
         <div>
           <div className="mc-page-title">내 보험 조회</div>
-          <div className="mc-page-subtitle">가입된 보험 상품과 보장 내역을 한 곳에서 관리하세요.</div>
+          <div className="mc-page-subtitle">가입된 보험 상품과 보장 내역을 한곳에서 관리하세요.</div>
         </div>
       </div>
 
-      {/* 요약 통계 */}
       <div className="mc-stats-strip mc-stats-strip-3">
         <div className="mc-stat">
           <div className="mc-stat-label">총 월 보험료</div>
@@ -138,7 +144,7 @@ const InsuranceList = () => {
         </div>
         <div className="mc-stat">
           <div className="mc-stat-label">보험 건수</div>
-          <div className="mc-stat-value">{policies.length}개</div>
+          <div className="mc-stat-value">{policies.length}건</div>
           <div className="mc-stat-sub">활성 계약</div>
         </div>
         <div className="mc-stat mc-stat-pill-blue">
@@ -148,40 +154,43 @@ const InsuranceList = () => {
         </div>
       </div>
 
-      {/* 보장 구성 + 필터 2열 */}
       <div className="mc-two-col" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div>
           <div className="mc-sec-head">
             <span className="mc-sec-title">보장 범주 구성</span>
           </div>
           <div className="mc-card mc-card-body mc-coverage-card">
-            <div className="mc-chart-wrap mc-coverage-chart">
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie
-                    data={COVERAGE_PIE_DATA}
-                    cx="50%" cy="50%"
-                    innerRadius={54} outerRadius={78}
-                    paddingAngle={4}
-                    cornerRadius={4}
-                    dataKey="value"
-                    label={renderPieLabel}
-                    labelLine={{ stroke: '#B5BDCA', strokeWidth: 1 }}
-                  >
-                    {PIE_COLORS.map((c, i) => (
-                      <Cell key={i} fill={c} stroke="#fff" strokeWidth={2}/>
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v) => `${v}%`}
-                    contentStyle={{
-                      background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
-                      fontSize: 12,
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {coveragePieData.length > 0 ? (
+              <div className="mc-chart-wrap mc-coverage-chart">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={coveragePieData}
+                      cx="50%" cy="50%"
+                      innerRadius={54} outerRadius={78}
+                      paddingAngle={4}
+                      cornerRadius={4}
+                      dataKey="value"
+                      label={renderPieLabel}
+                      labelLine={{ stroke: '#B5BDCA', strokeWidth: 1 }}
+                    >
+                      {coveragePieData.map((entry, index) => (
+                        <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={2}/>
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => `${value}건`}
+                      contentStyle={{
+                        background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
+                        fontSize: 12,
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div style={emptyCardStyle}>표시할 보험 구성이 없습니다.</div>
+            )}
           </div>
         </div>
 
@@ -203,9 +212,7 @@ const InsuranceList = () => {
             </div>
             <div className="mc-alert mc-alert-blue mc-filter-summary" style={{ marginTop: 16 }}>
               <div>
-                <div className="mc-alert-title">총 {filteredPolicies.length}건 · 월 {formatKRW(
-                  filteredPolicies.reduce((s, p) => s + (p.monthlyPremium || 0), 0),
-                )}</div>
+                <div className="mc-alert-title">총 {filteredPolicies.length}건 · 월 {formatKRW(filteredPremium)}</div>
                 <div className="mc-alert-body">현재 필터 기준 금액</div>
               </div>
               <span className="mc-tag mc-tag-blue">
@@ -216,13 +223,13 @@ const InsuranceList = () => {
         </div>
       </div>
 
-      {/* 보험 상품 리스트 */}
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
         <span className="mc-sec-title">가입 보험 · {filteredPolicies.length}건</span>
         <button className="mc-sec-link">
           <Ic d={P.plus} size={10}/> 새 보험 추가
         </button>
       </div>
+
       <div className="mc-stack-sm">
         {filteredPolicies.map((policy) => {
           const open = expandedPolicy === policy.id;
@@ -240,17 +247,17 @@ const InsuranceList = () => {
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     fontWeight: 800, fontSize: 14, letterSpacing: '-0.4px',
                   }}>
-                    {policy.companyName.charAt(0)}
+                    {(policy.companyName || '?').charAt(0)}
                   </div>
                   <div>
                     <div className="mc-card-title mc-policy-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      {policy.productName}
+                      {policy.productName || '보험 상품명 없음'}
                       {policy.hasSupplementaryCoverage && policy.policyType !== 'SUPPLEMENTARY' && (
                         <span style={supplementaryBadgeStyle}>실손보장 포함</span>
                       )}
                     </div>
                     <div className="mc-card-sub">
-                      {policy.companyName} · {TYPE_MAP[policy.policyType] || '기타'}
+                      {policy.companyName || '보험사 미확인'} · {getPolicyTypeLabel(policy)}
                     </div>
                   </div>
                 </div>
@@ -277,54 +284,82 @@ const InsuranceList = () => {
                   </div>
                   <div className="mc-kv mc-policy-kv">
                     <span className="mc-kv-key mc-policy-expiry-key">만료일</span>
-                    <span className="mc-kv-val mc-policy-date-val">{policy.endDate}</span>
+                    <span className="mc-kv-val mc-policy-date-val">{policy.endDate || '-'}</span>
                   </div>
                 </div>
 
                 {open && (
                   <div style={{ marginTop: 14 }}>
                     <div className="mc-field-label" style={{ marginBottom: 8 }}>보장 내역</div>
-                    <table className="mc-tbl">
-                      <thead>
-                        <tr>
-                          <th>보장 항목</th>
-                          <th style={{ textAlign: 'right' }}>보장금액</th>
-                          <th style={{ textAlign: 'right' }}>상태</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(policy.coverageItems || []).map((item, idx) => (
-                          <tr key={idx}>
-                            <td style={{ fontWeight: 600 }}>{item.name}</td>
-                            <td style={{ textAlign: 'right', color: 'var(--blue)', fontWeight: 700 }}>
-                              {formatKRW(item.amount)}
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <span className={`mc-tag ${item.isCovered ? 'mc-tag-success' : 'mc-tag-neutral'}`}>
-                                {item.isCovered ? '보장중' : '해지'}
-                              </span>
-                            </td>
+                    {(policy.coverageItems || []).length > 0 ? (
+                      <table className="mc-tbl">
+                        <thead>
+                          <tr>
+                            <th>보장 항목</th>
+                            <th style={{ textAlign: 'right' }}>보장금액</th>
+                            <th style={{ textAlign: 'right' }}>상태</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {(policy.coverageItems || []).map((item, idx) => (
+                            <tr key={idx}>
+                              <td style={{ fontWeight: 600 }}>{item.name || item.itemName || '-'}</td>
+                              <td style={{ textAlign: 'right', color: 'var(--blue)', fontWeight: 700 }}>
+                                {formatKRW(item.amount || item.maxBenefitAmount)}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <span className={`mc-tag ${item.isCovered !== false ? 'mc-tag-success' : 'mc-tag-neutral'}`}>
+                                  {item.isCovered !== false ? '보장중' : '예외'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="mc-card mc-card-body" style={{ color: 'var(--text-3)' }}>
+                        등록된 보장 내역이 없습니다.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           );
         })}
-        {filteredPolicies.length === 0 && (
-          <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: 'var(--text-3)' }}>
-            조건에 맞는 보험이 없어요.
+
+        {showInitialLoading && (
+          <div className="mc-card mc-card-body" style={emptyCardStyle}>
+            보험 정보를 불러오는 중입니다.
+          </div>
+        )}
+
+        {error && (
+          <div className="mc-alert mc-alert-red" style={{ marginTop: 8 }}>
+            <div>
+              <div className="mc-alert-title">보험 정보를 불러오지 못했습니다.</div>
+              <div className="mc-alert-body">{error}</div>
+            </div>
+          </div>
+        )}
+
+        {showEmptyPolicies && (
+          <div className="mc-card mc-card-body" style={emptyCardStyle}>
+            아직 조회된 보험 정보가 없습니다. 내 건강 불러오기를 통해 보험 정보를 동기화해주세요.
+          </div>
+        )}
+
+        {showEmptyFilter && (
+          <div className="mc-card mc-card-body" style={emptyCardStyle}>
+            현재 필터에 해당하는 보험이 없습니다.
           </div>
         )}
       </div>
 
-      {loading && (
+      {loading && hasPolicies && (
         <div className="mc-alert mc-alert-blue" style={{ marginTop: 16 }}>
           <div>
-            <div className="mc-alert-title">보험 정보 불러오는 중…</div>
+            <div className="mc-alert-title">보험 정보 불러오는 중...</div>
             <div className="mc-alert-body">잠시만 기다려주세요.</div>
           </div>
         </div>
