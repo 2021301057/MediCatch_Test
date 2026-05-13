@@ -55,6 +55,15 @@ public class Policy {
     @Column
     private Double annualPremium;
 
+    @Column
+    private Double premiumAmount;
+
+    @Column
+    private String paymentCycle;
+
+    @Column
+    private String paymentPeriod;
+
     @Column(columnDefinition = "LONGTEXT")
     private String policyDetails;
 

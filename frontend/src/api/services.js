@@ -42,6 +42,9 @@ const normalizePolicy = (row) => {
     end_date: 'endDate',
     monthly_premium: 'monthlyPremium',
     annual_premium: 'annualPremium',
+    premium_amount: 'premiumAmount',
+    payment_cycle: 'paymentCycle',
+    payment_period: 'paymentPeriod',
     has_supplementary_coverage: 'hasSupplementaryCoverage',
     coverage_items: 'coverageItems',
   });

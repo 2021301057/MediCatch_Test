@@ -32,7 +32,13 @@ const TYPE_MAP = {
 
 const formatKRW = (n) => new Intl.NumberFormat('ko-KR').format(n || 0) + '원';
 const hasPremium = (policy) => Number(policy.monthlyPremium || 0) > 0;
-const formatPremium = (policy) => (hasPremium(policy) ? formatKRW(policy.monthlyPremium) : '정보 없음');
+const isOneTimePayment = (policy) => (policy.paymentCycle || '').includes('일시');
+const formatPremium = (policy) => {
+  if (isOneTimePayment(policy) && Number(policy.premiumAmount || 0) > 0) {
+    return `일시납 ${formatKRW(policy.premiumAmount)}`;
+  }
+  return hasPremium(policy) ? formatKRW(policy.monthlyPremium) : '정보 없음';
+};
 
 const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, value }) => {
   const RADIAN = Math.PI / 180;
@@ -288,7 +294,7 @@ const InsuranceList = () => {
               <div className="mc-card-body">
                 <div className="mc-grid-2">
                   <div className="mc-kv mc-policy-kv">
-                    <span className="mc-kv-key mc-policy-premium-key">월 보험료</span>
+                    <span className="mc-kv-key mc-policy-premium-key">보험료</span>
                     <span className="mc-kv-val mc-policy-premium-val">{formatPremium(policy)}</span>
                   </div>
                   <div className="mc-kv mc-policy-kv">

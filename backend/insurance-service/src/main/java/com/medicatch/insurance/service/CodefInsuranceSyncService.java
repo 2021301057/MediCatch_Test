@@ -264,6 +264,13 @@ public class CodefInsuranceSyncService {
                 && source.getMonthlyPremium() != null && source.getMonthlyPremium() > 0) {
             target.setMonthlyPremium(source.getMonthlyPremium());
             target.setAnnualPremium(source.getAnnualPremium());
+            target.setPremiumAmount(source.getPremiumAmount());
+            target.setPaymentCycle(source.getPaymentCycle());
+            target.setPaymentPeriod(source.getPaymentPeriod());
+        } else if (target.getPremiumAmount() == null && source.getPremiumAmount() != null) {
+            target.setPremiumAmount(source.getPremiumAmount());
+            target.setPaymentCycle(source.getPaymentCycle());
+            target.setPaymentPeriod(source.getPaymentPeriod());
         }
         if ((target.getPolicyDetails() == null || target.getPolicyDetails().isBlank())
                 && source.getPolicyDetails() != null) {
@@ -391,10 +398,11 @@ public class CodefInsuranceSyncService {
                     || (contractStatus == null && endDate != null && endDate.isAfter(LocalDate.now()));
 
             String premiumStr = str(item.get("resPremium"));
-            Double monthly    = parseDouble(premiumStr);
-            if (monthly != null && "매년납".equals(str(item.get("resPaymentCycle")))) {
-                monthly = monthly / 12.0;
-            }
+            String paymentCycle = str(item.get("resPaymentCycle"));
+            String paymentPeriod = str(item.get("resPaymentPeriod"));
+            Double premiumAmount = parseDouble(premiumStr);
+            Double monthly = calculateMonthlyPremium(premiumAmount, paymentCycle);
+            Double annual = calculateAnnualPremium(premiumAmount, monthly, paymentCycle);
 
             List<CoverageItem> coverageItems = parseCoverageItems(item);
 
@@ -408,7 +416,10 @@ public class CodefInsuranceSyncService {
                     .endDate(endDate)
                     .isActive(isActive)
                     .monthlyPremium(monthly)
-                    .annualPremium(monthly != null ? monthly * 12 : null)
+                    .annualPremium(annual)
+                    .premiumAmount(premiumAmount)
+                    .paymentCycle(paymentCycle)
+                    .paymentPeriod(paymentPeriod)
                     .policyDetails(str(item.get("resInsuranceName")))
                     .coverageItems(coverageItems)
                     .build();
@@ -492,6 +503,29 @@ public class CodefInsuranceSyncService {
         String s = o.toString().trim().replaceAll("[^0-9.]", "");
         if (s.isEmpty()) return null;
         try { return Double.parseDouble(s); } catch (NumberFormatException e) { return null; }
+    }
+
+    private Double calculateMonthlyPremium(Double premiumAmount, String paymentCycle) {
+        if (premiumAmount == null || premiumAmount <= 0) return null;
+        if (isOneTimePayment(paymentCycle)) return null;
+        if (isAnnualPayment(paymentCycle)) return premiumAmount / 12.0;
+        return premiumAmount;
+    }
+
+    private Double calculateAnnualPremium(Double premiumAmount, Double monthlyPremium, String paymentCycle) {
+        if (premiumAmount == null || premiumAmount <= 0) return null;
+        if (isOneTimePayment(paymentCycle)) return null;
+        if (isAnnualPayment(paymentCycle)) return premiumAmount;
+        return monthlyPremium != null ? monthlyPremium * 12.0 : null;
+    }
+
+    private boolean isOneTimePayment(String paymentCycle) {
+        return paymentCycle != null && paymentCycle.contains("일시");
+    }
+
+    private boolean isAnnualPayment(String paymentCycle) {
+        if (paymentCycle == null) return false;
+        return paymentCycle.contains("년") || paymentCycle.contains("연");
     }
 
     private LocalDate parseDate8(String s) {

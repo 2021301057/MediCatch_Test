@@ -24,6 +24,9 @@ public class PolicyDto {
     private LocalDate endDate;
     private Double monthlyPremium;
     private Double annualPremium;
+    private Double premiumAmount;
+    private String paymentCycle;
+    private String paymentPeriod;
     private List<CoverageItemDto> coverageItems;
     private boolean hasSupplementaryCoverage;
 
@@ -61,6 +64,9 @@ public class PolicyDto {
                 .endDate(p.getEndDate())
                 .monthlyPremium(p.getMonthlyPremium())
                 .annualPremium(p.getAnnualPremium())
+                .premiumAmount(p.getPremiumAmount())
+                .paymentCycle(p.getPaymentCycle())
+                .paymentPeriod(p.getPaymentPeriod())
                 .coverageItems(items)
                 .hasSupplementaryCoverage(p.isHasSupplementaryCoverage())
                 .build();
