@@ -419,6 +419,174 @@ SELECT '4', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
        70, 30, 30000, 'MAX_FIXED_OR_RATE', TRUE, FALSE, '4세대 비급여 통원 기준', 70
 WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
 
+-- Expanded phase 1 treatment classification rules
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '통원', '외래,외래진료,병원진료,의원진료', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'GENERAL',
+       'GENERAL_OUTPATIENT', NULL, TRUE, '통원은 급여/비급여와 병원 규모에 따라 공제금이 달라질 수 있습니다.', 31
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '통원');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '약제', '약,처방약,처방전,조제약,복약', 'UNKNOWN', 'MEDICATION', 'COVERED', 'MEDICATION',
+       'MEDICATION', NULL, TRUE, '약제는 처방 조제 여부와 급여/비급여 여부 확인이 필요합니다.', 32
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '약제');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '물리치료', '재활치료,전기치료,운동치료,열치료', 'UNKNOWN', 'OUTPATIENT', 'COVERED', 'REHAB',
+       'GENERAL_OUTPATIENT', NULL, TRUE, '물리치료는 급여 항목인지 비급여 재활치료인지 확인이 필요합니다.', 51
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '물리치료');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '체외충격파', '충격파치료,체외충격파치료,ESWT', 'UNKNOWN', 'OUTPATIENT', 'NON_COVERED', 'REHAB',
+       'GENERAL_NON_COVERED', NULL, TRUE, '체외충격파는 비급여 가능성이 높아 치료 목적과 세대별 비급여 보장 여부 확인이 필요합니다.', 52
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '체외충격파');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '추나요법', '추나,한방추나,한의원추나', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'KOREAN_MEDICINE',
+       'KOREAN_MEDICINE_CHUNA', NULL, TRUE, '추나요법은 2019년 급여화 이후 급여 여부에 따라 보장 판단이 달라질 수 있습니다.', 91
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '추나요법');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '화상', '화상진단,열상,화상치료', 'INJURY', 'DIAGNOSIS', 'UNKNOWN', 'BURN',
+       NULL, 'BURN_DIAGNOSIS', FALSE, '화상 진단비는 담보별 화상 분류와 진단 기준에 따라 달라질 수 있습니다.', 92
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '화상');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '사망후유장해', '사망,후유장해,상해사망,질병사망,상해후유장해', 'UNKNOWN', 'DIAGNOSIS', 'UNKNOWN', 'DEATH_DISABILITY',
+       NULL, 'DEATH_DISABILITY', TRUE, '상해/질병 여부와 장해율에 따라 보장 담보가 달라질 수 있습니다.', 93
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '사망후유장해');
+
+-- Expanded phase 1 fixed benefit matching rules
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'BURN_DIAGNOSIS', '화상 진단비', '화상진단,화상 진단,중증화상', NULL,
+       '화상 진단 관련 정액형 담보를 찾습니다.', 70
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'BURN_DIAGNOSIS');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'INJURY_DEATH_DISABILITY', '상해 사망·후유장해', '상해사망,상해후유장해,일반상해 사망후유장해,상해50%이상후유장해', '질병',
+       '상해 사망 및 후유장해 관련 정액형 담보를 찾습니다.', 80
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'INJURY_DEATH_DISABILITY');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'DISEASE_DEATH', '질병 사망', '질병사망,질병 사망', '상해',
+       '질병 사망 관련 정액형 담보를 찾습니다.', 90
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'DISEASE_DEATH');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'OUTPATIENT_DAILY', '통원 담보', '통원,외래,통원의료비,암통원', '실손의료비',
+       '정액형 통원 담보를 찾습니다.', 100
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'OUTPATIENT_DAILY');
+
+-- Expanded phase 1 actual loss benefit rules
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '1-d', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       100, 0, 5000, 'FIXED_ONLY', FALSE, FALSE, '1세대 손해보험 통원 비급여 기준 정액 공제', 11
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '1-d' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '1-h', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       100, 0, 5000, 'FIXED_ONLY', FALSE, FALSE, '1세대 생명보험 통원 비급여 기준 정액 공제', 21
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '1-h' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '2', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, FALSE, '2세대 통원 비급여 기준 max 공제', 31
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '2' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-s', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, FALSE, '3세대 표준 통원 비급여 기준 max 공제', 41
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '3-s' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '4', 'OUTPATIENT', 'NON_COVERED', 'REHAB', 'NON_COVERED_THREE',
+       70, 30, 30000, 'MAX_FIXED_OR_RATE', TRUE, FALSE, '4세대 비급여 3종은 특약과 이용량 기준 확인이 필요합니다.', 71
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'NON_COVERED_THREE');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-c', 'OUTPATIENT', 'NON_COVERED', 'REHAB', 'NON_COVERED_THREE',
+       70, 30, 10000, 'MAX_FIXED_OR_RATE', TRUE, FALSE, '3세대 착한실손 비급여 3종은 특약 가입 여부 확인이 필요합니다.', 51
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '3-c' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'NON_COVERED_THREE');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '2', 'OUTPATIENT', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE',
+       0, 100, NULL, 'EXCLUDED', FALSE, TRUE, '2세대 이후 한방 비급여는 원칙적으로 면책 처리합니다.', 120
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '2' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'KOREAN_MEDICINE');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-s', 'OUTPATIENT', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE',
+       0, 100, NULL, 'EXCLUDED', FALSE, TRUE, '3세대 한방 비급여는 원칙적으로 면책 처리합니다.', 121
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '3-s' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'KOREAN_MEDICINE');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '4', 'OUTPATIENT', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE',
+       0, 100, NULL, 'EXCLUDED', FALSE, TRUE, '4세대 한방 비급여는 원칙적으로 면책 처리합니다.', 122
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'KOREAN_MEDICINE');
+
 -- Pre-treatment searches table (for logging and analytics)
 CREATE TABLE IF NOT EXISTS pre_treatment_searches (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
