@@ -114,7 +114,8 @@ export const insuranceAPI = {
 
 // ── Analysis ──────────────────────────────────────
 export const analysisAPI = {
-  searchTreatment:     (keyword) => api.get('/analysis/pre-treatment-search', { params: { keyword } }),
+  searchPreTreatment:  (data) => api.post('/analysis/pre-treatment-search', data),
+  searchTreatment:     (keyword) => api.post('/analysis/pre-treatment-search', { query: keyword }),
   getTreatmentCoverage:(id) => api.get(`/analysis/pre-treatment-search/${id}/coverage`),
   getCoverageGap:      () => api.get('/analysis/coverage-gap'),
   getClaimOpportunities: () => api.get('/analysis/claim-opportunities')
