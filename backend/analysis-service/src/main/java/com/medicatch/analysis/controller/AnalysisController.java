@@ -1,6 +1,8 @@
 package com.medicatch.analysis.controller;
 
 import com.medicatch.analysis.dto.ClaimOpportunityDto;
+import com.medicatch.analysis.dto.PreTreatmentSearchRequest;
+import com.medicatch.analysis.dto.PreTreatmentSearchResponse;
 import com.medicatch.analysis.service.ClaimMatchingService;
 import com.medicatch.analysis.service.CoverageGapService;
 import com.medicatch.analysis.service.PreTreatmentSearchService;
@@ -26,6 +28,26 @@ public class AnalysisController {
         this.preTreatmentSearchService = preTreatmentSearchService;
         this.coverageGapService = coverageGapService;
         this.claimMatchingService = claimMatchingService;
+    }
+
+    /**
+     * Search pre-treatment coverage rules by user query
+     */
+    @PostMapping("/pre-treatment-search")
+    public ResponseEntity<PreTreatmentSearchResponse> searchPreTreatment(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestBody PreTreatmentSearchRequest request) {
+        log.info("POST /api/analysis/pre-treatment-search - query: {}", request != null ? request.getQuery() : null);
+        try {
+            PreTreatmentSearchRequest normalizedRequest = request != null ? request : new PreTreatmentSearchRequest();
+            if (normalizedRequest.getUserId() == null && userIdHeader != null && !userIdHeader.isBlank()) {
+                normalizedRequest.setUserId(Long.parseLong(userIdHeader));
+            }
+            return ResponseEntity.ok(preTreatmentSearchService.searchPreTreatment(normalizedRequest));
+        } catch (Exception e) {
+            log.error("Error searching pre-treatment rules: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     /**
