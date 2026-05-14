@@ -16,7 +16,6 @@ import com.medicatch.analysis.repository.PreTreatmentSearchRepository;
 import com.medicatch.analysis.repository.TreatmentRuleRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -55,7 +54,6 @@ public class PreTreatmentSearchService {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional
     public PreTreatmentSearchResponse searchPreTreatment(PreTreatmentSearchRequest request) {
         String query = request != null ? normalizeInput(request.getQuery()) : "";
         if (query.isBlank()) {
