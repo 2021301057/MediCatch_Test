@@ -3,133 +3,70 @@ package com.medicatch.analysis.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
 public class CoverageGapService {
 
     /**
-     * Analyze coverage gaps for user
+     * Analyze coverage gaps for user.
+     *
+     * Mock recommendations were removed from this service. Coverage comparison
+     * should be calculated from real insurance data in insurance-service.
      */
     public Map<String, Object> analyzeCoverageGaps(Long userId, List<Map<String, Object>> policies) {
-        log.info("Analyzing coverage gaps for userId: {}", userId);
+        log.info("Coverage gap mock response disabled for userId: {}", userId);
 
         Map<String, Object> analysis = new HashMap<>();
-
-        List<Map<String, String>> gaps = new ArrayList<>();
-
-        gaps.add(Map.of(
-                "category", "치과",
-                "issue", "보장률 낮음",
-                "coverage", "30%",
-                "recommendation", "치과 보험 추가 가입 검토",
-                "estimatedCost", "월 50,000원"
-        ));
-
-        gaps.add(Map.of(
-                "category", "안경/렌즈",
-                "issue", "보장 제외",
-                "coverage", "0%",
-                "recommendation", "안경 보조금 서비스 이용",
-                "estimatedCost", "연 200,000원"
-        ));
-
-        gaps.add(Map.of(
-                "category", "미용 시술",
-                "issue", "보장 제외",
-                "coverage", "0%",
-                "recommendation", "실비보험 추가 고려",
-                "estimatedCost", "월 100,000원"
-        ));
-
         analysis.put("userId", userId);
-        analysis.put("totalGapsFound", gaps.size());
-        analysis.put("coverageGaps", gaps);
-        analysis.put("overallCoverageRating", "Good");
-        analysis.put("recommendedActions", List.of(
-                "치과 보험 추가 가입",
-                "안경 보조금 프로그램 확인",
-                "실비보험 비교 검토"
-        ));
+        analysis.put("available", false);
+        analysis.put("totalGapsFound", 0);
+        analysis.put("coverageGaps", List.of());
+        analysis.put("overallCoverageRating", "UNKNOWN");
+        analysis.put("recommendedActions", List.of());
+        analysis.put("message", "Coverage gap analysis is not generated from mock data. Use real insurance coverage comparison data.");
 
         return analysis;
     }
 
     /**
-     * Get claim opportunities
+     * Get claim opportunities.
+     *
+     * Claim opportunity matching is handled by ClaimMatchingService.
      */
     public List<Map<String, Object>> findClaimOpportunities(Long userId, List<String> recentMedicalEvents) {
-        log.info("Finding claim opportunities for userId: {}", userId);
-
-        List<Map<String, Object>> opportunities = new ArrayList<>();
-
-        if (recentMedicalEvents.contains("입원")) {
-            opportunities.add(Map.of(
-                    "type", "입원급여",
-                    "condition", "최근 입원 기록 발견",
-                    "estimatedAmount", 2000000,
-                    "probability", "높음",
-                    "nextStep", "입원 증명서 준비"
-            ));
-        }
-
-        if (recentMedicalEvents.contains("수술")) {
-            opportunities.add(Map.of(
-                    "type", "수술급여",
-                    "condition", "최근 수술 기록 발견",
-                    "estimatedAmount", 1500000,
-                    "probability", "높음",
-                    "nextStep", "수술비 영수증 확인"
-            ));
-        }
-
-        if (recentMedicalEvents.contains("진료")) {
-            opportunities.add(Map.of(
-                    "type", "외래진료비",
-                    "condition", "정기 진료 기록",
-                    "estimatedAmount", 500000,
-                    "probability", "중간",
-                    "nextStep", "최근 3개월 영수증 확인"
-            ));
-        }
-
-        if (opportunities.isEmpty()) {
-            opportunities.add(Map.of(
-                    "type", "일반진료비",
-                    "condition", "정기적인 진료",
-                    "estimatedAmount", 200000,
-                    "probability", "중간",
-                    "nextStep", "최근 진료 기록 확인"
-            ));
-        }
-
-        return opportunities;
+        log.info("CoverageGapService claim opportunity mock response disabled for userId: {}", userId);
+        return List.of();
     }
 
     /**
-     * Calculate potential savings
+     * Calculate potential savings.
+     *
+     * This method no longer applies a fixed coverage rate because that produced
+     * mock savings. It only reports the provided medical cost total.
      */
     public Map<String, Object> calculatePotentialSavings(Long userId, List<Map<String, Object>> medicalHistory) {
-        log.info("Calculating potential savings for userId: {}", userId);
+        log.info("Potential savings mock calculation disabled for userId: {}", userId);
 
-        double totalMedicalCost = medicalHistory.stream()
+        double totalMedicalCost = medicalHistory == null ? 0 : medicalHistory.stream()
                 .mapToDouble(record -> {
                     Object cost = record.get("cost");
                     return cost instanceof Number ? ((Number) cost).doubleValue() : 0;
                 })
                 .sum();
 
-        double avgCoverageRate = 0.80;  // 80% average
-        double currentCoverage = totalMedicalCost * avgCoverageRate;
-        double userResponsibility = totalMedicalCost - currentCoverage;
-
         Map<String, Object> savings = new HashMap<>();
+        savings.put("userId", userId);
+        savings.put("available", false);
         savings.put("totalMedicalCost", totalMedicalCost);
-        savings.put("currentCoverage", currentCoverage);
-        savings.put("userResponsibility", userResponsibility);
-        savings.put("annualizedResponsibility", userResponsibility * 12);
-        savings.put("potentialSavingsWithBetterCoverage", (totalMedicalCost * 0.9) - currentCoverage);
+        savings.put("currentCoverage", null);
+        savings.put("userResponsibility", null);
+        savings.put("annualizedResponsibility", null);
+        savings.put("potentialSavingsWithBetterCoverage", null);
+        savings.put("message", "Savings analysis is not calculated without real policy coverage rules.");
 
         return savings;
     }
