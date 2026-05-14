@@ -587,6 +587,15 @@ SELECT '4', 'OUTPATIENT', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE',
        0, 100, NULL, 'EXCLUDED', FALSE, TRUE, '4세대 한방 비급여는 원칙적으로 면책 처리합니다.', 122
 WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'KOREAN_MEDICINE');
 
+-- Normalize rule activation flags for existing databases and copied seed runs
+ALTER TABLE treatment_rules MODIFY COLUMN is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE fixed_benefit_match_rules MODIFY COLUMN is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE insurance_benefit_rules MODIFY COLUMN is_active BOOLEAN DEFAULT TRUE;
+
+UPDATE treatment_rules SET is_active = TRUE WHERE is_active IS NULL;
+UPDATE fixed_benefit_match_rules SET is_active = TRUE WHERE is_active IS NULL;
+UPDATE insurance_benefit_rules SET is_active = TRUE WHERE is_active IS NULL;
+
 -- Pre-treatment searches table (for logging and analytics)
 CREATE TABLE IF NOT EXISTS pre_treatment_searches (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
