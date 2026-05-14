@@ -535,13 +535,6 @@ public class ClaimMatchingService {
     private String resolveDiseaseCode(MedicalRecordInfo record) {
         if (record.getDiseaseCode() != null && !record.getDiseaseCode().isBlank())
             return record.getDiseaseCode();
-        if (record.getNotes() != null) {
-            int idx = record.getNotes().indexOf("진단코드: ");
-            if (idx >= 0) {
-                String code = record.getNotes().substring(idx + 6).trim().split("\\s")[0];
-                if (!code.isBlank() && !"-".equals(code)) return code;
-            }
-        }
         return null;
     }
 

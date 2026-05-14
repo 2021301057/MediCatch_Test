@@ -561,18 +561,22 @@ public class PreTreatmentSearchService {
         if (request == null || request.getUserId() == null) {
             return;
         }
-
-        PreTreatmentSearch logEntry = PreTreatmentSearch.builder()
-                .userId(request.getUserId())
-                .conditionSearched(response.getQuery())
-                .treatmentName(response.getClassification() != null ? response.getClassification().getKeyword() : null)
-                .estimatedCost(request.getEstimatedCost())
-                .hospitalType(request.getHospitalType())
-                .ruleMatched(Boolean.TRUE.equals(response.getMatched()))
-                .aiUsed(false)
-                .classificationJson(toJson(response.getClassification()))
-                .build();
-        preTreatmentSearchRepository.save(logEntry);
+        try {
+            PreTreatmentSearch logEntry = PreTreatmentSearch.builder()
+                    .userId(request.getUserId())
+                    .conditionSearched(response.getQuery())
+                    .treatmentName(response.getClassification() != null ? response.getClassification().getKeyword() : null)
+                    .estimatedCost(request.getEstimatedCost())
+                    .hospitalType(request.getHospitalType())
+                    .ruleMatched(Boolean.TRUE.equals(response.getMatched()))
+                    .aiUsed(false)
+                    .classificationJson(toJson(response.getClassification()))
+                    .build();
+            preTreatmentSearchRepository.save(logEntry);
+        } catch (Exception e) {
+            log.warn("Failed to save pre-treatment search log. userId={}, query={}, error={}",
+                    request.getUserId(), response.getQuery(), e.getMessage());
+        }
     }
 
     private String toJson(Object value) {

@@ -23,7 +23,6 @@ public class PolicyDto {
     private LocalDate startDate;
     private LocalDate endDate;
     private Double monthlyPremium;
-    private Double annualPremium;
     private Double premiumAmount;
     private String paymentCycle;
     private String paymentPeriod;
@@ -63,7 +62,6 @@ public class PolicyDto {
                 .startDate(p.getStartDate())
                 .endDate(p.getEndDate())
                 .monthlyPremium(p.getMonthlyPremium())
-                .annualPremium(p.getAnnualPremium())
                 .premiumAmount(p.getPremiumAmount())
                 .paymentCycle(p.getPaymentCycle())
                 .paymentPeriod(p.getPaymentPeriod())

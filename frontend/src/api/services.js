@@ -41,7 +41,6 @@ const normalizePolicy = (row) => {
     start_date: 'startDate',
     end_date: 'endDate',
     monthly_premium: 'monthlyPremium',
-    annual_premium: 'annualPremium',
     premium_amount: 'premiumAmount',
     payment_cycle: 'paymentCycle',
     payment_period: 'paymentPeriod',

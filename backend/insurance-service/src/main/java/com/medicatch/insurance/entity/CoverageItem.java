@@ -29,22 +29,10 @@ public class CoverageItem {
     private String category;  // "OUTPATIENT", "INPATIENT", "MEDICATION", "SURGERY"
 
     @Column
-    private Double coverageRate;  // Coverage percentage (e.g., 80.0)
-
-    @Column
     private Double maxBenefitAmount;  // Maximum benefit amount
-
-    @Column
-    private Double deductible;  // Deductible amount
-
-    @Column
-    private Double copay;  // Fixed copayment
 
     @Column(columnDefinition = "LONGTEXT")
     private String conditions;  // Coverage conditions
-
-    @Column(columnDefinition = "LONGTEXT")
-    private String exclusions;  // Exclusions and limitations
 
     @Column
     private boolean isCovered;

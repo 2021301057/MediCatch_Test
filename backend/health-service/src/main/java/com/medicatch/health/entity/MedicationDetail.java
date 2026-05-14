@@ -28,9 +28,6 @@ public class MedicationDetail {
     private String medicationName;
 
     @Column
-    private String medicationCode;
-
-    @Column
     private String dosage;
 
     @Column
@@ -47,18 +44,6 @@ public class MedicationDetail {
 
     @Column
     private String indication;  // Why it was prescribed
-
-    @Column
-    private String sideEffects;
-
-    @Column
-    private String warnings;
-
-    @Column
-    private Double cost;
-
-    @Column
-    private Double insuranceCoverage;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

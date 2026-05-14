@@ -29,7 +29,7 @@ export default function Navbar() {
     localStorage.getItem('healthDataLoaded') === 'true'
   ));
 
-  const shouldShowSyncGuide = !hasHealthData && !user?.codefConnectionCount;
+  const shouldShowSyncGuide = !hasHealthData;
 
   const handleLogout = () => {
     logout();

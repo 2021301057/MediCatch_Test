@@ -40,9 +40,6 @@ public class MedicalRecord {
     private String treatmentDetails;
 
     @Column
-    private String medicationPrescribed;
-
-    @Column
     private Double medicalCost;
 
     @Column
@@ -60,9 +57,6 @@ public class MedicalRecord {
 
     @Column
     private Double nonCoveredAmount;
-
-    @Column(columnDefinition = "LONGTEXT")
-    private String notes;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

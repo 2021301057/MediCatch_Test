@@ -295,7 +295,6 @@ public class CodefInsuranceSyncService {
         if ((target.getMonthlyPremium() == null || target.getMonthlyPremium() <= 0)
                 && source.getMonthlyPremium() != null && source.getMonthlyPremium() > 0) {
             target.setMonthlyPremium(source.getMonthlyPremium());
-            target.setAnnualPremium(source.getAnnualPremium());
             target.setPremiumAmount(source.getPremiumAmount());
             target.setPaymentCycle(source.getPaymentCycle());
             target.setPaymentPeriod(source.getPaymentPeriod());
@@ -434,7 +433,6 @@ public class CodefInsuranceSyncService {
             String paymentPeriod = str(item.get("resPaymentPeriod"));
             Double premiumAmount = parseDouble(premiumStr);
             Double monthly = calculateMonthlyPremium(premiumAmount, paymentCycle);
-            Double annual = calculateAnnualPremium(premiumAmount, monthly, paymentCycle);
 
             List<CoverageItem> coverageItems = parseCoverageItems(item);
 
@@ -448,7 +446,6 @@ public class CodefInsuranceSyncService {
                     .endDate(endDate)
                     .isActive(isActive)
                     .monthlyPremium(monthly)
-                    .annualPremium(annual)
                     .premiumAmount(premiumAmount)
                     .paymentCycle(paymentCycle)
                     .paymentPeriod(paymentPeriod)
@@ -547,13 +544,6 @@ public class CodefInsuranceSyncService {
         if (isOneTimePayment(paymentCycle)) return null;
         if (isAnnualPayment(paymentCycle)) return premiumAmount / 12.0;
         return premiumAmount;
-    }
-
-    private Double calculateAnnualPremium(Double premiumAmount, Double monthlyPremium, String paymentCycle) {
-        if (premiumAmount == null || premiumAmount <= 0) return null;
-        if (isOneTimePayment(paymentCycle)) return null;
-        if (isAnnualPayment(paymentCycle)) return premiumAmount;
-        return monthlyPremium != null ? monthlyPremium * 12.0 : null;
     }
 
     private boolean isOneTimePayment(String paymentCycle) {

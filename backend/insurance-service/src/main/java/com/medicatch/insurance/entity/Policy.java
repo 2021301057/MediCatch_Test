@@ -53,9 +53,6 @@ public class Policy {
     private Double monthlyPremium;
 
     @Column
-    private Double annualPremium;
-
-    @Column
     private Double premiumAmount;
 
     @Column
@@ -66,9 +63,6 @@ public class Policy {
 
     @Column(columnDefinition = "LONGTEXT")
     private String policyDetails;
-
-    @Column(columnDefinition = "LONGTEXT")
-    private String terms;
 
     @OneToMany(mappedBy = "policy", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CoverageItem> coverageItems;

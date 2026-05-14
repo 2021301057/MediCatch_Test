@@ -21,5 +21,4 @@ public class UserProfileResponse {
     private String gender;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private int codefConnectionCount;
 }

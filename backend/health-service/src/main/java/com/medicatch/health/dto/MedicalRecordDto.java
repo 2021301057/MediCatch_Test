@@ -24,7 +24,6 @@ public class MedicalRecordDto {
     private boolean hasClaimOpportunity;
     private Double claimAmount;
     private Double nonCoveredAmount;
-    private String notes;
 
     public static MedicalRecordDto from(MedicalRecord e) {
         Double outOfPocket = e.getOutOfPocket();
@@ -45,7 +44,6 @@ public class MedicalRecordDto {
                 .hasClaimOpportunity(hasClaim)
                 .claimAmount(hasClaim ? outOfPocket : 0.0)
                 .nonCoveredAmount(e.getNonCoveredAmount())
-                .notes(e.getNotes())
                 .build();
     }
 }

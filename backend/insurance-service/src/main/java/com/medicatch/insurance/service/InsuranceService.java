@@ -95,14 +95,11 @@ public class InsuranceService {
 
         for (CoverageItem item : items) {
             if (item.getCategory().equals(serviceCategory)) {
+                Map<String, Object> details = new HashMap<>();
+                details.put("maxBenefit", item.getMaxBenefitAmount());
+                details.put("conditions", item.getConditions());
                 result.put("isCovered", true);
-                result.put("coverageDetails", Map.of(
-                        "coverageRate", item.getCoverageRate(),
-                        "maxBenefit", item.getMaxBenefitAmount(),
-                        "deductible", item.getDeductible(),
-                        "copay", item.getCopay(),
-                        "conditions", item.getConditions()
-                ));
+                result.put("coverageDetails", details);
                 break;
             }
         }
@@ -124,19 +121,8 @@ public class InsuranceService {
 
         if ((Boolean) coverage.get("isCovered")) {
             Map<String, Object> details = (Map<String, Object>) coverage.get("coverageDetails");
-            Double coverageRate = (Double) details.getOrDefault("coverageRate", 0.0);
-
-            Double coveredAmount = serviceAmount * (coverageRate / 100);
-            Double deductible = (Double) details.getOrDefault("deductible", 0.0);
-
-            if (coveredAmount > deductible) {
-                coveredAmount -= deductible;
-            } else {
-                coveredAmount = 0.0;
-            }
-
-            Double maxBenefit = (Double) details.getOrDefault("maxBenefit", Double.MAX_VALUE);
-            coveredAmount = Math.min(coveredAmount, maxBenefit);
+            Double maxBenefit = (Double) details.getOrDefault("maxBenefit", serviceAmount);
+            Double coveredAmount = Math.min(serviceAmount, maxBenefit != null ? maxBenefit : serviceAmount);
 
             result.put("coveredAmount", coveredAmount);
             result.put("userResponsibility", serviceAmount - coveredAmount);

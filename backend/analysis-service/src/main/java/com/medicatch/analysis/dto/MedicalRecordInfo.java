@@ -23,5 +23,4 @@ public class MedicalRecordInfo {
     private boolean hasClaimOpportunity;
     private Double claimAmount;
     private Double nonCoveredAmount;
-    private String notes;
 }

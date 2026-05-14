@@ -114,9 +114,6 @@ public class AuthController {
         Long userId = Long.parseLong(userIdString);
 
         User user = authService.getUserById(userId);
-        int codefConnectionCount = (int) user.getCodefConnections().stream()
-                .filter(conn -> conn.isActive()).count();
-
         UserProfileResponse response = UserProfileResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -125,7 +122,6 @@ public class AuthController {
                 .gender(user.getGender().name())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
-                .codefConnectionCount(codefConnectionCount)
                 .build();
 
         return ResponseEntity.ok(response);
