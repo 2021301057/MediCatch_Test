@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -49,6 +50,10 @@ public class PreTreatmentSearchResponse {
         private String reason;
         private Integer candidateRuleCount;
         private List<ActualLossRuleDto> rules;
+        private List<ActualLossPolicyDto> ownedPolicies;
+        private List<String> selectedGenerationCodes;
+        private List<ActualLossRuleDto> selectedRules;
+        private Boolean needsGenerationConfirmation;
     }
 
     @Data
@@ -70,6 +75,24 @@ public class PreTreatmentSearchResponse {
         private Boolean requiresRider;
         private Boolean isExcluded;
         private String note;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ActualLossPolicyDto {
+        private Long policyId;
+        private String policyName;
+        private String insurerName;
+        private String policyType;
+        private LocalDate startDate;
+        private LocalDate endDate;
+        private String estimatedGenerationCode;
+        private String generationLabel;
+        private String generationConfidence;
+        private Boolean hasActualLossCoverage;
+        private List<String> matchedCoverageNames;
     }
 
     @Data

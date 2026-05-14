@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -69,9 +70,11 @@ public class PreTreatmentSearchService {
         }
 
         TreatmentRule rule = matchedRule.get();
+        Long userId = request != null ? request.getUserId() : null;
+        List<PolicyInfo> activePolicies = loadActivePolicies(userId);
         PreTreatmentSearchResponse.TreatmentClassificationDto classification = toClassificationDto(rule);
-        PreTreatmentSearchResponse.ActualLossResultDto actualLoss = buildActualLossResult(rule);
-        PreTreatmentSearchResponse.FixedBenefitResultDto fixedBenefits = buildFixedBenefitResult(rule, request != null ? request.getUserId() : null);
+        PreTreatmentSearchResponse.ActualLossResultDto actualLoss = buildActualLossResult(rule, activePolicies);
+        PreTreatmentSearchResponse.FixedBenefitResultDto fixedBenefits = buildFixedBenefitResult(rule, activePolicies);
         List<String> nextQuestions = buildNextQuestions(rule, actualLoss, fixedBenefits);
 
         PreTreatmentSearchResponse response = PreTreatmentSearchResponse.builder()
@@ -175,13 +178,24 @@ public class PreTreatmentSearchService {
                 .build();
     }
 
-    private PreTreatmentSearchResponse.ActualLossResultDto buildActualLossResult(TreatmentRule rule) {
+    private PreTreatmentSearchResponse.ActualLossResultDto buildActualLossResult(TreatmentRule rule, List<PolicyInfo> policies) {
+        List<PreTreatmentSearchResponse.ActualLossPolicyDto> actualLossPolicies = findActualLossPolicies(policies);
+        List<String> selectedGenerationCodes = actualLossPolicies.stream()
+                .map(PreTreatmentSearchResponse.ActualLossPolicyDto::getEstimatedGenerationCode)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
         if (isBlank(rule.getActualLossCategory())) {
             return PreTreatmentSearchResponse.ActualLossResultDto.builder()
                     .applicable(false)
                     .reason("정액형 담보 확인 중심 검색어입니다.")
                     .candidateRuleCount(0)
                     .rules(List.of())
+                    .ownedPolicies(actualLossPolicies)
+                    .selectedGenerationCodes(selectedGenerationCodes)
+                    .selectedRules(List.of())
+                    .needsGenerationConfirmation(needsGenerationConfirmation(actualLossPolicies))
                     .build();
         }
 
@@ -190,13 +204,163 @@ public class PreTreatmentSearchService {
                 .filter(benefitRule -> sameOrMixed(rule.getBenefitType(), benefitRule.getBenefitType()))
                 .filter(benefitRule -> sameCategory(rule.getActualLossCategory(), benefitRule.getActualLossCategory()))
                 .toList();
+        List<InsuranceBenefitRule> selectedRules = candidates.stream()
+                .filter(candidate -> selectedGenerationCodes.contains(candidate.getGenerationCode()))
+                .toList();
 
         return PreTreatmentSearchResponse.ActualLossResultDto.builder()
                 .applicable(true)
-                .reason(candidates.isEmpty() ? "일치하는 실손 세대별 룰 후보가 없습니다." : "실손 세대별 후보 룰을 확인했습니다.")
+                .reason(buildActualLossReason(candidates, selectedRules, actualLossPolicies))
                 .candidateRuleCount(candidates.size())
                 .rules(candidates.stream().map(this::toActualLossRuleDto).toList())
+                .ownedPolicies(actualLossPolicies)
+                .selectedGenerationCodes(selectedGenerationCodes)
+                .selectedRules(selectedRules.stream().map(this::toActualLossRuleDto).toList())
+                .needsGenerationConfirmation(needsGenerationConfirmation(actualLossPolicies))
                 .build();
+    }
+
+    private List<PreTreatmentSearchResponse.ActualLossPolicyDto> findActualLossPolicies(List<PolicyInfo> policies) {
+        return policies.stream()
+                .filter(Objects::nonNull)
+                .map(policy -> {
+                    List<String> matchedCoverageNames = safeCoverageItems(policy).stream()
+                            .filter(PolicyInfo.CoverageItemInfo::isCovered)
+                            .filter(this::isActualLossCoverageItem)
+                            .map(PolicyInfo.CoverageItemInfo::getName)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .toList();
+                    boolean hasActualLossCoverage = !matchedCoverageNames.isEmpty() || isActualLossPolicyType(policy);
+                    if (!hasActualLossCoverage) {
+                        return null;
+                    }
+                    String generationCode = estimateActualLossGeneration(policy);
+                    return PreTreatmentSearchResponse.ActualLossPolicyDto.builder()
+                            .policyId(policy.getId())
+                            .policyName(policy.getProductName())
+                            .insurerName(policy.getCompanyName())
+                            .policyType(policy.getPolicyType())
+                            .startDate(policy.getStartDate())
+                            .endDate(policy.getEndDate())
+                            .estimatedGenerationCode(generationCode)
+                            .generationLabel(generationLabel(generationCode))
+                            .generationConfidence(generationConfidence(generationCode))
+                            .hasActualLossCoverage(true)
+                            .matchedCoverageNames(matchedCoverageNames)
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private boolean isActualLossPolicyType(PolicyInfo policy) {
+        String target = normalizeForMatch(String.join(" ",
+                nullToBlank(policy.getPolicyType()),
+                nullToBlank(policy.getProductName()),
+                nullToBlank(policy.getCompanyName())
+        ));
+        return target.contains("실손") || target.contains("actualloss");
+    }
+
+    private boolean isActualLossCoverageItem(PolicyInfo.CoverageItemInfo item) {
+        String target = normalizeForMatch(String.join(" ",
+                nullToBlank(item.getName()),
+                nullToBlank(item.getCategory()),
+                nullToBlank(item.getAgreementType())
+        ));
+        return target.contains("실손")
+                || target.contains("입원의료비")
+                || target.contains("통원의료비")
+                || target.contains("상해입원")
+                || target.contains("상해통원")
+                || target.contains("질병입원")
+                || target.contains("질병통원");
+    }
+
+    private String estimateActualLossGeneration(PolicyInfo policy) {
+        LocalDate startDate = policy.getStartDate();
+        if (startDate == null) {
+            return null;
+        }
+        if (!startDate.isAfter(LocalDate.of(2009, 9, 30))) {
+            return isLifeInsurer(policy) ? "1-h" : "1-d";
+        }
+        if (!startDate.isAfter(LocalDate.of(2017, 3, 31))) {
+            return "2";
+        }
+        if (!startDate.isAfter(LocalDate.of(2021, 6, 30))) {
+            return isKindActualLoss(policy) ? "3-c" : "3-s";
+        }
+        return "4";
+    }
+
+    private boolean isLifeInsurer(PolicyInfo policy) {
+        String target = normalizeForMatch(String.join(" ",
+                nullToBlank(policy.getCompanyName()),
+                nullToBlank(policy.getPolicyType())
+        ));
+        return target.contains("생명") || target.contains("생보") || target.contains("life");
+    }
+
+    private boolean isKindActualLoss(PolicyInfo policy) {
+        String target = normalizeForMatch(String.join(" ",
+                nullToBlank(policy.getProductName()),
+                nullToBlank(policy.getPolicyType())
+        ));
+        boolean keywordMatched = target.contains("착한실손") || target.contains("착한") || target.contains("3-c");
+        boolean separatedThreeItems = safeCoverageItems(policy).stream()
+                .anyMatch(item -> {
+                    String itemTarget = normalizeForMatch(String.join(" ",
+                            nullToBlank(item.getName()),
+                            nullToBlank(item.getCategory()),
+                            nullToBlank(item.getAgreementType())
+                    ));
+                    return itemTarget.contains("도수") || itemTarget.contains("주사") || itemTarget.contains("mri");
+                });
+        return keywordMatched || separatedThreeItems;
+    }
+
+    private String generationLabel(String generationCode) {
+        if (generationCode == null) {
+            return null;
+        }
+        return switch (generationCode) {
+            case "1-d" -> "1세대 손해보험";
+            case "1-h" -> "1세대 생명보험";
+            case "2" -> "2세대";
+            case "3-s" -> "3세대 표준";
+            case "3-c" -> "3세대 착한실손";
+            case "4" -> "4세대";
+            default -> generationCode;
+        };
+    }
+
+    private String generationConfidence(String generationCode) {
+        if (generationCode == null) {
+            return "UNKNOWN";
+        }
+        return "3-s".equals(generationCode) || "3-c".equals(generationCode) ? "ESTIMATED" : "HIGH";
+    }
+
+    private boolean needsGenerationConfirmation(List<PreTreatmentSearchResponse.ActualLossPolicyDto> actualLossPolicies) {
+        return actualLossPolicies.stream()
+                .anyMatch(policy -> !"HIGH".equals(policy.getGenerationConfidence()));
+    }
+
+    private String buildActualLossReason(List<InsuranceBenefitRule> candidates,
+                                         List<InsuranceBenefitRule> selectedRules,
+                                         List<PreTreatmentSearchResponse.ActualLossPolicyDto> actualLossPolicies) {
+        if (candidates.isEmpty()) {
+            return "일치하는 실손 세대별 룰 후보가 없습니다.";
+        }
+        if (actualLossPolicies.isEmpty()) {
+            return "현재 조회된 보험에서 실손 담보를 찾지 못했습니다. 후보 룰만 참고용으로 제공합니다.";
+        }
+        if (selectedRules.isEmpty()) {
+            return "실손 계약은 찾았지만 추정 세대와 일치하는 룰이 아직 없습니다. 후보 룰만 참고용으로 제공합니다.";
+        }
+        return "사용자 실손 세대 기준으로 적용 가능한 후보 룰을 확인했습니다.";
     }
 
     private PreTreatmentSearchResponse.ActualLossRuleDto toActualLossRuleDto(InsuranceBenefitRule rule) {
@@ -218,11 +382,7 @@ public class PreTreatmentSearchService {
                 .build();
     }
 
-    private PreTreatmentSearchResponse.FixedBenefitResultDto buildFixedBenefitResult(TreatmentRule rule) {
-        return buildFixedBenefitResult(rule, null);
-    }
-
-    private PreTreatmentSearchResponse.FixedBenefitResultDto buildFixedBenefitResult(TreatmentRule rule, Long userId) {
+    private PreTreatmentSearchResponse.FixedBenefitResultDto buildFixedBenefitResult(TreatmentRule rule, List<PolicyInfo> policies) {
         if (isBlank(rule.getFixedBenefitCategory())) {
             return PreTreatmentSearchResponse.FixedBenefitResultDto.builder()
                     .applicable(false)
@@ -237,7 +397,6 @@ public class PreTreatmentSearchService {
         List<FixedBenefitMatchRule> rules = fixedBenefitMatchRuleRepository.findByIsActiveOrderByPriorityAsc(true).stream()
                 .filter(matchRule -> matchesFixedBenefitCategory(category, matchRule.getFixedBenefitCategory()))
                 .toList();
-        List<PolicyInfo> policies = loadActivePolicies(userId);
         List<PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto> ownedGroups = rules.stream()
                 .map(matchRule -> buildOwnedGroup(matchRule, policies))
                 .toList();
@@ -251,6 +410,10 @@ public class PreTreatmentSearchService {
                 .build();
     }
 
+    private PreTreatmentSearchResponse.FixedBenefitResultDto buildFixedBenefitResult(TreatmentRule rule, Long userId) {
+        return buildFixedBenefitResult(rule, loadActivePolicies(userId));
+    }
+
     private List<PolicyInfo> loadActivePolicies(Long userId) {
         if (userId == null) {
             return List.of();
@@ -259,7 +422,7 @@ public class PreTreatmentSearchService {
             List<PolicyInfo> policies = insuranceServiceClient.getActivePolicies(userId);
             return policies != null ? policies : List.of();
         } catch (Exception e) {
-            log.warn("Failed to load active policies for fixed benefit matching. userId={}, error={}", userId, e.getMessage());
+            log.warn("Failed to load active policies for pre-treatment matching. userId={}, error={}", userId, e.getMessage());
             return List.of();
         }
     }
@@ -359,6 +522,9 @@ public class PreTreatmentSearchService {
         if (Boolean.TRUE.equals(actualLoss.getApplicable()) && actualLoss.getRules().stream().anyMatch(PreTreatmentSearchResponse.ActualLossRuleDto::getRequiresRider)) {
             questions.add("비급여 특약 또는 해당 담보 특약에 가입되어 있나요?");
         }
+        if (Boolean.TRUE.equals(actualLoss.getNeedsGenerationConfirmation())) {
+            questions.add("실손 세대 추정이 필요합니다. 가입 시점과 착한실손/비급여 특약 분리 여부를 확인해주세요.");
+        }
         if (Boolean.TRUE.equals(fixedBenefits.getApplicable()) && fixedBenefits.getMatchRuleCount() == 0) {
             questions.add("정액형 담보명에 사용할 추가 키워드가 필요합니다.");
         }
@@ -433,6 +599,10 @@ public class PreTreatmentSearchService {
                         .reason("검색어와 일치하는 DB 룰이 없습니다.")
                         .candidateRuleCount(0)
                         .rules(List.of())
+                        .ownedPolicies(List.of())
+                        .selectedGenerationCodes(List.of())
+                        .selectedRules(List.of())
+                        .needsGenerationConfirmation(false)
                         .build())
                 .fixedBenefits(PreTreatmentSearchResponse.FixedBenefitResultDto.builder()
                         .applicable(false)
