@@ -28,6 +28,7 @@ public class PolicyInfo {
         private String name;
         private String category;
         private Double amount;
+        private String agreementType;
         @JsonProperty("isCovered")
         private boolean covered;
     }

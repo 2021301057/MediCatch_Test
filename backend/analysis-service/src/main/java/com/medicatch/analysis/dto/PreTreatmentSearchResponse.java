@@ -81,6 +81,7 @@ public class PreTreatmentSearchResponse {
         private String category;
         private Integer matchRuleCount;
         private List<FixedBenefitRuleDto> rules;
+        private List<FixedBenefitOwnedGroupDto> ownedGroups;
     }
 
     @Data
@@ -93,5 +94,33 @@ public class PreTreatmentSearchResponse {
         private List<String> matchKeywords;
         private List<String> excludeKeywords;
         private String description;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FixedBenefitOwnedGroupDto {
+        private String category;
+        private String displayName;
+        private Boolean owned;
+        private Integer matchedItemCount;
+        private Double totalCoverageAmount;
+        private List<MatchedCoverageItemDto> matchedItems;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MatchedCoverageItemDto {
+        private Long policyId;
+        private String policyName;
+        private String insurerName;
+        private String policyType;
+        private String itemName;
+        private String category;
+        private String agreementType;
+        private Double coverageAmount;
     }
 }

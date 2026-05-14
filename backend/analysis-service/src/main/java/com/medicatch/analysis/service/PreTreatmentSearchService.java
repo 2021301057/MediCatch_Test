@@ -2,6 +2,8 @@ package com.medicatch.analysis.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medicatch.analysis.client.InsuranceServiceClient;
+import com.medicatch.analysis.dto.PolicyInfo;
 import com.medicatch.analysis.dto.PreTreatmentSearchRequest;
 import com.medicatch.analysis.dto.PreTreatmentSearchResponse;
 import com.medicatch.analysis.entity.FixedBenefitMatchRule;
@@ -35,17 +37,20 @@ public class PreTreatmentSearchService {
     private final InsuranceBenefitRuleRepository insuranceBenefitRuleRepository;
     private final FixedBenefitMatchRuleRepository fixedBenefitMatchRuleRepository;
     private final PreTreatmentSearchRepository preTreatmentSearchRepository;
+    private final InsuranceServiceClient insuranceServiceClient;
     private final ObjectMapper objectMapper;
 
     public PreTreatmentSearchService(TreatmentRuleRepository treatmentRuleRepository,
                                      InsuranceBenefitRuleRepository insuranceBenefitRuleRepository,
                                      FixedBenefitMatchRuleRepository fixedBenefitMatchRuleRepository,
                                      PreTreatmentSearchRepository preTreatmentSearchRepository,
+                                     InsuranceServiceClient insuranceServiceClient,
                                      ObjectMapper objectMapper) {
         this.treatmentRuleRepository = treatmentRuleRepository;
         this.insuranceBenefitRuleRepository = insuranceBenefitRuleRepository;
         this.fixedBenefitMatchRuleRepository = fixedBenefitMatchRuleRepository;
         this.preTreatmentSearchRepository = preTreatmentSearchRepository;
+        this.insuranceServiceClient = insuranceServiceClient;
         this.objectMapper = objectMapper;
     }
 
@@ -66,7 +71,7 @@ public class PreTreatmentSearchService {
         TreatmentRule rule = matchedRule.get();
         PreTreatmentSearchResponse.TreatmentClassificationDto classification = toClassificationDto(rule);
         PreTreatmentSearchResponse.ActualLossResultDto actualLoss = buildActualLossResult(rule);
-        PreTreatmentSearchResponse.FixedBenefitResultDto fixedBenefits = buildFixedBenefitResult(rule);
+        PreTreatmentSearchResponse.FixedBenefitResultDto fixedBenefits = buildFixedBenefitResult(rule, request != null ? request.getUserId() : null);
         List<String> nextQuestions = buildNextQuestions(rule, actualLoss, fixedBenefits);
 
         PreTreatmentSearchResponse response = PreTreatmentSearchResponse.builder()
@@ -214,12 +219,17 @@ public class PreTreatmentSearchService {
     }
 
     private PreTreatmentSearchResponse.FixedBenefitResultDto buildFixedBenefitResult(TreatmentRule rule) {
+        return buildFixedBenefitResult(rule, null);
+    }
+
+    private PreTreatmentSearchResponse.FixedBenefitResultDto buildFixedBenefitResult(TreatmentRule rule, Long userId) {
         if (isBlank(rule.getFixedBenefitCategory())) {
             return PreTreatmentSearchResponse.FixedBenefitResultDto.builder()
                     .applicable(false)
                     .category(null)
                     .matchRuleCount(0)
                     .rules(List.of())
+                    .ownedGroups(List.of())
                     .build();
         }
 
@@ -227,12 +237,93 @@ public class PreTreatmentSearchService {
         List<FixedBenefitMatchRule> rules = fixedBenefitMatchRuleRepository.findByIsActiveOrderByPriorityAsc(true).stream()
                 .filter(matchRule -> matchesFixedBenefitCategory(category, matchRule.getFixedBenefitCategory()))
                 .toList();
+        List<PolicyInfo> policies = loadActivePolicies(userId);
+        List<PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto> ownedGroups = rules.stream()
+                .map(matchRule -> buildOwnedGroup(matchRule, policies))
+                .toList();
 
         return PreTreatmentSearchResponse.FixedBenefitResultDto.builder()
                 .applicable(true)
                 .category(category)
                 .matchRuleCount(rules.size())
                 .rules(rules.stream().map(this::toFixedBenefitRuleDto).toList())
+                .ownedGroups(ownedGroups)
+                .build();
+    }
+
+    private List<PolicyInfo> loadActivePolicies(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        try {
+            List<PolicyInfo> policies = insuranceServiceClient.getActivePolicies(userId);
+            return policies != null ? policies : List.of();
+        } catch (Exception e) {
+            log.warn("Failed to load active policies for fixed benefit matching. userId={}, error={}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    private PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto buildOwnedGroup(FixedBenefitMatchRule rule, List<PolicyInfo> policies) {
+        List<String> matchKeywords = splitCsv(rule.getMatchKeywords());
+        List<String> excludeKeywords = splitCsv(rule.getExcludeKeywords());
+        List<PreTreatmentSearchResponse.MatchedCoverageItemDto> matchedItems = policies.stream()
+                .filter(Objects::nonNull)
+                .flatMap(policy -> safeCoverageItems(policy).stream()
+                        .filter(PolicyInfo.CoverageItemInfo::isCovered)
+                        .filter(item -> matchesCoverageItem(item, matchKeywords, excludeKeywords))
+                        .map(item -> toMatchedCoverageItem(policy, item)))
+                .toList();
+
+        double totalAmount = matchedItems.stream()
+                .map(PreTreatmentSearchResponse.MatchedCoverageItemDto::getCoverageAmount)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        return PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto.builder()
+                .category(rule.getFixedBenefitCategory())
+                .displayName(rule.getDisplayName())
+                .owned(!matchedItems.isEmpty())
+                .matchedItemCount(matchedItems.size())
+                .totalCoverageAmount(totalAmount)
+                .matchedItems(matchedItems)
+                .build();
+    }
+
+    private List<PolicyInfo.CoverageItemInfo> safeCoverageItems(PolicyInfo policy) {
+        return policy.getCoverageItems() != null ? policy.getCoverageItems() : List.of();
+    }
+
+    private boolean matchesCoverageItem(PolicyInfo.CoverageItemInfo item, List<String> matchKeywords, List<String> excludeKeywords) {
+        String target = normalizeForMatch(String.join(" ",
+                nullToBlank(item.getName()),
+                nullToBlank(item.getCategory()),
+                nullToBlank(item.getAgreementType())
+        ));
+
+        boolean matched = matchKeywords.stream()
+                .map(this::normalizeForMatch)
+                .anyMatch(keyword -> !keyword.isBlank() && target.contains(keyword));
+        if (!matched) {
+            return false;
+        }
+
+        return excludeKeywords.stream()
+                .map(this::normalizeForMatch)
+                .noneMatch(keyword -> !keyword.isBlank() && target.contains(keyword));
+    }
+
+    private PreTreatmentSearchResponse.MatchedCoverageItemDto toMatchedCoverageItem(PolicyInfo policy, PolicyInfo.CoverageItemInfo item) {
+        return PreTreatmentSearchResponse.MatchedCoverageItemDto.builder()
+                .policyId(policy.getId())
+                .policyName(policy.getProductName())
+                .insurerName(policy.getCompanyName())
+                .policyType(policy.getPolicyType())
+                .itemName(item.getName())
+                .category(item.getCategory())
+                .agreementType(item.getAgreementType())
+                .coverageAmount(item.getAmount())
                 .build();
     }
 
@@ -348,6 +439,7 @@ public class PreTreatmentSearchService {
                         .category(null)
                         .matchRuleCount(0)
                         .rules(List.of())
+                        .ownedGroups(List.of())
                         .build())
                 .nextQuestions(List.of("검색어를 더 구체적으로 입력하거나, DB 룰 또는 OpenAI 분류 보강이 필요합니다."))
                 .message(message)
@@ -395,6 +487,10 @@ public class PreTreatmentSearchService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String nullToBlank(String value) {
+        return value != null ? value : "";
     }
 
     private int safePriority(Integer priority) {
