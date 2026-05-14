@@ -173,6 +173,252 @@ CREATE TABLE IF NOT EXISTS coverage_comparison (
 -- ============================================
 USE medicatch_analysis;
 
+-- Treatment rules table (maps user search terms to insurance analysis categories)
+CREATE TABLE IF NOT EXISTS treatment_rules (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    keyword VARCHAR(255) NOT NULL,
+    synonyms LONGTEXT,
+    injury_disease_type VARCHAR(30),
+    care_type VARCHAR(30),
+    benefit_type VARCHAR(30),
+    treatment_category VARCHAR(50),
+    actual_loss_category VARCHAR(50),
+    fixed_benefit_category VARCHAR(50),
+    needs_user_confirmation BOOLEAN DEFAULT FALSE,
+    caution_message LONGTEXT,
+    priority INT DEFAULT 100,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_keyword (keyword),
+    INDEX idx_actual_loss_category (actual_loss_category),
+    INDEX idx_fixed_benefit_category (fixed_benefit_category),
+    INDEX idx_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Actual loss benefit rules table (generation-based calculation rules)
+CREATE TABLE IF NOT EXISTS insurance_benefit_rules (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    generation_code VARCHAR(20) NOT NULL,
+    care_type VARCHAR(30) NOT NULL,
+    benefit_type VARCHAR(30) NOT NULL,
+    treatment_category VARCHAR(50),
+    actual_loss_category VARCHAR(50),
+    reimbursement_rate DECIMAL(5,2),
+    patient_copay_rate DECIMAL(5,2),
+    fixed_deductible DECIMAL(10,2),
+    deductible_method VARCHAR(30),
+    limit_amount DECIMAL(12,2),
+    limit_count INT,
+    requires_rider BOOLEAN DEFAULT FALSE,
+    is_excluded BOOLEAN DEFAULT FALSE,
+    note LONGTEXT,
+    priority INT DEFAULT 100,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_generation_code (generation_code),
+    INDEX idx_rule_lookup (generation_code, care_type, benefit_type),
+    INDEX idx_actual_loss_category (actual_loss_category),
+    INDEX idx_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fixed benefit match rules table (maps fixed benefit searches to owned coverage items)
+CREATE TABLE IF NOT EXISTS fixed_benefit_match_rules (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    fixed_benefit_category VARCHAR(50) NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    match_keywords LONGTEXT NOT NULL,
+    exclude_keywords LONGTEXT,
+    description LONGTEXT,
+    priority INT DEFAULT 100,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_fixed_benefit_category (fixed_benefit_category),
+    INDEX idx_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Initial treatment classification rules
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '암', '위암,대장암,폐암,갑상선암,유사암,고액암', 'DISEASE', 'DIAGNOSIS', 'UNKNOWN', 'CANCER',
+       NULL, 'CANCER', FALSE, '암 종류, 최초 진단 여부, 면책기간, 감액기간에 따라 실제 보장 여부가 달라질 수 있습니다.', 10
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '암');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '골절', '뼈 골절,발목 골절,손목 골절,치아파절', 'INJURY', 'DIAGNOSIS', 'UNKNOWN', 'FRACTURE',
+       NULL, 'FRACTURE_DIAGNOSIS', FALSE, '치아파절은 담보별 보장 제외 조건이 있을 수 있습니다.', 20
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '골절');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '입원', '입원치료,병실,중환자실', 'UNKNOWN', 'INPATIENT', 'COVERED', 'GENERAL',
+       'GENERAL_INPATIENT', 'HOSPITALIZATION_DAILY', TRUE, '상해 입원인지 질병 입원인지에 따라 적용 담보가 달라질 수 있습니다.', 30
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '입원');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '수술', '수술비,질병수술,상해수술,암수술', 'UNKNOWN', 'SURGERY', 'MIXED', 'SURGERY',
+       'GENERAL_SURGERY', 'SURGERY_BENEFIT', TRUE, '질병/상해/암 수술 여부와 수술 분류에 따라 정액형 담보가 달라질 수 있습니다.', 40
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '수술');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '도수치료', '도수,수기치료,재활도수', 'UNKNOWN', 'OUTPATIENT', 'NON_COVERED', 'REHAB',
+       'NON_COVERED_THREE', NULL, TRUE, '도수치료는 세대와 특약 가입 여부에 따라 보장 여부와 한도가 크게 달라질 수 있습니다.', 50
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '도수치료');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT 'MRI', '자기공명영상,엠알아이', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING',
+       'NON_COVERED_THREE', NULL, TRUE, 'MRI는 급여 여부와 비급여 특약 가입 여부에 따라 보장 판단이 달라질 수 있습니다.', 60
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = 'MRI');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '비급여주사', '주사치료,영양주사,증식치료,프롤로주사', 'UNKNOWN', 'OUTPATIENT', 'NON_COVERED', 'INJECTION',
+       'NON_COVERED_THREE', NULL, TRUE, '비급여 주사는 치료 목적과 특약 가입 여부 확인이 필요합니다.', 70
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '비급여주사');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '치과', '치아,충치,잇몸,임플란트,스케일링', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'DENTAL',
+       'DENTAL', NULL, TRUE, '치과 질병 치료는 세대별로 급여/비급여 보장 범위가 달라질 수 있습니다.', 80
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '치과');
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '한방', '한의원,침,뜸,부항,추나요법,한약', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'KOREAN_MEDICINE',
+       'KOREAN_MEDICINE', NULL, TRUE, '한방 비급여는 2세대 이후 면책되는 경우가 많아 급여 여부 확인이 필요합니다.', 90
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '한방');
+
+-- Initial fixed benefit matching rules
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'CANCER_DIAGNOSIS', '암 진단비', '암진단,고액암진단,특정암진단,유사암진단,소액암진단', '수술,입원,항암,방사선',
+       '암 진단 관련 정액형 담보를 찾습니다.', 10
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'CANCER_DIAGNOSIS');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'CANCER_SURGERY', '암 수술비', '암수술,특정암수술,유사암수술', '진단,입원,항암',
+       '암 수술 관련 정액형 담보를 찾습니다.', 20
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'CANCER_SURGERY');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'CANCER_TREATMENT', '항암 치료비', '항암,방사선,약물치료,표적항암,양성자방사선,세기조절방사선', NULL,
+       '항암 치료 관련 정액형 담보를 찾습니다.', 30
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'CANCER_TREATMENT');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'HOSPITALIZATION_DAILY', '입원일당', '입원일당,입원비,중환자실입원일당', '수술',
+       '질병/상해/암 입원일당 담보를 찾습니다.', 40
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'HOSPITALIZATION_DAILY');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'SURGERY_BENEFIT', '수술비', '수술비,질병수술,상해수술,특정질병수술,기타수술,종수술', '진단,입원일당',
+       '질병/상해/기타 수술 정액형 담보를 찾습니다.', 50
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'SURGERY_BENEFIT');
+
+INSERT INTO fixed_benefit_match_rules (
+    fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority
+)
+SELECT 'FRACTURE_DIAGNOSIS', '골절 진단비', '골절진단,중대골절진단,5대골절', NULL,
+       '골절 진단 관련 정액형 담보를 찾습니다.', 60
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'FRACTURE_DIAGNOSIS');
+
+-- Initial actual loss benefit rules
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '1-d', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       100, 0, 5000, 'FIXED_ONLY', FALSE, FALSE, '1세대 손해보험 통원 급여 기준 정액 공제', 10
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '1-d' AND care_type = 'OUTPATIENT' AND benefit_type = 'COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '1-h', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 5000, 'FIXED_ONLY', FALSE, FALSE, '1세대 생명보험 통원 급여 기준 정액 공제', 20
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '1-h' AND care_type = 'OUTPATIENT' AND benefit_type = 'COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '2', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, FALSE, '2세대 통원 급여 기준 max 공제', 30
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '2' AND care_type = 'OUTPATIENT' AND benefit_type = 'COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-s', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, FALSE, '3세대 표준 통원 급여 기준 max 공제', 40
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '3-s' AND care_type = 'OUTPATIENT' AND benefit_type = 'COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-c', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       70, 30, 10000, 'MAX_FIXED_OR_RATE', TRUE, FALSE, '3세대 착한실손 비급여 통원 기준', 50
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '3-c' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '4', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, FALSE, '4세대 급여 통원 기준', 60
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '4', 'OUTPATIENT', 'NON_COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       70, 30, 30000, 'MAX_FIXED_OR_RATE', TRUE, FALSE, '4세대 비급여 통원 기준', 70
+WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT');
+
 -- Pre-treatment searches table (for logging and analytics)
 CREATE TABLE IF NOT EXISTS pre_treatment_searches (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -184,6 +430,9 @@ CREATE TABLE IF NOT EXISTS pre_treatment_searches (
     coverage_rate DECIMAL(5,2),
     estimated_copay DECIMAL(10,2),
     hospital_type VARCHAR(100),
+    rule_matched BOOLEAN DEFAULT FALSE,
+    ai_used BOOLEAN DEFAULT FALSE,
+    classification_json LONGTEXT,
     search_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
     INDEX idx_search_date (search_date)
