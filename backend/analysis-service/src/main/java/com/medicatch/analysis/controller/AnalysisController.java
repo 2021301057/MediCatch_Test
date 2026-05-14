@@ -36,18 +36,61 @@ public class AnalysisController {
     @PostMapping("/pre-treatment-search")
     public ResponseEntity<PreTreatmentSearchResponse> searchPreTreatment(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestBody PreTreatmentSearchRequest request) {
-        log.info("POST /api/analysis/pre-treatment-search - query: {}", request != null ? request.getQuery() : null);
+            @RequestBody(required = false) Map<String, Object> body) {
+        log.info("POST /api/analysis/pre-treatment-search - query: {}", body != null ? body.get("query") : null);
         try {
-            PreTreatmentSearchRequest normalizedRequest = request != null ? request : new PreTreatmentSearchRequest();
-            if (normalizedRequest.getUserId() == null && userIdHeader != null && !userIdHeader.isBlank()) {
-                normalizedRequest.setUserId(Long.parseLong(userIdHeader));
-            }
+            PreTreatmentSearchRequest normalizedRequest = toPreTreatmentRequest(body, userIdHeader);
             return ResponseEntity.ok(preTreatmentSearchService.searchPreTreatment(normalizedRequest));
         } catch (Exception e) {
             log.error("Error searching pre-treatment rules: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    private PreTreatmentSearchRequest toPreTreatmentRequest(Map<String, Object> body, String userIdHeader) {
+        Map<String, Object> safeBody = body != null ? body : Map.of();
+        Long userId = parseLong(safeBody.get("userId"));
+        if (userId == null) {
+            userId = parseLong(userIdHeader);
+        }
+        return PreTreatmentSearchRequest.builder()
+                .userId(userId)
+                .query(asString(safeBody.get("query")))
+                .estimatedCost(parseDouble(safeBody.get("estimatedCost")))
+                .hospitalType(asString(safeBody.get("hospitalType")))
+                .benefitType(asString(safeBody.get("benefitType")))
+                .injuryDiseaseType(asString(safeBody.get("injuryDiseaseType")))
+                .build();
+    }
+
+    private Long parseLong(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number number) return number.longValue();
+        String text = value.toString().trim();
+        if (text.isBlank()) return null;
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("userId must be a number.");
+        }
+    }
+
+    private Double parseDouble(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number number) return number.doubleValue();
+        String text = value.toString().trim();
+        if (text.isBlank()) return null;
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("estimatedCost must be a number.");
+        }
+    }
+
+    private String asString(Object value) {
+        if (value == null) return null;
+        String text = value.toString().trim();
+        return text.isBlank() ? null : text;
     }
 
     /**
