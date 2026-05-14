@@ -258,7 +258,11 @@ public class PreTreatmentSearchService {
                 nullToBlank(policy.getProductName()),
                 nullToBlank(policy.getCompanyName())
         ));
-        return target.contains("실손") || target.contains("actualloss");
+        return policy.isHasSupplementaryCoverage()
+                || "SUPPLEMENTARY".equalsIgnoreCase(nullToBlank(policy.getPolicyType()))
+                || target.contains("실손")
+                || target.contains("actualloss")
+                || target.contains("actual_loss");
     }
 
     private boolean isActualLossCoverageItem(PolicyInfo.CoverageItemInfo item) {
@@ -267,13 +271,15 @@ public class PreTreatmentSearchService {
                 nullToBlank(item.getCategory()),
                 nullToBlank(item.getAgreementType())
         ));
-        return target.contains("실손")
-                || target.contains("입원의료비")
-                || target.contains("통원의료비")
-                || target.contains("상해입원")
-                || target.contains("상해통원")
-                || target.contains("질병입원")
-                || target.contains("질병통원");
+        if (containsAny(target,
+                "입원일당", "중환자실입원일당", "입원비", "입원수술비", "수술비",
+                "암통원", "통원일당", "진단비", "후유장해", "사망", "위로금")) {
+            return false;
+        }
+        return containsAny(target,
+                "실손", "실손의료비", "입원의료비", "통원의료비",
+                "상해입원의료비", "상해통원의료비", "질병입원의료비", "질병통원의료비",
+                "actual_loss", "actualloss");
     }
 
     private String estimateActualLossGeneration(PolicyInfo policy) {
@@ -659,6 +665,19 @@ public class PreTreatmentSearchService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private boolean containsAny(String target, String... keywords) {
+        if (target == null || keywords == null) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            String normalizedKeyword = normalizeForMatch(keyword);
+            if (!normalizedKeyword.isBlank() && target.contains(normalizedKeyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String nullToBlank(String value) {
