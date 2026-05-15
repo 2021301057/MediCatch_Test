@@ -390,8 +390,9 @@ public class PreTreatmentSearchService {
         List<FixedBenefitMatchRule> rules = fixedBenefitMatchRuleRepository.findByIsActiveOrderByPriorityAsc(true).stream()
                 .filter(matchRule -> matchesFixedBenefitCategory(category, matchRule.getFixedBenefitCategory()))
                 .toList();
+        List<String> contextTerms = rule.getKeyword() != null ? List.of(rule.getKeyword()) : List.of();
         List<PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto> ownedGroups = rules.stream()
-                .map(matchRule -> buildOwnedGroup(matchRule, policies))
+                .map(matchRule -> buildOwnedGroup(matchRule, policies, contextTerms))
                 .toList();
 
         return PreTreatmentSearchResponse.FixedBenefitResultDto.builder()
@@ -420,7 +421,8 @@ public class PreTreatmentSearchService {
         }
     }
 
-    private PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto buildOwnedGroup(FixedBenefitMatchRule rule, List<PolicyInfo> policies) {
+    private PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto buildOwnedGroup(
+            FixedBenefitMatchRule rule, List<PolicyInfo> policies, List<String> contextTerms) {
         List<String> matchKeywords = splitCsv(rule.getMatchKeywords());
         List<String> excludeKeywords = splitCsv(rule.getExcludeKeywords());
         List<PreTreatmentSearchResponse.MatchedCoverageItemDto> matchedItems = policies.stream()
@@ -428,6 +430,7 @@ public class PreTreatmentSearchService {
                 .flatMap(policy -> safeCoverageItems(policy).stream()
                         .filter(PolicyInfo.CoverageItemInfo::isCovered)
                         .filter(item -> matchesCoverageItem(item, matchKeywords, excludeKeywords))
+                        .filter(item -> !isContextTermExcluded(item, contextTerms))
                         .map(item -> toMatchedCoverageItem(policy, item)))
                 .toList();
 
@@ -470,6 +473,23 @@ public class PreTreatmentSearchService {
         return excludeKeywords.stream()
                 .map(this::normalizeForMatch)
                 .noneMatch(keyword -> !keyword.isBlank() && target.contains(keyword));
+    }
+
+    /**
+     * 검색 문맥 키워드(치료 룰의 keyword)가 담보명에서 제외 문구와 함께 나오면 true.
+     * 예: "치아파절" 검색 → "[골절진단비(치아파절 제외)]" → true (이 담보는 치아파절을 보장하지 않음)
+     */
+    private boolean isContextTermExcluded(PolicyInfo.CoverageItemInfo item, List<String> contextTerms) {
+        if (contextTerms == null || contextTerms.isEmpty()) return false;
+        String target = normalizeForMatch(String.join(" ",
+                nullToBlank(item.getName()),
+                nullToBlank(item.getCategory()),
+                nullToBlank(item.getAgreementType())
+        ));
+        return contextTerms.stream()
+                .map(this::normalizeForMatch)
+                .filter(t -> !t.isBlank())
+                .anyMatch(term -> isExcludedByItemName(target, term));
     }
 
     /**
