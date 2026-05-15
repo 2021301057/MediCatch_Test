@@ -464,9 +464,19 @@ export default function PreTreatmentSearch() {
                 <div className="mc-card-body">
                   <div className="mc-stack-xs">
                     {result.nextQuestions.map((question) => (
-                      <div key={question} className="mc-kv">
-                        <span className="mc-kv-key">확인</span>
-                        <span className="mc-kv-val">{question}</span>
+                      <div
+                        key={question}
+                        style={{
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          lineHeight: 1.55,
+                          color: 'var(--text-1)',
+                          wordBreak: 'keep-all',
+                        }}
+                      >
+                        {question}
                       </div>
                     ))}
                   </div>
