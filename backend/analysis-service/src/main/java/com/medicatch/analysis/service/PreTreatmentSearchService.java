@@ -31,9 +31,10 @@ import java.util.Optional;
 @Service
 public class PreTreatmentSearchService {
 
-    private static final String MATCH_SOURCE_DB_RULE = "DB_RULE";
-    private static final String MATCH_SOURCE_AI      = "AI_CLASSIFICATION";
-    private static final String MATCH_SOURCE_NONE    = "NONE";
+    private static final String MATCH_SOURCE_DB_RULE  = "DB_RULE";
+    private static final String MATCH_SOURCE_AI       = "AI_CLASSIFICATION";
+    private static final String MATCH_SOURCE_HEURISTIC = "HEURISTIC";
+    private static final String MATCH_SOURCE_NONE     = "NONE";
 
     private final TreatmentRuleRepository treatmentRuleRepository;
     private final InsuranceBenefitRuleRepository insuranceBenefitRuleRepository;
@@ -71,6 +72,7 @@ public class PreTreatmentSearchService {
         if (matchedRule.isEmpty()) {
             AiClassificationResult aiResult = aiClassificationService.classify(query);
             if (aiResult != null) {
+                boolean isHeuristic = "HEURISTIC".equals(aiResult.getSource());
                 List<PolicyInfo> activePolicies = loadActivePolicies(userId);
                 TreatmentRule syntheticRule = toSyntheticRule(query, aiResult);
                 PreTreatmentSearchResponse.TreatmentClassificationDto classification = toClassificationDto(syntheticRule);
@@ -80,18 +82,23 @@ public class PreTreatmentSearchService {
                         ? aiResult.getNextQuestions()
                         : buildNextQuestions(syntheticRule, actualLoss, fixedBenefits);
 
+                String matchSource = isHeuristic ? MATCH_SOURCE_HEURISTIC : MATCH_SOURCE_AI;
+                String message = isHeuristic
+                        ? "키워드 기반으로 분류했습니다. 정확도가 낮을 수 있으니 실제 보장 여부는 보험 약관을 확인해주세요."
+                        : "AI가 검색어를 분류했습니다. 실제 보장 여부는 보험 약관 기준으로 확인이 필요합니다.";
+
                 PreTreatmentSearchResponse aiResponse = PreTreatmentSearchResponse.builder()
                         .query(query)
                         .matched(true)
-                        .matchSource(MATCH_SOURCE_AI)
+                        .matchSource(matchSource)
                         .confidence(aiResult.getConfidence())
                         .classification(classification)
                         .actualLoss(actualLoss)
                         .fixedBenefits(fixedBenefits)
                         .nextQuestions(nextQuestions)
-                        .message("AI가 검색어를 분류했습니다. 실제 보장 여부는 보험 약관 기준으로 확인이 필요합니다.")
+                        .message(message)
                         .build();
-                saveSearchLog(request, aiResponse, true);
+                saveSearchLog(request, aiResponse, !isHeuristic);
                 return aiResponse;
             }
 

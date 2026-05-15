@@ -19,4 +19,7 @@ public class AiClassificationResult {
     private boolean needsUserConfirmation;
     private String reason;
     private List<String> nextQuestions;
+    /** AI_CLASSIFICATION or HEURISTIC */
+    @Builder.Default
+    private String source = "AI_CLASSIFICATION";
 }

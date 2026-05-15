@@ -88,16 +88,81 @@ public class AiClassificationService {
 
     public AiClassificationResult classify(String query) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.debug("OpenAI API key not configured, skipping AI classification for query='{}'", query);
-            return null;
+            log.debug("OpenAI API key not configured, using heuristic classification for query='{}'", query);
+            return heuristicClassify(query);
         }
         try {
             String content = callOpenAi(query);
             return parseClassification(content, query);
         } catch (Exception e) {
-            log.warn("AI classification failed for query='{}': {}", query, e.getMessage());
-            return null;
+            log.warn("AI classification failed for query='{}': {}, falling back to heuristic", query, e.getMessage());
+            return heuristicClassify(query);
         }
+    }
+
+    /**
+     * OpenAI 호출 불가(미설정, 429, 네트워크 오류 등) 시 키워드 기반 분류.
+     * confidence=LOW, needsUserConfirmation=true 로 반환해 사용자에게 확인 요청.
+     */
+    private AiClassificationResult heuristicClassify(String query) {
+        String n = query.toLowerCase().replaceAll("\\s+", "");
+
+        // 진료 형태
+        boolean isSurgery   = containsAny(n, "수술", "절제", "봉합", "절개");
+        boolean isTest      = containsAny(n, "mri", "ct", "초음파", "내시경", "엑스레이", "xray", "혈액검사", "조직검사");
+        boolean isRehab     = containsAny(n, "도수치료", "도수", "체외충격파", "충격파", "재활치료");
+        boolean isInjection = containsAny(n, "주사치료", "프롤로", "인대주사", "신경주사");
+        boolean isDental    = containsAny(n, "치아", "치과", "치수", "잇몸", "치주", "신경치료", "임플란트", "치아파절", "치아균열");
+        boolean isKorean    = containsAny(n, "한방", "한의원", "침치료", "뜸", "추나", "첩약");
+        boolean isHerbal    = containsAny(n, "한약", "탕약", "첩약");
+
+        // 상해/질병 구분
+        boolean isInjury   = containsAny(n, "골절", "파열", "인대파열", "근육파열", "타박", "삐끗", "염좌",
+                "찢", "상처", "찰과상", "화상", "탈구", "탈골", "외상", "사고", "충돌", "넘어");
+        boolean isDisease  = containsAny(n, "위염", "당뇨", "고혈압", "갑상선", "비염", "축농증", "역류",
+                "피부염", "두드러기", "요로결석", "편두통", "빈혈", "천식", "폐렴", "간염", "신장",
+                "자궁", "난소", "전립선", "통풍", "류마티스");
+
+        String injuryDiseaseType = isInjury ? "INJURY" : isDisease ? "DISEASE" : "UNKNOWN";
+        String careType = isSurgery ? "SURGERY"
+                : isTest ? "TEST"
+                : "OUTPATIENT";
+        String treatmentCategory = isTest ? "IMAGING"
+                : isRehab || isInjection ? "REHAB"
+                : isDental ? "DENTAL"
+                : isKorean || isHerbal ? "KOREAN_MEDICINE"
+                : isSurgery ? "SURGERY"
+                : "GENERAL";
+        String actualLossCategory = isHerbal ? "KOREAN_MEDICINE_HERBAL"
+                : isKorean ? "KOREAN_MEDICINE"
+                : isDental ? (isInjury ? "DENTAL_INJURY" : "DENTAL_DISEASE")
+                : isRehab || isInjection ? "NON_COVERED_THREE"
+                : isSurgery ? "GENERAL_SURGERY"
+                : "GENERAL_OUTPATIENT";
+
+        return AiClassificationResult.builder()
+                .normalizedQuery(query)
+                .injuryDiseaseType(injuryDiseaseType)
+                .careType(careType)
+                .benefitType("UNKNOWN")
+                .treatmentCategory(treatmentCategory)
+                .actualLossCategory(actualLossCategory)
+                .fixedBenefitCategory(null)
+                .confidence("LOW")
+                .needsUserConfirmation(true)
+                .reason("키워드 기반 추정 결과입니다. AI 분류를 사용할 수 없어 정확도가 낮을 수 있습니다.")
+                .nextQuestions(List.of(
+                        "상해(사고) 치료인가요, 질병 치료인가요?",
+                        "급여 항목인가요, 비급여 항목인가요?"))
+                .source("HEURISTIC")
+                .build();
+    }
+
+    private boolean containsAny(String target, String... keywords) {
+        for (String kw : keywords) {
+            if (target.contains(kw)) return true;
+        }
+        return false;
     }
 
     private String callOpenAi(String query) throws Exception {
