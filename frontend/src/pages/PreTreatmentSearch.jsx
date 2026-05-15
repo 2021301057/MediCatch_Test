@@ -291,7 +291,8 @@ function ActualLossSection({ actualLoss }) {
     .filter((amount) => Number.isFinite(amount) && amount > 0)
     .sort((a, b) => b - a)[0] || null;
   const treatmentCostAmount = Number(String(treatmentCost).replaceAll(',', ''));
-  const calculationRule = visibleRules.find((rule) => !rule.isExcluded) || visibleRules[0];
+  const payableRules = visibleRules.filter((rule) => !rule.isExcluded && rule.deductibleMethod !== 'EXCLUDED');
+  const calculationRule = payableRules[0];
   const calculation = calculationRule
     ? calculateActualLossPayment(treatmentCostAmount, calculationRule, coverageLimit)
     : null;
@@ -325,16 +326,6 @@ function ActualLossSection({ actualLoss }) {
                     <div className="mc-list-sub" style={{ marginTop: 4 }}>
                       확인 담보: {policy.matchedCoverageNames.slice(0, 3).join(', ')}
                       {policy.matchedCoverageNames.length > 3 ? ` 외 ${policy.matchedCoverageNames.length - 3}건` : ''}
-                    </div>
-                  )}
-                  {policy.matchedCoverageItems?.length > 0 && (
-                    <div className="mc-stack-xs" style={{ marginTop: 8 }}>
-                      {policy.matchedCoverageItems.slice(0, 4).map((item, index) => (
-                        <div key={`${policy.policyId}-${item.name}-${index}`} className="mc-kv">
-                          <span className="mc-kv-key">{item.name}</span>
-                          <span className="mc-kv-val">{formatWon(item.amount)}</span>
-                        </div>
-                      ))}
                     </div>
                   )}
                 </div>
@@ -373,41 +364,50 @@ function ActualLossSection({ actualLoss }) {
               <ActualLossRuleRow key={`${rule.generationCode}-${rule.actualLossCategory}-${index}`} rule={rule} />
             ))}
             </div>
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <div className="mc-field-label" style={{ marginBottom: 8 }}>예상 치료비</div>
-              <input
-                className="mc-input"
-                inputMode="numeric"
-                placeholder="예: 200000"
-                value={treatmentCost}
-                onChange={(event) => setTreatmentCost(event.target.value.replace(/[^\d,]/g, ''))}
-              />
-              <div className="mc-stack-xs" style={{ marginTop: 10 }}>
-                <div className="mc-kv">
-                  <span className="mc-kv-key">적용 담보 한도</span>
-                  <span className="mc-kv-val">{coverageLimit ? formatWon(coverageLimit) : '확인 필요'}</span>
+            {payableRules.length > 0 ? (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <div className="mc-field-label" style={{ marginBottom: 8 }}>예상 치료비</div>
+                <input
+                  className="mc-input"
+                  inputMode="numeric"
+                  placeholder="예: 200000"
+                  value={treatmentCost}
+                  onChange={(event) => setTreatmentCost(event.target.value.replace(/[^\d,]/g, ''))}
+                />
+                <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                  <div className="mc-kv">
+                    <span className="mc-kv-key">적용 담보 한도</span>
+                    <span className="mc-kv-val">{coverageLimit ? formatWon(coverageLimit) : '확인 필요'}</span>
+                  </div>
+                  {calculation && (
+                    <>
+                      <div className="mc-kv">
+                        <span className="mc-kv-key">공제 예상</span>
+                        <span className="mc-kv-val">{formatWon(calculation.deduction)}</span>
+                      </div>
+                      <div className="mc-kv">
+                        <span className="mc-kv-key">예상 보험금</span>
+                        <span className="mc-kv-val">{formatWon(calculation.finalPayment)}</span>
+                      </div>
+                      <div className="mc-kv">
+                        <span className="mc-kv-key">예상 본인부담</span>
+                        <span className="mc-kv-val">{formatWon(calculation.patientPayment)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
-                {calculation && (
-                  <>
-                    <div className="mc-kv">
-                      <span className="mc-kv-key">공제 예상</span>
-                      <span className="mc-kv-val">{formatWon(calculation.deduction)}</span>
-                    </div>
-                    <div className="mc-kv">
-                      <span className="mc-kv-key">예상 보험금</span>
-                      <span className="mc-kv-val">{formatWon(calculation.finalPayment)}</span>
-                    </div>
-                    <div className="mc-kv">
-                      <span className="mc-kv-key">예상 본인부담</span>
-                      <span className="mc-kv-val">{formatWon(calculation.patientPayment)}</span>
-                    </div>
-                  </>
-                )}
+                <div className="mc-list-sub" style={{ marginTop: 8 }}>
+                  실제 지급액은 영수증의 급여/비급여 구분, 약관, 특약 가입 여부, 연간 한도 사용액에 따라 달라질 수 있습니다.
+                </div>
               </div>
-              <div className="mc-list-sub" style={{ marginTop: 8 }}>
-                실제 지급액은 영수증의 급여/비급여 구분, 약관, 특약 가입 여부, 연간 한도 사용액에 따라 달라질 수 있습니다.
+            ) : (
+              <div className="mc-alert mc-alert-blue" style={{ marginTop: 14 }}>
+                <div>
+                  <div className="mc-alert-title">예상 보험금 계산 제외</div>
+                  <div className="mc-alert-body">선택한 조건은 현재 기준에서 보상 제외로 분류되어 치료비 입력 계산을 제공하지 않습니다.</div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
