@@ -22,13 +22,13 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class AiClassificationService {
 
-    @Value("${openai.api-key:}")
+    @Value("${ai.api-key:}")
     private String apiKey;
 
-    @Value("${openai.model:gpt-4o-mini}")
+    @Value("${ai.model:gpt-4o-mini}")
     private String model;
 
-    @Value("${openai.base-url:https://api.openai.com/v1}")
+    @Value("${ai.base-url:https://api.openai.com/v1}")
     private String baseUrl;
 
     private final OkHttpClient httpClient;

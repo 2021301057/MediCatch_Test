@@ -16,13 +16,13 @@ import java.util.Map;
 @Component
 public class OpenAiClient {
 
-    @Value("${openai.api-key:}")
+    @Value("${ai.api-key:}")
     private String openaiApiKey;
 
-    @Value("${openai.model:gpt-4o}")
+    @Value("${ai.model:gpt-4o}")
     private String openaiModel;
 
-    @Value("${openai.base-url:https://api.openai.com/v1}")
+    @Value("${ai.base-url:https://api.openai.com/v1}")
     private String openaiBaseUrl;
 
     private final OkHttpClient httpClient;

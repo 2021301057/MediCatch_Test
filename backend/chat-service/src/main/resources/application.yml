@@ -26,10 +26,10 @@ server:
   servlet:
     context-path: /
 
-openai:
-  api-key: ${OPENAI_API_KEY:sk-your-api-key-here}
-  model: gpt-4o
-  base-url: https://api.openai.com/v1
+ai:
+  api-key: ${AI_API_KEY:}
+  model: ${AI_MODEL:gpt-4o}
+  base-url: ${AI_BASE_URL:https://api.openai.com/v1}
 
 eureka:
   client:
