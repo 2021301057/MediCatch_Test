@@ -14,10 +14,10 @@ import com.medicatch.analysis.repository.FixedBenefitMatchRuleRepository;
 import com.medicatch.analysis.repository.InsuranceBenefitRuleRepository;
 import com.medicatch.analysis.repository.PreTreatmentSearchRepository;
 import com.medicatch.analysis.repository.TreatmentRuleRepository;
+import com.medicatch.analysis.util.InsuranceGenerationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -311,46 +311,7 @@ public class PreTreatmentSearchService {
     }
 
     private String estimateActualLossGeneration(PolicyInfo policy) {
-        LocalDate startDate = policy.getStartDate();
-        if (startDate == null) {
-            return null;
-        }
-        if (!startDate.isAfter(LocalDate.of(2009, 9, 30))) {
-            return isLifeInsurer(policy) ? "1-h" : "1-d";
-        }
-        if (!startDate.isAfter(LocalDate.of(2017, 3, 31))) {
-            return "2";
-        }
-        if (!startDate.isAfter(LocalDate.of(2021, 6, 30))) {
-            return isKindActualLoss(policy) ? "3-c" : "3-s";
-        }
-        return "4";
-    }
-
-    private boolean isLifeInsurer(PolicyInfo policy) {
-        String target = normalizeForMatch(String.join(" ",
-                nullToBlank(policy.getCompanyName()),
-                nullToBlank(policy.getPolicyType())
-        ));
-        return target.contains("생명") || target.contains("생보") || target.contains("life");
-    }
-
-    private boolean isKindActualLoss(PolicyInfo policy) {
-        String target = normalizeForMatch(String.join(" ",
-                nullToBlank(policy.getProductName()),
-                nullToBlank(policy.getPolicyType())
-        ));
-        boolean keywordMatched = target.contains("착한실손") || target.contains("착한") || target.contains("3-c");
-        boolean separatedThreeItems = safeCoverageItems(policy).stream()
-                .anyMatch(item -> {
-                    String itemTarget = normalizeForMatch(String.join(" ",
-                            nullToBlank(item.getName()),
-                            nullToBlank(item.getCategory()),
-                            nullToBlank(item.getAgreementType())
-                    ));
-                    return itemTarget.contains("도수") || itemTarget.contains("주사") || itemTarget.contains("mri");
-                });
-        return keywordMatched || separatedThreeItems;
+        return InsuranceGenerationUtils.detect(policy);
     }
 
     private String generationLabel(String generationCode) {

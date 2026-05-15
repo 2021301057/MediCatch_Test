@@ -8,6 +8,7 @@ import com.medicatch.analysis.dto.MedicalRecordInfo;
 import com.medicatch.analysis.dto.PolicyInfo;
 import com.medicatch.analysis.entity.InsuranceBenefitRule;
 import com.medicatch.analysis.repository.InsuranceBenefitRuleRepository;
+import com.medicatch.analysis.util.InsuranceGenerationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,13 +19,13 @@ import java.util.stream.Collectors;
 /**
  * 진료 기록과 보험 보장 내역을 매핑하여 청구 가능 여부를 판단한다.
  *
- * 실손 세대 코드:
- *   "1d" = 1세대 손보 (~2009.09): 급여 100%, 비급여 100%
- *   "1h" = 1세대 생보 (~2009.09): 급여 80%, 비급여 100%
- *   "2"  = 2세대 (2009.10~2017.03)
- *   "3"  = 3세대 표준 (2017.04~2021.06)
- *   "3k" = 3세대 착한실손 (2017.04~2021.06)
- *   "4"  = 4세대 (2021.07~현재)
+ * 실손 세대 코드 (DB insurance_benefit_rules.generation_code 기준):
+ *   "1-d" = 1세대 손보 (~2009.09)
+ *   "1-h" = 1세대 생보 (~2009.09)
+ *   "2"   = 2세대 (2009.10~2017.03)
+ *   "3-s" = 3세대 표준 (2017.04~2021.06)
+ *   "3-c" = 3세대 착한실손 (2017.04~2021.06)
+ *   "4"   = 4세대 (2021.07~현재)
  */
 @Slf4j
 @Service
@@ -34,11 +35,6 @@ public class ClaimMatchingService {
     private static final String LIKELY       = "LIKELY";
     private static final String CHECK_NEEDED = "CHECK_NEEDED";
     private static final String EXCLUDED     = "EXCLUDED";
-
-    // 실손보험 세대 기준일 (업계 표준 4세대 체계)
-    private static final LocalDate GEN2_START = LocalDate.of(2009, 10, 1);
-    private static final LocalDate GEN3_START = LocalDate.of(2017,  4, 1);
-    private static final LocalDate GEN4_START = LocalDate.of(2021,  7, 1);
 
     private final HealthServiceClient healthClient;
     private final InsuranceServiceClient insuranceClient;
@@ -215,7 +211,7 @@ public class ClaimMatchingService {
      * insurance_benefit_rules COVERED 행의 reimbursementRate 사용.
      */
     private double publicChargeRatio(String gen, List<InsuranceBenefitRule> rules) {
-        InsuranceBenefitRule rule = findGeneralOutpatientRule(toDbGenCode(gen), "COVERED", rules);
+        InsuranceBenefitRule rule = findGeneralOutpatientRule(gen, "COVERED", rules);
         if (rule != null && rule.getReimbursementRate() != null)
             return rule.getReimbursementRate() / 100.0;
         return publicChargeRatioFallback(gen);
@@ -223,11 +219,11 @@ public class ClaimMatchingService {
 
     private double publicChargeRatioFallback(String gen) {
         return switch (gen != null ? gen : "") {
-            case "1d"           -> 1.0;
-            case "1h"           -> 0.8;
-            case "2"            -> 0.9;
-            case "3", "3k", "4" -> 0.8;
-            default             -> 1.0;
+            case "1-d"                -> 1.0;
+            case "1-h"               -> 0.8;
+            case "2"                 -> 0.9;
+            case "3-s", "3-c", "4"  -> 0.8;
+            default                  -> 1.0;
         };
     }
 
@@ -252,18 +248,7 @@ public class ClaimMatchingService {
     }
 
     private boolean isFirstGeneration(String gen) {
-        return "1d".equals(gen) || "1h".equals(gen);
-    }
-
-    private String toDbGenCode(String gen) {
-        if (gen == null) return null;
-        return switch (gen) {
-            case "1d" -> "1-d";
-            case "1h" -> "1-h";
-            case "3"  -> "3-s";
-            case "3k" -> "3-c";
-            default   -> gen;
-        };
+        return "1-d".equals(gen) || "1-h".equals(gen);
     }
 
     private InsuranceBenefitRule findGeneralOutpatientRule(String dbGen, String benefitType,
@@ -280,7 +265,7 @@ public class ClaimMatchingService {
 
     private double outpatientFixedDeductible(String gen, double nonCoveredExpense, List<InsuranceBenefitRule> rules) {
         String benefitType = nonCoveredExpense > 0 ? "NON_COVERED" : "COVERED";
-        InsuranceBenefitRule rule = findGeneralOutpatientRule(toDbGenCode(gen), benefitType, rules);
+        InsuranceBenefitRule rule = findGeneralOutpatientRule(gen, benefitType, rules);
         if (rule != null && rule.getFixedDeductible() != null)
             return rule.getFixedDeductible();
         return outpatientFixedDeductibleFallback(gen, nonCoveredExpense);
@@ -288,10 +273,10 @@ public class ClaimMatchingService {
 
     private double outpatientFixedDeductibleFallback(String gen, double nonCoveredExpense) {
         return switch (gen != null ? gen : "") {
-            case "1d", "1h" -> 5000.0;
-            case "4" -> nonCoveredExpense > 0 ? 30000.0 : 10000.0;
-            case "2", "3", "3k" -> 10000.0;
-            default -> 10000.0;
+            case "1-d", "1-h"    -> 5000.0;
+            case "4"             -> nonCoveredExpense > 0 ? 30000.0 : 10000.0;
+            case "2", "3-s", "3-c" -> 10000.0;
+            default              -> 10000.0;
         };
     }
 
@@ -300,7 +285,7 @@ public class ClaimMatchingService {
     }
 
     private double nonCoveredSelfPayRatio(String gen, List<InsuranceBenefitRule> rules) {
-        InsuranceBenefitRule rule = findGeneralOutpatientRule(toDbGenCode(gen), "NON_COVERED", rules);
+        InsuranceBenefitRule rule = findGeneralOutpatientRule(gen, "NON_COVERED", rules);
         if (rule != null && rule.getPatientCopayRate() != null)
             return rule.getPatientCopayRate() / 100.0;
         return nonCoveredSelfPayRatioFallback(gen);
@@ -308,10 +293,10 @@ public class ClaimMatchingService {
 
     private double nonCoveredSelfPayRatioFallback(String gen) {
         return switch (gen != null ? gen : "") {
-            case "1d", "1h" -> 0.0;
-            case "2", "3" -> 0.2;
-            case "3k", "4" -> 0.3;
-            default -> 0.2;
+            case "1-d", "1-h"  -> 0.0;
+            case "2", "3-s"    -> 0.2;
+            case "3-c", "4"    -> 0.3;
+            default            -> 0.2;
         };
     }
 
@@ -320,12 +305,12 @@ public class ClaimMatchingService {
         if (nonCovered == null || nonCovered <= 0 || tc == TreatClass.DENTAL || tc == TreatClass.PHARMACY)
             return baseNote;
         String ncInfo = switch (gen != null ? gen : "") {
-            case "1d"       -> " · 비급여 전액 포함";
-            case "1h"       -> " · 급여 80% · 비급여 전액 포함";
-            case "2", "3"   -> " · 비급여 20% 자기부담";
-            case "3k"       -> " · 비급여 특약 30% 자기부담";
-            case "4"        -> " · 비급여 30% 자기부담";
-            default         -> "";
+            case "1-d"        -> " · 비급여 전액 포함";
+            case "1-h"        -> " · 급여 80% · 비급여 전액 포함";
+            case "2", "3-s"   -> " · 비급여 20% 자기부담";
+            case "3-c"        -> " · 비급여 특약 30% 자기부담";
+            case "4"          -> " · 비급여 30% 자기부담";
+            default           -> "";
         };
         return baseNote != null ? baseNote + ncInfo : ncInfo.trim();
     }
@@ -441,7 +426,7 @@ public class ClaimMatchingService {
     private MatchResult matchInjury(String company, String itemName, String gen, boolean inpatient) {
         String place = inpatient ? "입원" : "통원";
         return switch (gen != null ? gen : "") {
-            case "1d", "1h", "2", "3", "3k" -> new MR(company, itemName, CONFIRMED, gen,
+            case "1-d", "1-h", "2", "3-s", "3-c" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 상해 " + place + " 급여+비급여 보장");
             case "4" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 상해 " + place + " 보장 (비급여 30% 자기부담)");
@@ -461,13 +446,13 @@ public class ClaimMatchingService {
                     gl(gen) + " · 질병 " + place + " 급여 보장");
         }
         return switch (gen != null ? gen : "") {
-            case "1d", "1h", "2", "3" -> new MR(company, itemName, CONFIRMED, gen,
+            case "1-d", "1-h", "2", "3-s" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 질병 " + place + " 급여+비급여 보장");
-            case "3k" -> new MR(company, itemName, CONFIRMED, gen,
+            case "3-c" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 질병 " + place + " 보장 (비급여 특약 별도)");
-            case "4"  -> new MR(company, itemName, LIKELY, gen,
+            case "4"   -> new MR(company, itemName, LIKELY, gen,
                     gl(gen) + " · 비급여 30% 자기부담 (도수치료 등 특약 확인)");
-            default   -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 약관 확인");
+            default    -> new MR(company, itemName, LIKELY, gen, gl(gen) + " · 약관 확인");
         };
     }
 
@@ -476,7 +461,7 @@ public class ClaimMatchingService {
      */
     private MatchResult matchDentalDisease(String company, String itemName,
                                             boolean hasPublicCharge, String gen) {
-        if ("1d".equals(gen) || "1h".equals(gen))
+        if ("1-d".equals(gen) || "1-h".equals(gen))
             return new MR(company, itemName, EXCLUDED, gen, gl(gen) + " · 치과 질병 면책");
         if (hasPublicCharge)
             return new MR(company, itemName, CONFIRMED, gen, gl(gen) + " · 치과 질병 급여만 보상");
@@ -494,9 +479,9 @@ public class ClaimMatchingService {
                     gl(gen) + " · 한방 " + place + " 급여 보장");
         }
         return switch (gen != null ? gen : "") {
-            case "1d", "1h" -> new MR(company, itemName, CONFIRMED, gen,
+            case "1-d", "1-h" -> new MR(company, itemName, CONFIRMED, gen,
                     gl(gen) + " · 한방 비급여 포함 보장");
-            case "2", "3", "3k" -> new MR(company, itemName, LIKELY, gen,
+            case "2", "3-s", "3-c" -> new MR(company, itemName, LIKELY, gen,
                     gl(gen) + " · 한방 비급여 약관 확인");
             case "4" -> new MR(company, itemName, EXCLUDED, gen,
                     gl(gen) + " · 한방 비급여 제외");
@@ -507,40 +492,21 @@ public class ClaimMatchingService {
 
     // ── 세대 판별 ────────────────────────────────────────────────────────────
 
-    /**
-     * 실손보험 세대 판별.
-     * - 1세대: 손보(1d) vs 생보(1h) 구분 (companyName에 "생명" 포함 여부)
-     * - 3세대: 착한실손(3k) 여부 (productName에 "착한" 또는 "경제형" 포함)
-     */
     private String detectGeneration(PolicyInfo policy) {
-        LocalDate startDate = policy.getStartDate();
-        if (startDate == null) return null;
-        if (startDate.isBefore(GEN2_START)) {
-            String company = policy.getCompanyName();
-            if (company != null && company.contains("생명")) return "1h";
-            return "1d";
-        }
-        if (startDate.isBefore(GEN3_START)) return "2";
-        if (startDate.isBefore(GEN4_START)) {
-            String product = policy.getProductName();
-            if (product != null && (product.contains("착한") || product.contains("경제형")))
-                return "3k";
-            return "3";
-        }
-        return "4";
+        return InsuranceGenerationUtils.detect(policy);
     }
 
     /** 세대 코드 → 표시 레이블 */
     private String gl(String gen) {
         if (gen == null) return "실손";
         return switch (gen) {
-            case "1d" -> "1세대 손보 실손";
-            case "1h" -> "1세대 생보 실손";
-            case "2"  -> "2세대 실손";
-            case "3"  -> "3세대 실손";
-            case "3k" -> "3세대 착한실손";
-            case "4"  -> "4세대 실손";
-            default   -> "실손";
+            case "1-d" -> "1세대 손보 실손";
+            case "1-h" -> "1세대 생보 실손";
+            case "2"   -> "2세대 실손";
+            case "3-s" -> "3세대 실손";
+            case "3-c" -> "3세대 착한실손";
+            case "4"   -> "4세대 실손";
+            default    -> "실손";
         };
     }
 
