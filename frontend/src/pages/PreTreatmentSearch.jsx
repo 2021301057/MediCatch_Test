@@ -61,6 +61,29 @@ const formatWon = (value) => {
 
 const labelOf = (map, value) => map[value] || value || '확인 필요';
 
+const actualLossConditionLabel = (rule) => {
+  switch (rule.actualLossCategory) {
+    case 'DENTAL_INJURY':
+      return '치과 상해';
+    case 'DENTAL_DISEASE':
+      return '치과 질병';
+    case 'KOREAN_MEDICINE_COVERED':
+      return '한방 급여';
+    case 'KOREAN_MEDICINE':
+      return '한방 비급여';
+    case 'KOREAN_MEDICINE_CHUNA':
+      return '추나요법';
+    case 'KOREAN_MEDICINE_HERBAL':
+      return '한약';
+    case 'NON_COVERED_THREE':
+      return '비급여 3종';
+    case 'GENERAL_OUTPATIENT':
+      return labelOf(BENEFIT_TYPE_LABELS, rule.benefitType);
+    default:
+      return labelOf(BENEFIT_TYPE_LABELS, rule.benefitType);
+  }
+};
+
 const tagStyle = (tone) => ({
   display: 'inline-flex',
   alignItems: 'center',
@@ -145,11 +168,13 @@ function ActualLossRuleRow({ rule }) {
   return (
     <div className="mc-kv" style={{ alignItems: 'flex-start', gap: 14 }}>
       <span className="mc-kv-key" style={{ minWidth: 92 }}>
-        {rule.generationCode} · {labelOf(DEDUCTIBLE_LABELS, rule.deductibleMethod)}
+        {actualLossConditionLabel(rule)}
       </span>
       <span className="mc-kv-val" style={{ textAlign: 'right' }}>
         <span>
-          {excluded ? '보상 제외' : `보장 ${rule.reimbursementRate || 0}% · 자기부담 ${rule.patientCopayRate || 0}%`}
+          {excluded
+            ? '보상 제외'
+            : `${labelOf(DEDUCTIBLE_LABELS, rule.deductibleMethod)} · 보장 ${rule.reimbursementRate || 0}% · 자기부담 ${rule.patientCopayRate || 0}%`}
           {rule.fixedDeductible ? ` · 공제 ${formatWon(rule.fixedDeductible)}` : ''}
           {rule.limitAmount ? ` · 한도 ${formatWon(rule.limitAmount)}` : ''}
           {rule.limitCount ? ` · ${rule.limitCount}회` : ''}
