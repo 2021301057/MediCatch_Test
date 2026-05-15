@@ -517,6 +517,69 @@ WHERE NOT EXISTS (
       AND r.benefit_type = seed.benefit_type AND r.actual_loss_category = seed.actual_loss_category
 );
 
+-- General inpatient rules (GENERAL_INPATIENT) - AI fallback 조회용
+INSERT INTO insurance_benefit_rules (generation_code, care_type, benefit_type, treatment_category, actual_loss_category, reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method, requires_rider, is_excluded, note, priority)
+SELECT gen, 'INPATIENT', btype, 'GENERAL', 'GENERAL_INPATIENT', reimb, copay, NULL, 'MAX_FIXED_OR_RATE', rider, FALSE, memo, prio
+FROM (
+    SELECT '1-d' gen, 'COVERED' btype, 100 reimb, 0 copay, FALSE rider, '1세대 손해보험 입원 급여 기준' memo, 410 prio
+    UNION ALL SELECT '1-d', 'NON_COVERED', 100, 0, FALSE, '1세대 손해보험 입원 비급여 기준', 411
+    UNION ALL SELECT '1-h', 'COVERED', 80, 20, FALSE, '1세대 생명보험 입원 급여 기준', 420
+    UNION ALL SELECT '1-h', 'NON_COVERED', 80, 20, FALSE, '1세대 생명보험 입원 비급여 기준', 421
+    UNION ALL SELECT '2', 'COVERED', 90, 10, FALSE, '2세대 입원 급여 (본인부담 10%)', 430
+    UNION ALL SELECT '2', 'NON_COVERED', 80, 20, FALSE, '2세대 입원 비급여 기준', 431
+    UNION ALL SELECT '3-s', 'COVERED', 90, 10, FALSE, '3세대 표준 입원 급여 기준', 440
+    UNION ALL SELECT '3-s', 'NON_COVERED', 80, 20, FALSE, '3세대 표준 입원 비급여 기준', 441
+    UNION ALL SELECT '3-c', 'COVERED', 90, 10, FALSE, '3세대 착한실손 입원 급여 기준', 450
+    UNION ALL SELECT '3-c', 'NON_COVERED', 70, 30, TRUE, '3세대 착한실손 입원 비급여 기준 (특약 필요)', 451
+    UNION ALL SELECT '4', 'COVERED', 90, 10, FALSE, '4세대 입원 급여 기준', 460
+    UNION ALL SELECT '4', 'NON_COVERED', 70, 30, TRUE, '4세대 입원 비급여 기준 (특약 필요)', 461
+) t
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = t.gen AND r.care_type = 'INPATIENT'
+      AND r.benefit_type = t.btype AND r.actual_loss_category = 'GENERAL_INPATIENT'
+);
+
+-- General surgery rules (GENERAL_SURGERY) - AI fallback 조회용
+INSERT INTO insurance_benefit_rules (generation_code, care_type, benefit_type, treatment_category, actual_loss_category, reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method, requires_rider, is_excluded, note, priority)
+SELECT gen, 'SURGERY', btype, 'GENERAL', 'GENERAL_SURGERY', reimb, copay, NULL, 'MAX_FIXED_OR_RATE', rider, FALSE, memo, prio
+FROM (
+    SELECT '1-d' gen, 'COVERED' btype, 100 reimb, 0 copay, FALSE rider, '1세대 손해보험 수술 급여 기준' memo, 510 prio
+    UNION ALL SELECT '1-d', 'NON_COVERED', 100, 0, FALSE, '1세대 손해보험 수술 비급여 기준', 511
+    UNION ALL SELECT '1-h', 'COVERED', 80, 20, FALSE, '1세대 생명보험 수술 급여 기준', 520
+    UNION ALL SELECT '1-h', 'NON_COVERED', 80, 20, FALSE, '1세대 생명보험 수술 비급여 기준', 521
+    UNION ALL SELECT '2', 'COVERED', 80, 20, FALSE, '2세대 수술 급여 기준', 530
+    UNION ALL SELECT '2', 'NON_COVERED', 80, 20, FALSE, '2세대 수술 비급여 기준', 531
+    UNION ALL SELECT '3-s', 'COVERED', 80, 20, FALSE, '3세대 표준 수술 급여 기준', 540
+    UNION ALL SELECT '3-s', 'NON_COVERED', 80, 20, FALSE, '3세대 표준 수술 비급여 기준', 541
+    UNION ALL SELECT '3-c', 'COVERED', 80, 20, FALSE, '3세대 착한실손 수술 급여 기준', 550
+    UNION ALL SELECT '3-c', 'NON_COVERED', 70, 30, TRUE, '3세대 착한실손 수술 비급여 기준 (특약 필요)', 551
+    UNION ALL SELECT '4', 'COVERED', 80, 20, FALSE, '4세대 수술 급여 기준', 560
+    UNION ALL SELECT '4', 'NON_COVERED', 70, 30, TRUE, '4세대 수술 비급여 기준 (특약 필요)', 561
+) t
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = t.gen AND r.care_type = 'SURGERY'
+      AND r.benefit_type = t.btype AND r.actual_loss_category = 'GENERAL_SURGERY'
+);
+
+-- Medication rules (MEDICATION) - AI fallback 조회용
+INSERT INTO insurance_benefit_rules (generation_code, care_type, benefit_type, treatment_category, actual_loss_category, reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method, requires_rider, is_excluded, note, priority)
+SELECT gen, 'MEDICATION', 'COVERED', 'MEDICATION', 'MEDICATION', reimb, copay, deductible, 'MAX_FIXED_OR_RATE', FALSE, FALSE, memo, prio
+FROM (
+    SELECT '1-d' gen, 100 reimb, 0 copay, 5000 deductible, '1세대 손해보험 약제 급여 기준 (5천원 공제)' memo, 610 prio
+    UNION ALL SELECT '1-h', 80, 20, 5000, '1세대 생명보험 약제 급여 기준 (5천원 공제)', 620
+    UNION ALL SELECT '2', 80, 20, 8000, '2세대 약제 급여 기준 (8천원 공제)', 630
+    UNION ALL SELECT '3-s', 80, 20, 8000, '3세대 표준 약제 급여 기준 (8천원 공제)', 640
+    UNION ALL SELECT '3-c', 80, 20, 8000, '3세대 착한실손 약제 급여 기준 (8천원 공제)', 650
+    UNION ALL SELECT '4', 80, 20, 8000, '4세대 약제 급여 기준 (8천원 공제)', 660
+) t
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = t.gen AND r.care_type = 'MEDICATION'
+      AND r.actual_loss_category = 'MEDICATION'
+);
+
 UPDATE insurance_benefit_rules
 SET note = CONCAT(COALESCE(note, ''), ' 4세대 비급여 보험료 할증: 연간 비급여 보험금 없음 약 5% 할인, 100만원 미만 유지, 100만~150만원 100% 할증, 150만~300만원 200% 할증, 300만원 이상 300% 할증. 비급여 순보험료 기준이며 예외 대상이 있을 수 있습니다.')
 WHERE generation_code = '4'

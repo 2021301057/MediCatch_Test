@@ -14,6 +14,7 @@ import com.medicatch.analysis.repository.FixedBenefitMatchRuleRepository;
 import com.medicatch.analysis.repository.InsuranceBenefitRuleRepository;
 import com.medicatch.analysis.repository.PreTreatmentSearchRepository;
 import com.medicatch.analysis.repository.TreatmentRuleRepository;
+import com.medicatch.analysis.dto.AiClassificationResult;
 import com.medicatch.analysis.util.InsuranceGenerationUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,13 +32,15 @@ import java.util.Optional;
 public class PreTreatmentSearchService {
 
     private static final String MATCH_SOURCE_DB_RULE = "DB_RULE";
-    private static final String MATCH_SOURCE_NONE = "NONE";
+    private static final String MATCH_SOURCE_AI      = "AI_CLASSIFICATION";
+    private static final String MATCH_SOURCE_NONE    = "NONE";
 
     private final TreatmentRuleRepository treatmentRuleRepository;
     private final InsuranceBenefitRuleRepository insuranceBenefitRuleRepository;
     private final FixedBenefitMatchRuleRepository fixedBenefitMatchRuleRepository;
     private final PreTreatmentSearchRepository preTreatmentSearchRepository;
     private final InsuranceServiceClient insuranceServiceClient;
+    private final AiClassificationService aiClassificationService;
     private final ObjectMapper objectMapper;
 
     public PreTreatmentSearchService(TreatmentRuleRepository treatmentRuleRepository,
@@ -45,12 +48,14 @@ public class PreTreatmentSearchService {
                                      FixedBenefitMatchRuleRepository fixedBenefitMatchRuleRepository,
                                      PreTreatmentSearchRepository preTreatmentSearchRepository,
                                      InsuranceServiceClient insuranceServiceClient,
+                                     AiClassificationService aiClassificationService,
                                      ObjectMapper objectMapper) {
         this.treatmentRuleRepository = treatmentRuleRepository;
         this.insuranceBenefitRuleRepository = insuranceBenefitRuleRepository;
         this.fixedBenefitMatchRuleRepository = fixedBenefitMatchRuleRepository;
         this.preTreatmentSearchRepository = preTreatmentSearchRepository;
         this.insuranceServiceClient = insuranceServiceClient;
+        this.aiClassificationService = aiClassificationService;
         this.objectMapper = objectMapper;
     }
 
@@ -61,14 +66,41 @@ public class PreTreatmentSearchService {
         }
 
         Optional<TreatmentRule> matchedRule = findBestTreatmentRule(query);
+        Long userId = request != null ? request.getUserId() : null;
+
         if (matchedRule.isEmpty()) {
+            AiClassificationResult aiResult = aiClassificationService.classify(query);
+            if (aiResult != null) {
+                List<PolicyInfo> activePolicies = loadActivePolicies(userId);
+                TreatmentRule syntheticRule = toSyntheticRule(query, aiResult);
+                PreTreatmentSearchResponse.TreatmentClassificationDto classification = toClassificationDto(syntheticRule);
+                PreTreatmentSearchResponse.ActualLossResultDto actualLoss = buildActualLossResult(syntheticRule, activePolicies);
+                PreTreatmentSearchResponse.FixedBenefitResultDto fixedBenefits = buildFixedBenefitResult(syntheticRule, activePolicies);
+                List<String> nextQuestions = (aiResult.getNextQuestions() != null && !aiResult.getNextQuestions().isEmpty())
+                        ? aiResult.getNextQuestions()
+                        : buildNextQuestions(syntheticRule, actualLoss, fixedBenefits);
+
+                PreTreatmentSearchResponse aiResponse = PreTreatmentSearchResponse.builder()
+                        .query(query)
+                        .matched(true)
+                        .matchSource(MATCH_SOURCE_AI)
+                        .confidence(aiResult.getConfidence())
+                        .classification(classification)
+                        .actualLoss(actualLoss)
+                        .fixedBenefits(fixedBenefits)
+                        .nextQuestions(nextQuestions)
+                        .message("AI가 검색어를 분류했습니다. 실제 보장 여부는 보험 약관 기준으로 확인이 필요합니다.")
+                        .build();
+                saveSearchLog(request, aiResponse, true);
+                return aiResponse;
+            }
+
             PreTreatmentSearchResponse response = unmatched(query, "DB 룰에서 일치하는 진료/보장 기준을 찾지 못했습니다.");
-            saveSearchLog(request, response);
+            saveSearchLog(request, response, false);
             return response;
         }
 
         TreatmentRule rule = matchedRule.get();
-        Long userId = request != null ? request.getUserId() : null;
         List<PolicyInfo> activePolicies = loadActivePolicies(userId);
         PreTreatmentSearchResponse.TreatmentClassificationDto classification = toClassificationDto(rule);
         PreTreatmentSearchResponse.ActualLossResultDto actualLoss = buildActualLossResult(rule, activePolicies);
@@ -87,7 +119,7 @@ public class PreTreatmentSearchService {
                 .message(buildMessage(rule, actualLoss, fixedBenefits))
                 .build();
 
-        saveSearchLog(request, response);
+        saveSearchLog(request, response, false);
         return response;
     }
 
@@ -130,6 +162,20 @@ public class PreTreatmentSearchService {
                 "location", location != null ? location : "",
                 "message", "병원 검색은 현재 진료 전 보장 룰 검색과 분리되어 있습니다."
         ));
+    }
+
+    private TreatmentRule toSyntheticRule(String query, AiClassificationResult ai) {
+        return TreatmentRule.builder()
+                .keyword(ai.getNormalizedQuery() != null ? ai.getNormalizedQuery() : query)
+                .injuryDiseaseType(ai.getInjuryDiseaseType())
+                .careType(ai.getCareType())
+                .benefitType(ai.getBenefitType())
+                .treatmentCategory(ai.getTreatmentCategory())
+                .actualLossCategory(ai.getActualLossCategory())
+                .fixedBenefitCategory(ai.getFixedBenefitCategory())
+                .needsUserConfirmation(ai.isNeedsUserConfirmation())
+                .cautionMessage(ai.getReason())
+                .build();
     }
 
     private Optional<TreatmentRule> findBestTreatmentRule(String query) {
@@ -610,7 +656,7 @@ public class PreTreatmentSearchService {
         return synonymExact ? "HIGH" : "MEDIUM";
     }
 
-    private void saveSearchLog(PreTreatmentSearchRequest request, PreTreatmentSearchResponse response) {
+    private void saveSearchLog(PreTreatmentSearchRequest request, PreTreatmentSearchResponse response, boolean aiUsed) {
         if (request == null || request.getUserId() == null) {
             return;
         }
@@ -622,7 +668,7 @@ public class PreTreatmentSearchService {
                     .estimatedCost(request.getEstimatedCost())
                     .hospitalType(request.getHospitalType())
                     .ruleMatched(Boolean.TRUE.equals(response.getMatched()))
-                    .aiUsed(false)
+                    .aiUsed(aiUsed)
                     .classificationJson(toJson(response.getClassification()))
                     .build();
             preTreatmentSearchRepository.save(logEntry);
