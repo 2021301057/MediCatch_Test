@@ -22,7 +22,7 @@ const P = {
   close: (<path d="M4 4l8 8M12 4l-8 8" />),
 };
 
-const QUICK_SEARCHES = ['암', '골절', '입원', '수술', '도수치료', 'MRI', '치과', '한방'];
+const QUICK_SEARCHES = ['암', '골절', '입원', '수술', '도수치료', 'MRI', '치과', '한방', '한약'];
 
 const CARE_TYPE_LABELS = {
   DIAGNOSIS: '진단',
@@ -37,7 +37,7 @@ const CARE_TYPE_LABELS = {
 const BENEFIT_TYPE_LABELS = {
   COVERED: '급여',
   NON_COVERED: '비급여',
-  MIXED: '급여/비급여 혼재',
+  MIXED: '급여/비급여 확인',
   UNKNOWN: '확인 필요',
 };
 
@@ -45,6 +45,12 @@ const INJURY_DISEASE_LABELS = {
   INJURY: '상해',
   DISEASE: '질병',
   UNKNOWN: '확인 필요',
+};
+
+const DEDUCTIBLE_LABELS = {
+  FIXED_ONLY: '정액 공제',
+  MAX_FIXED_OR_RATE: '정액/비율 중 큰 금액 공제',
+  EXCLUDED: '보상 제외',
 };
 
 const formatWon = (value) => {
@@ -91,7 +97,7 @@ function FixedBenefitSection({ fixedBenefits }) {
       <div className="mc-card-head">
         <div>
           <div className="mc-card-title">정액형 담보</div>
-          <div className="mc-card-sub">내 보험 보장 항목과 담보명을 기준으로 확인</div>
+          <div className="mc-card-sub">내 보험의 보장 항목과 담보명을 기준으로 확인합니다.</div>
         </div>
       </div>
       <div className="mc-card-body">
@@ -130,6 +136,24 @@ function FixedBenefitSection({ fixedBenefits }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ActualLossRuleRow({ rule }) {
+  const excluded = rule.isExcluded;
+  return (
+    <div className="mc-kv" style={{ alignItems: 'flex-start' }}>
+      <span className="mc-kv-key">
+        {rule.generationCode} · {labelOf(DEDUCTIBLE_LABELS, rule.deductibleMethod)}
+      </span>
+      <span className="mc-kv-val" style={{ textAlign: 'right' }}>
+        {excluded ? '보상 제외' : `보장 ${rule.reimbursementRate || 0}% · 자기부담 ${rule.patientCopayRate || 0}%`}
+        {rule.fixedDeductible ? ` · 공제 ${formatWon(rule.fixedDeductible)}` : ''}
+        {rule.limitAmount ? ` · 한도 ${formatWon(rule.limitAmount)}` : ''}
+        {rule.limitCount ? ` · ${rule.limitCount}회` : ''}
+        {rule.requiresRider ? ' · 특약 확인' : ''}
+      </span>
     </div>
   );
 }
@@ -177,12 +201,7 @@ function ActualLossSection({ actualLoss }) {
         {actualLoss?.selectedRules?.length > 0 && (
           <div className="mc-stack-xs" style={{ marginTop: 14 }}>
             {actualLoss.selectedRules.map((rule, index) => (
-              <div key={`${rule.generationCode}-${index}`} className="mc-kv">
-                <span className="mc-kv-key">{rule.generationCode} · {rule.deductibleMethod}</span>
-                <span className="mc-kv-val">
-                  보장 {rule.reimbursementRate}% · 자기부담 {rule.patientCopayRate}%
-                </span>
-              </div>
+              <ActualLossRuleRow key={`${rule.generationCode}-${rule.actualLossCategory}-${index}`} rule={rule} />
             ))}
           </div>
         )}
@@ -230,7 +249,7 @@ export default function PreTreatmentSearch() {
       <div className="mc-page-top">
         <div>
           <div className="mc-page-title">진료 전 검색</div>
-          <div className="mc-page-subtitle">병원 가기 전, 내 보험에서 확인되는 실손과 정액형 담보를 미리 살펴보세요.</div>
+          <div className="mc-page-subtitle">병원 가기 전, 내 보험의 실손과 정액형 담보를 미리 확인하세요.</div>
         </div>
         <div className="mc-page-top-right">
           <button className="mc-btn" onClick={() => navigate('/chat')}>
