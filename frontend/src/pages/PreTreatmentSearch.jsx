@@ -84,6 +84,28 @@ const actualLossConditionLabel = (rule) => {
   }
 };
 
+const userResultMessage = (result) => {
+  if (!result) return '';
+  if (!result.matched) return '아직 등록된 기준으로는 바로 확인하기 어려운 검색어입니다.';
+  if (result.actualLoss?.applicable && result.fixedBenefits?.applicable) {
+    return '실손 보장과 정액형 담보를 함께 확인했습니다.';
+  }
+  if (result.actualLoss?.applicable) {
+    return '내 실손 세대 기준으로 적용 가능한 조건을 확인했습니다.';
+  }
+  if (result.fixedBenefits?.applicable) {
+    return '내 보험의 정액형 담보와 비교했습니다.';
+  }
+  return '검색어의 보장 기준을 확인했습니다.';
+};
+
+const actualLossReasonText = (actualLoss) => {
+  if (!actualLoss?.applicable) return '이 검색어는 실손보다 정액형 담보 확인이 더 중심입니다.';
+  if (!actualLoss?.ownedPolicies?.length) return '현재 조회된 보험에서는 실손 담보가 확인되지 않았습니다.';
+  if (!actualLoss?.selectedRules?.length) return '내 실손 세대에 바로 적용할 수 있는 세부 기준은 아직 없습니다.';
+  return '조건을 선택하면 해당 경우의 실손 기준만 볼 수 있습니다.';
+};
+
 const tagStyle = (tone) => ({
   display: 'inline-flex',
   alignItems: 'center',
@@ -192,13 +214,24 @@ function ActualLossRuleRow({ rule }) {
 
 function ActualLossSection({ actualLoss }) {
   const policies = actualLoss?.ownedPolicies || [];
+  const rules = actualLoss?.selectedRules || [];
+  const [selectedCondition, setSelectedCondition] = useState('ALL');
+  const conditionOptions = useMemo(() => (
+    Array.from(new Set(rules.map(actualLossConditionLabel)))
+  ), [rules]);
+  const activeCondition = selectedCondition !== 'ALL' && conditionOptions.includes(selectedCondition)
+    ? selectedCondition
+    : 'ALL';
+  const visibleRules = activeCondition === 'ALL'
+    ? rules
+    : rules.filter((rule) => actualLossConditionLabel(rule) === activeCondition);
 
   return (
     <div className="mc-card mc-section-tight">
       <div className="mc-card-head">
         <div>
           <div className="mc-card-title">실손 확인</div>
-          <div className="mc-card-sub">{actualLoss?.reason || '실손 담보 기준을 확인합니다.'}</div>
+          <div className="mc-card-sub">{actualLossReasonText(actualLoss)}</div>
         </div>
       </div>
       <div className="mc-card-body">
@@ -230,11 +263,36 @@ function ActualLossSection({ actualLoss }) {
           </div>
         )}
 
-        {actualLoss?.selectedRules?.length > 0 && (
-          <div className="mc-stack-xs" style={{ marginTop: 14 }}>
-            {actualLoss.selectedRules.map((rule, index) => (
+        {rules.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            {conditionOptions.length > 1 && (
+              <div className="mc-row-wrap" style={{ marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className="mc-chip"
+                  onClick={() => setSelectedCondition('ALL')}
+                  style={activeCondition === 'ALL' ? { background: 'var(--blue-soft)', borderColor: '#D8E4FB', color: 'var(--blue)' } : undefined}
+                >
+                  전체
+                </button>
+                {conditionOptions.map((condition) => (
+                  <button
+                    key={condition}
+                    type="button"
+                    className="mc-chip"
+                    onClick={() => setSelectedCondition(condition)}
+                    style={activeCondition === condition ? { background: 'var(--blue-soft)', borderColor: '#D8E4FB', color: 'var(--blue)' } : undefined}
+                  >
+                    {condition}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mc-stack-xs">
+            {visibleRules.map((rule, index) => (
               <ActualLossRuleRow key={`${rule.generationCode}-${rule.actualLossCategory}-${index}`} rule={rule} />
             ))}
+            </div>
           </div>
         )}
       </div>
@@ -342,7 +400,7 @@ export default function PreTreatmentSearch() {
               <div className="mc-card-head">
                 <div>
                   <div className="mc-card-title">{resultTitle}</div>
-                  <div className="mc-card-sub">{result.message}</div>
+                  <div className="mc-card-sub">{userResultMessage(result)}</div>
                   <SummaryTags result={result} />
                 </div>
                 <button className="mc-sec-link" onClick={() => setResult(null)}>
