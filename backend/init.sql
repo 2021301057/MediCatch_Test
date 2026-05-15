@@ -276,6 +276,47 @@ INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, 
 SELECT '사망후유장해', '사망,후유장해,상해사망,질병사망,상해후유장해', 'UNKNOWN', 'DIAGNOSIS', 'UNKNOWN', 'DEATH_DISABILITY', NULL, 'DEATH_DISABILITY', TRUE, '상해/질병 여부와 장해율에 따라 보장 담보가 달라질 수 있습니다.', 94
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '사망후유장해');
 
+-- Expanded common pre-treatment search terms
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '발목 인대 파열', '발목부상,발목 염좌,인대손상,인대파열,발목 통증', 'INJURY', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '상해 통원/입원 여부와 검사·치료 항목의 급여 여부에 따라 실손 보장 기준이 달라질 수 있습니다.', 101
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '발목 인대 파열');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '허리디스크', '추간판탈출증,디스크,요추디스크,목디스크,요통,허리 통증', 'DISEASE', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '검사, 주사, 수술, 물리치료 등 실제 치료 항목에 따라 급여/비급여와 보장 기준이 달라질 수 있습니다.', 102
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '허리디스크');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '감기', '상기도감염,목감기,코감기,기침,인후통', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, FALSE, '일반 외래 진료와 처방 약제는 급여 항목 중심으로 실손 확인이 가능합니다.', 103
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '감기');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '장염', '위장염,급성장염,복통,설사,구토', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '외래 진료인지 입원 치료인지에 따라 공제와 한도가 달라질 수 있습니다.', 104
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '장염');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '독감', '인플루엔자,독감검사,타미플루,독감치료', 'DISEASE', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '검사와 약제의 급여 여부에 따라 실손 보장 기준이 달라질 수 있습니다.', 105
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '독감');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '폐렴', '기관지폐렴,폐감염,호흡기감염', 'DISEASE', 'INPATIENT', 'COVERED', 'GENERAL', 'GENERAL_INPATIENT', 'HOSPITALIZATION_DAILY', TRUE, '외래 치료인지 입원 치료인지에 따라 실손 및 입원일당 담보 확인이 달라질 수 있습니다.', 106
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '폐렴');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '백내장', '백내장수술,인공수정체,다초점렌즈,노안수술', 'DISEASE', 'SURGERY', 'MIXED', 'SURGERY', 'GENERAL_SURGERY', 'SURGERY_BENEFIT', TRUE, '수술 목적, 렌즈 종류, 급여/비급여 여부에 따라 보장 판단이 달라질 수 있습니다.', 107
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '백내장');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '내시경', '위내시경,대장내시경,수면내시경,용종절제', 'DISEASE', 'TEST', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '검사 목적, 수면 여부, 용종 제거 등 처치 여부에 따라 급여/비급여와 보장 기준이 달라질 수 있습니다.', 108
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '내시경');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '초음파', '복부초음파,갑상선초음파,유방초음파,심장초음파', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'GENERAL_OUTPATIENT', NULL, TRUE, '초음파는 진단 목적과 급여 인정 여부에 따라 실손 보장 기준이 달라질 수 있습니다.', 109
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '초음파');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT 'CT', '컴퓨터단층촬영,씨티,CT검사,복부CT,흉부CT', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'GENERAL_OUTPATIENT', NULL, TRUE, 'CT 검사는 급여 인정 여부와 촬영 목적에 따라 실손 보장 기준이 달라질 수 있습니다.', 110
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = 'CT');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '치아파절', '치아 파절,치아깨짐,이빨 깨짐,치아 골절', 'INJURY', 'OUTPATIENT', 'MIXED', 'DENTAL', 'DENTAL_INJURY', 'FRACTURE_DIAGNOSIS', TRUE, '치아파절은 상해 치과 치료와 골절 담보가 함께 확인될 수 있으며, 담보별 제외 조건 확인이 필요합니다.', 111
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '치아파절');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '스케일링', '치석제거,치주치료,잇몸치료', 'DISEASE', 'OUTPATIENT', 'COVERED', 'DENTAL', 'DENTAL_DISEASE', NULL, TRUE, '치과 질병 치료는 세대별로 급여 보장 여부가 달라질 수 있습니다.', 112
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '스케일링');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '임플란트', '치과임플란트,인공치아,보철치료,치아보철', 'DISEASE', 'SURGERY', 'MIXED', 'DENTAL', 'DENTAL_DISEASE', NULL, TRUE, '임플란트는 치료 목적, 급여 인정 여부, 치과 질병 보장 범위에 따라 보장 판단이 달라질 수 있습니다.', 113
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '임플란트');
+
 -- Initial fixed benefit matching rules
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
 SELECT 'CANCER_DIAGNOSIS', '암 진단비', '암진단,고액암진단,특정암진단,유사암진단,소액암진단', '수술,입원,항암,방사선', '암 진단 관련 정액형 담보를 찾습니다.', 10
