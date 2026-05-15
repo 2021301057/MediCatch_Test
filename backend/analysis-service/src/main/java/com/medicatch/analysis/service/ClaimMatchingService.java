@@ -6,6 +6,8 @@ import com.medicatch.analysis.dto.ClaimOpportunityDto;
 import com.medicatch.analysis.dto.ClaimPaymentInfo;
 import com.medicatch.analysis.dto.MedicalRecordInfo;
 import com.medicatch.analysis.dto.PolicyInfo;
+import com.medicatch.analysis.entity.InsuranceBenefitRule;
+import com.medicatch.analysis.repository.InsuranceBenefitRuleRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -40,11 +42,14 @@ public class ClaimMatchingService {
 
     private final HealthServiceClient healthClient;
     private final InsuranceServiceClient insuranceClient;
+    private final InsuranceBenefitRuleRepository benefitRuleRepository;
 
     public ClaimMatchingService(HealthServiceClient healthClient,
-                                InsuranceServiceClient insuranceClient) {
+                                InsuranceServiceClient insuranceClient,
+                                InsuranceBenefitRuleRepository benefitRuleRepository) {
         this.healthClient = healthClient;
         this.insuranceClient = insuranceClient;
+        this.benefitRuleRepository = benefitRuleRepository;
     }
 
     // ── 진입점 ──────────────────────────────────────────────────────────────
@@ -62,9 +67,11 @@ public class ClaimMatchingService {
                 .filter(p -> "지급".equals(p.getJudgeResult()) && p.getOccurrenceDate() != null)
                 .toList();
 
+        List<InsuranceBenefitRule> benefitRules = benefitRuleRepository.findByIsActiveOrderByPriorityAsc(true);
+
         List<ClaimOpportunityDto> result = new ArrayList<>();
         for (MedicalRecordInfo r : records)
-            result.add(matchRecord(r, policies, paidPayments));
+            result.add(matchRecord(r, policies, paidPayments, benefitRules));
         return result;
     }
 
@@ -97,7 +104,8 @@ public class ClaimMatchingService {
 
     private ClaimOpportunityDto matchRecord(MedicalRecordInfo record,
                                              List<PolicyInfo> policies,
-                                             List<ClaimPaymentInfo> paidPayments) {
+                                             List<ClaimPaymentInfo> paidPayments,
+                                             List<InsuranceBenefitRule> rules) {
 
         String     diseaseCode    = resolveDiseaseCode(record);
         TreatClass tc             = classify(diseaseCode, record.getDiagnosis());
@@ -174,7 +182,7 @@ public class ClaimMatchingService {
         if (claimable) {
             double publicCharge = outOfPocket != null ? outOfPocket : 0.0;
             double nonCoveredExpense = eligibleNonCoveredExpense(nonCovered, tc);
-            claimAmt = calculateClaimAmount(publicCharge, nonCoveredExpense, gen, treatType);
+            claimAmt = calculateClaimAmount(publicCharge, nonCoveredExpense, gen, treatType, rules);
         }
         return builder
                 .hasClaimOpportunity(claimable)
@@ -193,7 +201,7 @@ public class ClaimMatchingService {
      */
     private double eligibleNonCovered(Double nonCovered, String gen, TreatClass tc) {
         double expense = eligibleNonCoveredExpense(nonCovered, tc);
-        return expense * (1 - nonCoveredSelfPayRatio(gen));
+        return expense * (1 - nonCoveredSelfPayRatioFallback(gen));
     }
 
     private double eligibleNonCoveredExpense(Double nonCovered, TreatClass tc) {
@@ -204,9 +212,16 @@ public class ClaimMatchingService {
 
     /**
      * 세대별 급여 자기부담금 보상 비율.
-     * 1d: 100%, 1h: 80%(생보 특성), 2세대: 90%, 3/3k/4세대: 80%
+     * insurance_benefit_rules COVERED 행의 reimbursementRate 사용.
      */
-    private double publicChargeRatio(String gen) {
+    private double publicChargeRatio(String gen, List<InsuranceBenefitRule> rules) {
+        InsuranceBenefitRule rule = findGeneralOutpatientRule(toDbGenCode(gen), "COVERED", rules);
+        if (rule != null && rule.getReimbursementRate() != null)
+            return rule.getReimbursementRate() / 100.0;
+        return publicChargeRatioFallback(gen);
+    }
+
+    private double publicChargeRatioFallback(String gen) {
         return switch (gen != null ? gen : "") {
             case "1d"           -> 1.0;
             case "1h"           -> 0.8;
@@ -217,22 +232,22 @@ public class ClaimMatchingService {
     }
 
     private double calculateClaimAmount(double publicCharge, double nonCoveredExpense,
-                                        String gen, String treatType) {
+                                        String gen, String treatType, List<InsuranceBenefitRule> rules) {
         if (!isOutpatient(treatType)) {
-            return publicCharge * publicChargeRatio(gen)
-                    + nonCoveredExpense * (1 - nonCoveredSelfPayRatio(gen));
+            return publicCharge * publicChargeRatio(gen, rules)
+                    + nonCoveredExpense * (1 - nonCoveredSelfPayRatio(gen, rules));
         }
 
         double medicalExpense = publicCharge + nonCoveredExpense;
         if (medicalExpense <= 0) return 0.0;
 
-        double fixedDeductible = outpatientFixedDeductible(gen, nonCoveredExpense);
+        double fixedDeductible = outpatientFixedDeductible(gen, nonCoveredExpense, rules);
         if (isFirstGeneration(gen)) {
             return Math.max(0.0, medicalExpense - fixedDeductible);
         }
 
-        double selfPayAmount = publicCharge * publicSelfPayRatio(gen)
-                + nonCoveredExpense * nonCoveredSelfPayRatio(gen);
+        double selfPayAmount = publicCharge * publicSelfPayRatio(gen, rules)
+                + nonCoveredExpense * nonCoveredSelfPayRatio(gen, rules);
         return Math.max(0.0, medicalExpense - Math.max(fixedDeductible, selfPayAmount));
     }
 
@@ -240,7 +255,38 @@ public class ClaimMatchingService {
         return "1d".equals(gen) || "1h".equals(gen);
     }
 
-    private double outpatientFixedDeductible(String gen, double nonCoveredExpense) {
+    private String toDbGenCode(String gen) {
+        if (gen == null) return null;
+        return switch (gen) {
+            case "1d" -> "1-d";
+            case "1h" -> "1-h";
+            case "3"  -> "3-s";
+            case "3k" -> "3-c";
+            default   -> gen;
+        };
+    }
+
+    private InsuranceBenefitRule findGeneralOutpatientRule(String dbGen, String benefitType,
+                                                            List<InsuranceBenefitRule> rules) {
+        if (dbGen == null || rules == null || rules.isEmpty()) return null;
+        return rules.stream()
+                .filter(r -> dbGen.equals(r.getGenerationCode())
+                        && "OUTPATIENT".equals(r.getCareType())
+                        && benefitType.equals(r.getBenefitType())
+                        && "GENERAL_OUTPATIENT".equals(r.getActualLossCategory()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private double outpatientFixedDeductible(String gen, double nonCoveredExpense, List<InsuranceBenefitRule> rules) {
+        String benefitType = nonCoveredExpense > 0 ? "NON_COVERED" : "COVERED";
+        InsuranceBenefitRule rule = findGeneralOutpatientRule(toDbGenCode(gen), benefitType, rules);
+        if (rule != null && rule.getFixedDeductible() != null)
+            return rule.getFixedDeductible();
+        return outpatientFixedDeductibleFallback(gen, nonCoveredExpense);
+    }
+
+    private double outpatientFixedDeductibleFallback(String gen, double nonCoveredExpense) {
         return switch (gen != null ? gen : "") {
             case "1d", "1h" -> 5000.0;
             case "4" -> nonCoveredExpense > 0 ? 30000.0 : 10000.0;
@@ -249,11 +295,18 @@ public class ClaimMatchingService {
         };
     }
 
-    private double publicSelfPayRatio(String gen) {
-        return 1 - publicChargeRatio(gen);
+    private double publicSelfPayRatio(String gen, List<InsuranceBenefitRule> rules) {
+        return 1 - publicChargeRatio(gen, rules);
     }
 
-    private double nonCoveredSelfPayRatio(String gen) {
+    private double nonCoveredSelfPayRatio(String gen, List<InsuranceBenefitRule> rules) {
+        InsuranceBenefitRule rule = findGeneralOutpatientRule(toDbGenCode(gen), "NON_COVERED", rules);
+        if (rule != null && rule.getPatientCopayRate() != null)
+            return rule.getPatientCopayRate() / 100.0;
+        return nonCoveredSelfPayRatioFallback(gen);
+    }
+
+    private double nonCoveredSelfPayRatioFallback(String gen) {
         return switch (gen != null ? gen : "") {
             case "1d", "1h" -> 0.0;
             case "2", "3" -> 0.2;
