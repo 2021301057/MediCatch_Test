@@ -138,35 +138,41 @@ public class PreTreatmentSearchService {
 
         return rules.stream()
                 .filter(rule -> matchesRule(normalizedQuery, rule))
-                .min(Comparator.comparingInt(this::matchRank).thenComparing(rule -> safePriority(rule.getPriority())));
+                .min(Comparator.comparingInt((TreatmentRule rule) -> matchScore(normalizedQuery, rule))
+                        .thenComparing(rule -> safePriority(rule.getPriority())));
     }
 
     private boolean matchesRule(String normalizedQuery, TreatmentRule rule) {
+        return matchScore(normalizedQuery, rule) < Integer.MAX_VALUE;
+    }
+
+    private int matchScore(String normalizedQuery, TreatmentRule rule) {
         String keyword = normalizeForMatch(rule.getKeyword());
-        if (matchesSearchTerm(normalizedQuery, keyword)) {
-            return true;
+        int keywordScore = scoreSearchTerm(normalizedQuery, keyword, 0, 2);
+        if (keywordScore < Integer.MAX_VALUE) {
+            return keywordScore;
         }
 
         return splitCsv(rule.getSynonyms()).stream()
                 .map(this::normalizeForMatch)
-                .anyMatch(synonym -> matchesSearchTerm(normalizedQuery, synonym));
+                .mapToInt(synonym -> scoreSearchTerm(normalizedQuery, synonym, 1, 3))
+                .min()
+                .orElse(Integer.MAX_VALUE);
     }
 
-    private boolean matchesSearchTerm(String normalizedQuery, String normalizedTerm) {
+    private int scoreSearchTerm(String normalizedQuery, String normalizedTerm, int exactScore, int partialScore) {
         if (normalizedQuery.isBlank() || normalizedTerm.isBlank()) {
-            return false;
+            return Integer.MAX_VALUE;
         }
         if (normalizedTerm.equals(normalizedQuery)) {
-            return true;
+            return exactScore;
         }
         if (normalizedTerm.length() < 2) {
-            return false;
+            return Integer.MAX_VALUE;
         }
-        return normalizedQuery.contains(normalizedTerm) || normalizedTerm.contains(normalizedQuery);
-    }
-
-    private int matchRank(TreatmentRule rule) {
-        return safePriority(rule.getPriority());
+        return normalizedQuery.contains(normalizedTerm) || normalizedTerm.contains(normalizedQuery)
+                ? partialScore
+                : Integer.MAX_VALUE;
     }
 
     private PreTreatmentSearchResponse.TreatmentClassificationDto toClassificationDto(TreatmentRule rule) {
@@ -662,7 +668,7 @@ public class PreTreatmentSearchService {
             return ruleValue != null && ruleValue.startsWith("DENTAL");
         }
         if ("KOREAN_MEDICINE".equals(treatmentValue)) {
-            return ruleValue != null && ruleValue.startsWith("KOREAN_MEDICINE");
+            return "KOREAN_MEDICINE".equals(ruleValue) || "KOREAN_MEDICINE_COVERED".equals(ruleValue);
         }
         return false;
     }

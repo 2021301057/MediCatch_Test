@@ -143,16 +143,23 @@ function FixedBenefitSection({ fixedBenefits }) {
 function ActualLossRuleRow({ rule }) {
   const excluded = rule.isExcluded;
   return (
-    <div className="mc-kv" style={{ alignItems: 'flex-start' }}>
-      <span className="mc-kv-key">
+    <div className="mc-kv" style={{ alignItems: 'flex-start', gap: 14 }}>
+      <span className="mc-kv-key" style={{ minWidth: 92 }}>
         {rule.generationCode} · {labelOf(DEDUCTIBLE_LABELS, rule.deductibleMethod)}
       </span>
       <span className="mc-kv-val" style={{ textAlign: 'right' }}>
-        {excluded ? '보상 제외' : `보장 ${rule.reimbursementRate || 0}% · 자기부담 ${rule.patientCopayRate || 0}%`}
-        {rule.fixedDeductible ? ` · 공제 ${formatWon(rule.fixedDeductible)}` : ''}
-        {rule.limitAmount ? ` · 한도 ${formatWon(rule.limitAmount)}` : ''}
-        {rule.limitCount ? ` · ${rule.limitCount}회` : ''}
-        {rule.requiresRider ? ' · 특약 확인' : ''}
+        <span>
+          {excluded ? '보상 제외' : `보장 ${rule.reimbursementRate || 0}% · 자기부담 ${rule.patientCopayRate || 0}%`}
+          {rule.fixedDeductible ? ` · 공제 ${formatWon(rule.fixedDeductible)}` : ''}
+          {rule.limitAmount ? ` · 한도 ${formatWon(rule.limitAmount)}` : ''}
+          {rule.limitCount ? ` · ${rule.limitCount}회` : ''}
+          {rule.requiresRider ? ' · 특약 확인' : ''}
+        </span>
+        {rule.note && (
+          <span className="mc-list-sub" style={{ display: 'block', marginTop: 4 }}>
+            {rule.note}
+          </span>
+        )}
       </span>
     </div>
   );
