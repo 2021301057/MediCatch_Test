@@ -266,17 +266,17 @@ function ActualLossRuleRow({ rule }) {
 function ActualLossSection({ actualLoss }) {
   const policies = actualLoss?.ownedPolicies || [];
   const rules = actualLoss?.selectedRules || [];
-  const [selectedCondition, setSelectedCondition] = useState('ALL');
+  const [selectedCondition, setSelectedCondition] = useState('');
   const [treatmentCost, setTreatmentCost] = useState('');
   const conditionOptions = useMemo(() => (
     Array.from(new Set(rules.map(actualLossConditionLabel)))
   ), [rules]);
-  const activeCondition = selectedCondition !== 'ALL' && conditionOptions.includes(selectedCondition)
+  const activeCondition = conditionOptions.includes(selectedCondition)
     ? selectedCondition
-    : 'ALL';
-  const visibleRules = activeCondition === 'ALL'
-    ? rules
-    : rules.filter((rule) => actualLossConditionLabel(rule) === activeCondition);
+    : conditionOptions[0];
+  const visibleRules = activeCondition
+    ? rules.filter((rule) => actualLossConditionLabel(rule) === activeCondition)
+    : rules;
   const relevantCoverageItems = useMemo(() => (
     policies.flatMap((policy) => (
       (policy.matchedCoverageItems || [])
@@ -338,14 +338,6 @@ function ActualLossSection({ actualLoss }) {
           <div style={{ marginTop: 14 }}>
             {conditionOptions.length > 1 && (
               <div className="mc-row-wrap" style={{ marginBottom: 10 }}>
-                <button
-                  type="button"
-                  className="mc-chip"
-                  onClick={() => setSelectedCondition('ALL')}
-                  style={activeCondition === 'ALL' ? { background: 'var(--blue-soft)', borderColor: '#D8E4FB', color: 'var(--blue)' } : undefined}
-                >
-                  전체
-                </button>
                 {conditionOptions.map((condition) => (
                   <button
                     key={condition}
