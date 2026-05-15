@@ -317,6 +317,47 @@ INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, 
 SELECT '임플란트', '치과임플란트,인공치아,보철치료,치아보철', 'DISEASE', 'SURGERY', 'MIXED', 'DENTAL', 'DENTAL_DISEASE', NULL, TRUE, '임플란트는 치료 목적, 급여 인정 여부, 치과 질병 보장 범위에 따라 보장 판단이 달라질 수 있습니다.', 113
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '임플란트');
 
+-- Step 2: 추가 검색어 seed (근골격·소화기·만성질환·피부·비뇨기)
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '무릎통증', '슬관절통증,무릎관절,무릎연골,반월상연골,슬개골통증,무릎관절염', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '통증 원인(상해/질병)과 치료 항목(주사·물리치료·수술 등)에 따라 급여/비급여와 실손 보장 기준이 달라집니다.', 120
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '무릎통증');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '어깨통증', '어깨관절통,어깨결림,오십견,어깨충돌증후군,동결견,견관절통', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '통증 원인과 치료 방법(도수치료·주사·수술 등)에 따라 보장 기준이 달라질 수 있습니다.', 121
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '어깨통증');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '회전근개파열', '회전근개,어깨힘줄파열,극상근파열,극하근파열,어깨파열,회전근개손상', 'INJURY', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', 'SURGERY_BENEFIT', TRUE, '수술로 이어질 경우 수술비 담보도 확인이 필요하며, 도수치료·주사 등 비급여 치료 포함 여부에 따라 보장 기준이 달라집니다.', 122
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '회전근개파열');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '손목터널증후군', '수근관증후군,손목터널,손목저림,정중신경압박,손저림', 'DISEASE', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '보존치료(주사·물리치료)와 수술치료 여부에 따라 보장 기준이 달라질 수 있습니다.', 123
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '손목터널증후군');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '비염', '알레르기비염,만성비염,코막힘,비강염,코알레르기,통년성비염', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, FALSE, NULL, 124
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '비염');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '축농증', '부비동염,만성부비동염,비용종,후비루,코수술', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '수술적 치료(내시경 수술 등)가 필요한 경우 수술비 담보 확인이 별도로 필요합니다.', 125
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '축농증');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '위염', '만성위염,급성위염,위궤양,헬리코박터,소화불량,속쓰림', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, FALSE, NULL, 126
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '위염');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '역류성식도염', '위식도역류,GERD,식도염,가슴쓰림,위산역류,역류', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, FALSE, NULL, 127
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '역류성식도염');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '당뇨', '당뇨병,제1형당뇨,제2형당뇨,혈당,인슐린,당뇨합병증,혈당관리', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, FALSE, '당뇨 관련 합병증 치료는 항목에 따라 급여/비급여 여부가 다를 수 있습니다.', 128
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '당뇨');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '고혈압', '혈압,고혈압증,혈압약,혈압치료,고혈압관리', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, FALSE, NULL, 129
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '고혈압');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '갑상선질환', '갑상선,갑상선염,갑상선기능항진,갑상선기능저하,갑상선결절,갑상선호르몬', 'DISEASE', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '갑상선암으로 진단될 경우 암 담보 확인이 필요하며, 수술 시 수술비 담보도 함께 확인하세요.', 130
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '갑상선질환');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '피부질환', '피부병,아토피,건선,두드러기,습진,피부염,피부과,아토피피부염', 'DISEASE', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '치료 목적(질병)인지 미용 목적인지에 따라 보장 여부가 달라지며, 비급여 시술은 실손 보장이 제한될 수 있습니다.', 131
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '피부질환');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '요로결석', '신장결석,방광결석,요관결석,콩팥결석,결석치료,쇄석술', 'DISEASE', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '체외충격파쇄석술은 급여 항목이나 입원 치료가 필요한 경우 입원 담보 확인도 필요합니다.', 132
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '요로결석');
+
 -- Initial fixed benefit matching rules
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
 SELECT 'CANCER_DIAGNOSIS', '암 진단비', '암진단,고액암진단,특정암진단,유사암진단,소액암진단', '수술,입원,항암,방사선', '암 진단 관련 정액형 담보를 찾습니다.', 10
