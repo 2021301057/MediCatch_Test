@@ -201,6 +201,7 @@ public class PreTreatmentSearchService {
                 .filter(benefitRule -> sameOrUnknown(rule.getCareType(), benefitRule.getCareType()))
                 .filter(benefitRule -> sameOrMixed(rule.getBenefitType(), benefitRule.getBenefitType()))
                 .filter(benefitRule -> sameCategory(rule.getActualLossCategory(), benefitRule.getActualLossCategory()))
+                .filter(benefitRule -> sameTreatmentCategory(rule.getTreatmentCategory(), benefitRule))
                 .toList();
         List<InsuranceBenefitRule> selectedRules = candidates.stream()
                 .filter(candidate -> selectedGenerationCodes.contains(candidate.getGenerationCode()))
@@ -649,7 +650,24 @@ public class PreTreatmentSearchService {
         if ("NON_COVERED_THREE".equals(treatmentValue)) {
             return "NON_COVERED_THREE".equals(ruleValue);
         }
+        if ("DENTAL".equals(treatmentValue)) {
+            return ruleValue != null && ruleValue.startsWith("DENTAL");
+        }
+        if ("KOREAN_MEDICINE".equals(treatmentValue)) {
+            return ruleValue != null && ruleValue.startsWith("KOREAN_MEDICINE");
+        }
         return false;
+    }
+
+    private boolean sameTreatmentCategory(String treatmentCategory, InsuranceBenefitRule benefitRule) {
+        String ruleCategory = benefitRule.getTreatmentCategory();
+        if (isBlank(treatmentCategory) || "UNKNOWN".equals(treatmentCategory)) {
+            return true;
+        }
+        if ("NON_COVERED_THREE".equals(benefitRule.getActualLossCategory())) {
+            return Objects.equals(treatmentCategory, ruleCategory);
+        }
+        return isBlank(ruleCategory) || "GENERAL".equals(ruleCategory) || Objects.equals(treatmentCategory, ruleCategory);
     }
 
     private String normalizeInput(String value) {

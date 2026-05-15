@@ -567,6 +567,243 @@ SELECT '4', 'OUTPATIENT', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE',
        0, 100, NULL, 'EXCLUDED', FALSE, TRUE, '4?∏Î? ?úÎ∞© ÎπÑÍ∏â?¨Îäî ?êÏπô?ÅÏúºÎ°?Î©¥Ï±Ö Ï≤òÎ¶¨?©Îãà??', 122
 WHERE NOT EXISTS (SELECT 1 FROM insurance_benefit_rules WHERE generation_code = '4' AND care_type = 'OUTPATIENT' AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'KOREAN_MEDICINE');
 
+
+-- Actual loss rules aligned with generation comparison table
+-- These rows refine the DB-driven pre-treatment search rules without deleting older seed rows.
+UPDATE insurance_benefit_rules
+SET reimbursement_rate = 80,
+    patient_copay_rate = 20,
+    note = '1-h non-covered outpatient: life insurer contracts generally reimburse 80 percent of total covered/non-covered amount; terms may vary.'
+WHERE generation_code = '1-h'
+  AND care_type = 'OUTPATIENT'
+  AND benefit_type = 'NON_COVERED'
+  AND actual_loss_category = 'GENERAL_OUTPATIENT';
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-c', 'OUTPATIENT', 'COVERED', 'GENERAL', 'GENERAL_OUTPATIENT',
+       80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, FALSE,
+       '3-c covered outpatient default rule: 80 percent reimbursement, max fixed/rate deductible.', 45
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules
+    WHERE generation_code = '3-c' AND care_type = 'OUTPATIENT'
+      AND benefit_type = 'COVERED' AND actual_loss_category = 'GENERAL_OUTPATIENT'
+);
+
+UPDATE insurance_benefit_rules
+SET limit_amount = 3500000,
+    limit_count = 50,
+    requires_rider = generation_code IN ('3-c', '4'),
+    note = CASE
+        WHEN generation_code IN ('3-c', '4') THEN 'Non-covered three item: manual therapy, extracorporeal shockwave, prolotherapy. Annual 3.5M KRW / 50 sessions. Rider required.'
+        ELSE 'Non-covered three item included in base actual-loss coverage for this generation. Terms may vary.'
+    END
+WHERE actual_loss_category = 'NON_COVERED_THREE'
+  AND treatment_category = 'REHAB';
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    limit_amount, limit_count, requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'NON_COVERED', 'REHAB', 'NON_COVERED_THREE',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       limit_amount, limit_count, requires_rider, FALSE, note, priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, NULL limit_amount, NULL limit_count, FALSE requires_rider, '1-d non-covered three included in base coverage.' note, 111 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', NULL, NULL, FALSE, '1-h non-covered three follows 80 percent total reimbursement rule.', 112
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', NULL, NULL, FALSE, '2nd generation non-covered three included in base coverage.', 113
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', NULL, NULL, FALSE, '3-s non-covered three included in base coverage.', 114
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.care_type = 'OUTPATIENT'
+      AND r.benefit_type = 'NON_COVERED' AND r.treatment_category = 'REHAB'
+      AND r.actual_loss_category = 'NON_COVERED_THREE'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    limit_amount, limit_count, requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'NON_COVERED', 'INJECTION', 'NON_COVERED_THREE',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       limit_amount, limit_count, requires_rider, FALSE, note, priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, NULL limit_amount, NULL limit_count, FALSE requires_rider, '1-d non-covered injection included in base coverage.' note, 121 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', NULL, NULL, FALSE, '1-h non-covered injection follows 80 percent total reimbursement rule.', 122
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', NULL, NULL, FALSE, '2nd generation non-covered injection included in base coverage.', 123
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', NULL, NULL, FALSE, '3-s non-covered injection included in base coverage.', 124
+    UNION ALL SELECT '3-c', 70, 30, 10000, 'MAX_FIXED_OR_RATE', 2500000, 50, TRUE, '3-c non-covered injection rider. Annual 2.5M KRW / 50 sessions.', 125
+    UNION ALL SELECT '4', 70, 30, 30000, 'MAX_FIXED_OR_RATE', 2500000, 50, TRUE, '4th generation non-covered injection rider. Annual 2.5M KRW / 50 sessions.', 126
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.care_type = 'OUTPATIENT'
+      AND r.benefit_type = 'NON_COVERED' AND r.treatment_category = 'INJECTION'
+      AND r.actual_loss_category = 'NON_COVERED_THREE'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    limit_amount, limit_count, requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'NON_COVERED', 'IMAGING', 'NON_COVERED_THREE',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       limit_amount, limit_count, requires_rider, FALSE, note, priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, NULL limit_amount, NULL limit_count, FALSE requires_rider, '1-d non-covered MRI/MRA included in base coverage.' note, 131 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', NULL, NULL, FALSE, '1-h non-covered MRI/MRA follows 80 percent total reimbursement rule.', 132
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', NULL, NULL, FALSE, '2nd generation non-covered MRI/MRA included in base coverage.', 133
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', NULL, NULL, FALSE, '3-s non-covered MRI/MRA included in base coverage.', 134
+    UNION ALL SELECT '3-c', 70, 30, 10000, 'MAX_FIXED_OR_RATE', 3000000, NULL, TRUE, '3-c non-covered MRI/MRA rider. Annual 3M KRW, no fixed count limit.', 135
+    UNION ALL SELECT '4', 70, 30, 30000, 'MAX_FIXED_OR_RATE', 3000000, NULL, TRUE, '4th generation non-covered MRI/MRA rider. Annual 3M KRW, no fixed count limit.', 136
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.care_type = 'OUTPATIENT'
+      AND r.benefit_type = 'NON_COVERED' AND r.treatment_category = 'IMAGING'
+      AND r.actual_loss_category = 'NON_COVERED_THREE'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'MIXED', 'DENTAL', 'DENTAL_INJURY',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       FALSE, FALSE, 'Dental injury: covered and non-covered treatment can be considered across generations.', priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, 201 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', 202
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 203
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 204
+    UNION ALL SELECT '3-c', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 205
+    UNION ALL SELECT '4', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 206
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.actual_loss_category = 'DENTAL_INJURY'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'COVERED', 'DENTAL', 'DENTAL_DISEASE',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       FALSE, is_excluded, note, priority
+FROM (
+    SELECT '1-d' generation_code, 0 reimbursement_rate, 100 patient_copay_rate, NULL fixed_deductible, 'EXCLUDED' deductible_method, TRUE is_excluded, 'Dental disease excluded in 1-d actual-loss contracts.' note, 211 priority
+    UNION ALL SELECT '1-h', 0, 100, NULL, 'EXCLUDED', TRUE, 'Dental disease excluded in 1-h actual-loss contracts.', 212
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, 'Dental disease: covered treatment only from 2nd generation onward.', 213
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, 'Dental disease: covered treatment only.', 214
+    UNION ALL SELECT '3-c', 80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, 'Dental disease: covered treatment only.', 215
+    UNION ALL SELECT '4', 80, 20, 10000, 'MAX_FIXED_OR_RATE', FALSE, 'Dental disease: covered treatment only.', 216
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.actual_loss_category = 'DENTAL_DISEASE'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE_COVERED',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       FALSE, FALSE, 'Korean medicine covered treatment can be considered across generations.', priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, 301 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', 302
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 303
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 304
+    UNION ALL SELECT '3-c', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 305
+    UNION ALL SELECT '4', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 306
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.actual_loss_category = 'KOREAN_MEDICINE_COVERED'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT '3-c', 'OUTPATIENT', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE',
+       0, 100, NULL, 'EXCLUDED', FALSE, TRUE, '3-c Korean medicine non-covered treatment is generally excluded.', 123
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules
+    WHERE generation_code = '3-c' AND care_type = 'OUTPATIENT'
+      AND benefit_type = 'NON_COVERED' AND actual_loss_category = 'KOREAN_MEDICINE'
+);
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    limit_count, requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'OUTPATIENT', 'COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE_CHUNA',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       20, FALSE, FALSE, 'Chuna treatment: covered treatment after Apr 2019, annual 20-session limit.', priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, 331 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', 332
+    UNION ALL SELECT '2', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 333
+    UNION ALL SELECT '3-s', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 334
+    UNION ALL SELECT '3-c', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 335
+    UNION ALL SELECT '4', 80, 20, 10000, 'MAX_FIXED_OR_RATE', 336
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.actual_loss_category = 'KOREAN_MEDICINE_CHUNA'
+);
+
+INSERT INTO treatment_rules (
+    keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category,
+    actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority
+)
+SELECT '«—æ‡', '≈¡æ‡,√∏æ‡,«—πÊæ‡,«—¿«ø¯æ‡', 'DISEASE', 'MEDICATION', 'NON_COVERED', 'KOREAN_MEDICINE',
+       'KOREAN_MEDICINE_HERBAL', NULL, TRUE,
+       'Herbal medicine is usually excluded from 2nd generation onward; 1st generation may only be conditional for inpatient prescription.', 92
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '«—æ‡');
+
+INSERT INTO insurance_benefit_rules (
+    generation_code, care_type, benefit_type, treatment_category, actual_loss_category,
+    reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+    requires_rider, is_excluded, note, priority
+)
+SELECT generation_code, 'MEDICATION', 'NON_COVERED', 'KOREAN_MEDICINE', 'KOREAN_MEDICINE_HERBAL',
+       reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method,
+       FALSE, is_excluded, note, priority
+FROM (
+    SELECT '1-d' generation_code, 100 reimbursement_rate, 0 patient_copay_rate, 5000 fixed_deductible, 'FIXED_ONLY' deductible_method, FALSE is_excluded, '1-d herbal medicine may be conditional when prescribed during inpatient treatment.' note, 341 priority
+    UNION ALL SELECT '1-h', 80, 20, 5000, 'FIXED_ONLY', FALSE, '1-h herbal medicine may be conditional when prescribed during inpatient treatment; 80 percent total rule.', 342
+    UNION ALL SELECT '2', 0, 100, NULL, 'EXCLUDED', TRUE, '2nd generation herbal medicine non-covered treatment is generally excluded.', 343
+    UNION ALL SELECT '3-s', 0, 100, NULL, 'EXCLUDED', TRUE, '3-s herbal medicine non-covered treatment is generally excluded.', 344
+    UNION ALL SELECT '3-c', 0, 100, NULL, 'EXCLUDED', TRUE, '3-c herbal medicine non-covered treatment is generally excluded.', 345
+    UNION ALL SELECT '4', 0, 100, NULL, 'EXCLUDED', TRUE, '4th generation herbal medicine non-covered treatment is generally excluded.', 346
+) seed
+WHERE NOT EXISTS (
+    SELECT 1 FROM insurance_benefit_rules r
+    WHERE r.generation_code = seed.generation_code AND r.actual_loss_category = 'KOREAN_MEDICINE_HERBAL'
+);
+
+UPDATE insurance_benefit_rules
+SET note = CONCAT(COALESCE(note, ''), ' 4th generation surcharge note: annual non-covered payout none = about 5 percent discount; under 1M KRW = no change; 1M-1.5M = 100 percent surcharge; 1.5M-3M = 200 percent; 3M+ = 300 percent. Applies to non-covered risk premium only; exceptions may apply.')
+WHERE generation_code = '4'
+  AND benefit_type = 'NON_COVERED'
+  AND is_excluded = FALSE
+  AND (note IS NULL OR note NOT LIKE '%4th generation surcharge note%');
 -- Normalize rule activation flags for existing databases and copied seed runs
 ALTER TABLE treatment_rules MODIFY COLUMN is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE fixed_benefit_match_rules MODIFY COLUMN is_active BOOLEAN DEFAULT TRUE;
