@@ -460,7 +460,9 @@ public class PreTreatmentSearchService {
 
         boolean matched = matchKeywords.stream()
                 .map(this::normalizeForMatch)
-                .anyMatch(keyword -> !keyword.isBlank() && target.contains(keyword));
+                .anyMatch(keyword -> !keyword.isBlank()
+                        && target.contains(keyword)
+                        && !isExcludedByItemName(target, keyword));
         if (!matched) {
             return false;
         }
@@ -468,6 +470,44 @@ public class PreTreatmentSearchService {
         return excludeKeywords.stream()
                 .map(this::normalizeForMatch)
                 .noneMatch(keyword -> !keyword.isBlank() && target.contains(keyword));
+    }
+
+    /**
+     * 담보명에 "[keyword] (설명) 제외/면책/해당없음" 패턴이 있으면 true.
+     * 중첩 괄호도 처리: "치아파절(깨짐(조각포함), 부러짐) 제외" → true
+     * "골절진단비(치아파절 제외)"에서 "골절" 검색 시 → false (골절 바로 뒤는 진단비)
+     */
+    private boolean isExcludedByItemName(String normalizedTarget, String normalizedKeyword) {
+        // 선행 태그 제거: [건강], [상해] 등
+        String cleaned = normalizedTarget.replaceAll("^\\[[^\\]]*\\]", "");
+        int idx = cleaned.indexOf(normalizedKeyword);
+        while (idx >= 0) {
+            String after = cleaned.substring(idx + normalizedKeyword.length());
+            String afterSkipped = skipParenthetical(after);
+            if (afterSkipped.startsWith("제외")
+                    || afterSkipped.startsWith("면책")
+                    || afterSkipped.startsWith("해당없음")) {
+                return true;
+            }
+            idx = cleaned.indexOf(normalizedKeyword, idx + 1);
+        }
+        return false;
+    }
+
+    /** "(" 로 시작하는 괄호 블록(중첩 포함)을 건너뛰고 그 이후 문자열 반환. */
+    private String skipParenthetical(String s) {
+        if (s.isEmpty() || s.charAt(0) != '(') {
+            return s;
+        }
+        int depth = 0;
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == '(') depth++;
+            else if (s.charAt(i) == ')') {
+                depth--;
+                if (depth == 0) return s.substring(i + 1);
+            }
+        }
+        return s;
     }
 
     private PreTreatmentSearchResponse.MatchedCoverageItemDto toMatchedCoverageItem(PolicyInfo policy, PolicyInfo.CoverageItemInfo item) {
