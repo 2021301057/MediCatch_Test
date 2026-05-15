@@ -221,8 +221,12 @@ CREATE TABLE IF NOT EXISTS fixed_benefit_match_rules (
 
 -- Initial treatment classification rules
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT '암', '위암,대장암,폐암,갑상선암,유사암,고액암', 'DISEASE', 'DIAGNOSIS', 'UNKNOWN', 'CANCER', NULL, 'CANCER', FALSE, '암 종류, 최초 진단 여부, 면책기간, 감액기간에 따라 실제 보장 여부가 달라질 수 있습니다.', 10
+SELECT '암', '위암,대장암,폐암,갑상선암,유사암,고액암,암진단,암수술,암입원,암통원,항암,항암치료,방사선치료', 'DISEASE', 'DIAGNOSIS', 'UNKNOWN', 'CANCER', NULL, 'CANCER', FALSE, '암 종류, 최초 진단 여부, 면책기간, 감액기간에 따라 실제 보장 여부가 달라질 수 있습니다.', 10
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '암');
+UPDATE treatment_rules
+SET synonyms = '위암,대장암,폐암,갑상선암,유사암,고액암,암진단,암수술,암입원,암통원,항암,항암치료,방사선치료'
+WHERE keyword = '암'
+  AND synonyms NOT LIKE '%암진단%';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '골절', '뼈 골절,발목 골절,손목 골절,치아파절', 'INJURY', 'DIAGNOSIS', 'UNKNOWN', 'FRACTURE', NULL, 'FRACTURE_DIAGNOSIS', FALSE, '치아파절은 담보별 보장 제외 조건이 있을 수 있습니다.', 20
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '골절');

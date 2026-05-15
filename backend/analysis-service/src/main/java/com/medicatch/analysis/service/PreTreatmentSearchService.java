@@ -143,18 +143,26 @@ public class PreTreatmentSearchService {
 
     private boolean matchesRule(String normalizedQuery, TreatmentRule rule) {
         String keyword = normalizeForMatch(rule.getKeyword());
-        if (!keyword.isBlank() && (keyword.equals(normalizedQuery)
-                || keyword.contains(normalizedQuery)
-                || normalizedQuery.contains(keyword))) {
+        if (matchesSearchTerm(normalizedQuery, keyword)) {
             return true;
         }
 
         return splitCsv(rule.getSynonyms()).stream()
                 .map(this::normalizeForMatch)
-                .anyMatch(synonym -> !synonym.isBlank()
-                        && (synonym.equals(normalizedQuery)
-                        || synonym.contains(normalizedQuery)
-                        || normalizedQuery.contains(synonym)));
+                .anyMatch(synonym -> matchesSearchTerm(normalizedQuery, synonym));
+    }
+
+    private boolean matchesSearchTerm(String normalizedQuery, String normalizedTerm) {
+        if (normalizedQuery.isBlank() || normalizedTerm.isBlank()) {
+            return false;
+        }
+        if (normalizedTerm.equals(normalizedQuery)) {
+            return true;
+        }
+        if (normalizedTerm.length() < 2) {
+            return false;
+        }
+        return normalizedQuery.contains(normalizedTerm) || normalizedTerm.contains(normalizedQuery);
     }
 
     private int matchRank(TreatmentRule rule) {
