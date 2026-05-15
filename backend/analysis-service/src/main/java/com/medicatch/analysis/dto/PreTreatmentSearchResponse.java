@@ -93,6 +93,18 @@ public class PreTreatmentSearchResponse {
         private String generationConfidence;
         private Boolean hasActualLossCoverage;
         private List<String> matchedCoverageNames;
+        private List<ActualLossCoverageItemDto> matchedCoverageItems;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ActualLossCoverageItemDto {
+        private String name;
+        private String category;
+        private String agreementType;
+        private Double amount;
     }
 
     @Data

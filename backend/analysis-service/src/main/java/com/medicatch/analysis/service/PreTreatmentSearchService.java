@@ -237,10 +237,13 @@ public class PreTreatmentSearchService {
         return policies.stream()
                 .filter(Objects::nonNull)
                 .map(policy -> {
-                    List<String> matchedCoverageNames = safeCoverageItems(policy).stream()
+                    List<PreTreatmentSearchResponse.ActualLossCoverageItemDto> matchedCoverageItems = safeCoverageItems(policy).stream()
                             .filter(PolicyInfo.CoverageItemInfo::isCovered)
                             .filter(this::isActualLossCoverageItem)
-                            .map(PolicyInfo.CoverageItemInfo::getName)
+                            .map(this::toActualLossCoverageItemDto)
+                            .toList();
+                    List<String> matchedCoverageNames = matchedCoverageItems.stream()
+                            .map(PreTreatmentSearchResponse.ActualLossCoverageItemDto::getName)
                             .filter(Objects::nonNull)
                             .distinct()
                             .toList();
@@ -261,10 +264,20 @@ public class PreTreatmentSearchService {
                             .generationConfidence(generationConfidence(generationCode))
                             .hasActualLossCoverage(true)
                             .matchedCoverageNames(matchedCoverageNames)
+                            .matchedCoverageItems(matchedCoverageItems)
                             .build();
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private PreTreatmentSearchResponse.ActualLossCoverageItemDto toActualLossCoverageItemDto(PolicyInfo.CoverageItemInfo item) {
+        return PreTreatmentSearchResponse.ActualLossCoverageItemDto.builder()
+                .name(item.getName())
+                .category(item.getCategory())
+                .agreementType(item.getAgreementType())
+                .amount(item.getAmount())
+                .build();
     }
 
     private boolean isActualLossPolicyType(PolicyInfo policy) {

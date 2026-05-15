@@ -106,6 +106,57 @@ const actualLossReasonText = (actualLoss) => {
   return '조건을 선택하면 해당 경우의 실손 기준만 볼 수 있습니다.';
 };
 
+const normalizeText = (value) => String(value || '').replace(/\s+/g, '').toLowerCase();
+
+const actualLossCoverageMatchesRule = (item, rule) => {
+  const target = normalizeText(`${item.name || ''} ${item.category || ''} ${item.agreementType || ''}`);
+
+  if (rule.actualLossCategory === 'DENTAL_INJURY' && !target.includes('상해')) return false;
+  if (rule.actualLossCategory === 'DENTAL_DISEASE' && !target.includes('질병')) return false;
+
+  if (rule.careType === 'INPATIENT') {
+    return target.includes('입원');
+  }
+  if (['OUTPATIENT', 'TEST', 'MEDICATION'].includes(rule.careType)) {
+    return target.includes('통원') || target.includes('외래') || !target.includes('입원');
+  }
+  return true;
+};
+
+const calculateActualLossPayment = (cost, rule, coverageLimit) => {
+  if (!Number.isFinite(cost) || cost <= 0) return null;
+  if (rule.isExcluded || rule.deductibleMethod === 'EXCLUDED') {
+    return {
+      excluded: true,
+      deduction: cost,
+      rawPayment: 0,
+      finalPayment: 0,
+      patientPayment: cost,
+      appliedLimit: 0,
+    };
+  }
+
+  const fixedDeductible = Number(rule.fixedDeductible || 0);
+  const rateDeductible = cost * (Number(rule.patientCopayRate || 0) / 100);
+  const deduction = rule.deductibleMethod === 'MAX_FIXED_OR_RATE'
+    ? Math.max(fixedDeductible, rateDeductible)
+    : fixedDeductible;
+  const rawPayment = Math.max(0, cost - deduction);
+  const caps = [Number(rule.limitAmount || 0), Number(coverageLimit || 0)]
+    .filter((amount) => Number.isFinite(amount) && amount > 0);
+  const appliedLimit = caps.length > 0 ? Math.min(...caps) : null;
+  const finalPayment = appliedLimit ? Math.min(rawPayment, appliedLimit) : rawPayment;
+
+  return {
+    excluded: false,
+    deduction,
+    rawPayment,
+    finalPayment,
+    patientPayment: Math.max(0, cost - finalPayment),
+    appliedLimit,
+  };
+};
+
 const tagStyle = (tone) => ({
   display: 'inline-flex',
   alignItems: 'center',
@@ -216,6 +267,7 @@ function ActualLossSection({ actualLoss }) {
   const policies = actualLoss?.ownedPolicies || [];
   const rules = actualLoss?.selectedRules || [];
   const [selectedCondition, setSelectedCondition] = useState('ALL');
+  const [treatmentCost, setTreatmentCost] = useState('');
   const conditionOptions = useMemo(() => (
     Array.from(new Set(rules.map(actualLossConditionLabel)))
   ), [rules]);
@@ -225,6 +277,24 @@ function ActualLossSection({ actualLoss }) {
   const visibleRules = activeCondition === 'ALL'
     ? rules
     : rules.filter((rule) => actualLossConditionLabel(rule) === activeCondition);
+  const relevantCoverageItems = useMemo(() => (
+    policies.flatMap((policy) => (
+      (policy.matchedCoverageItems || [])
+        .filter((item) => visibleRules.some((rule) => (
+          policy.estimatedGenerationCode === rule.generationCode && actualLossCoverageMatchesRule(item, rule)
+        )))
+        .map((item) => ({ ...item, policyId: policy.policyId, policyName: policy.policyName }))
+    ))
+  ), [policies, visibleRules]);
+  const coverageLimit = relevantCoverageItems
+    .map((item) => Number(item.amount || 0))
+    .filter((amount) => Number.isFinite(amount) && amount > 0)
+    .sort((a, b) => b - a)[0] || null;
+  const treatmentCostAmount = Number(String(treatmentCost).replaceAll(',', ''));
+  const calculationRule = visibleRules.find((rule) => !rule.isExcluded) || visibleRules[0];
+  const calculation = calculationRule
+    ? calculateActualLossPayment(treatmentCostAmount, calculationRule, coverageLimit)
+    : null;
 
   return (
     <div className="mc-card mc-section-tight">
@@ -255,6 +325,16 @@ function ActualLossSection({ actualLoss }) {
                     <div className="mc-list-sub" style={{ marginTop: 4 }}>
                       확인 담보: {policy.matchedCoverageNames.slice(0, 3).join(', ')}
                       {policy.matchedCoverageNames.length > 3 ? ` 외 ${policy.matchedCoverageNames.length - 3}건` : ''}
+                    </div>
+                  )}
+                  {policy.matchedCoverageItems?.length > 0 && (
+                    <div className="mc-stack-xs" style={{ marginTop: 8 }}>
+                      {policy.matchedCoverageItems.slice(0, 4).map((item, index) => (
+                        <div key={`${policy.policyId}-${item.name}-${index}`} className="mc-kv">
+                          <span className="mc-kv-key">{item.name}</span>
+                          <span className="mc-kv-val">{formatWon(item.amount)}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -292,6 +372,41 @@ function ActualLossSection({ actualLoss }) {
             {visibleRules.map((rule, index) => (
               <ActualLossRuleRow key={`${rule.generationCode}-${rule.actualLossCategory}-${index}`} rule={rule} />
             ))}
+            </div>
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <div className="mc-field-label" style={{ marginBottom: 8 }}>예상 치료비</div>
+              <input
+                className="mc-input"
+                inputMode="numeric"
+                placeholder="예: 200000"
+                value={treatmentCost}
+                onChange={(event) => setTreatmentCost(event.target.value.replace(/[^\d,]/g, ''))}
+              />
+              <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                <div className="mc-kv">
+                  <span className="mc-kv-key">적용 담보 한도</span>
+                  <span className="mc-kv-val">{coverageLimit ? formatWon(coverageLimit) : '확인 필요'}</span>
+                </div>
+                {calculation && (
+                  <>
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">공제 예상</span>
+                      <span className="mc-kv-val">{formatWon(calculation.deduction)}</span>
+                    </div>
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">예상 보험금</span>
+                      <span className="mc-kv-val">{formatWon(calculation.finalPayment)}</span>
+                    </div>
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">예상 본인부담</span>
+                      <span className="mc-kv-val">{formatWon(calculation.patientPayment)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="mc-list-sub" style={{ marginTop: 8 }}>
+                실제 지급액은 영수증의 급여/비급여 구분, 약관, 특약 가입 여부, 연간 한도 사용액에 따라 달라질 수 있습니다.
+              </div>
             </div>
           </div>
         )}
