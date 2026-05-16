@@ -279,6 +279,9 @@ WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '화상');
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '사망후유장해', '사망,후유장해,상해사망,질병사망,상해후유장해', 'UNKNOWN', 'DIAGNOSIS', 'UNKNOWN', 'DEATH_DISABILITY', NULL, 'DEATH_DISABILITY', TRUE, '상해/질병 여부와 장해율에 따라 보장 담보가 달라질 수 있습니다.', 94
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '사망후유장해');
+INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
+SELECT '뇌졸중', '뇌경색,뇌출혈,중풍,뇌혈관질환,뇌졸중진단,뇌혈관진단', 'DISEASE', 'INPATIENT', 'COVERED', 'CEREBROVASCULAR', 'GENERAL_INPATIENT', 'CEREBROVASCULAR', FALSE, '뇌졸중/뇌경색/뇌출혈은 진단 기준과 입원 여부에 따라 실손 및 정액형 보장 기준이 달라질 수 있습니다.', 25
+WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '뇌졸중');
 
 -- Expanded common pre-treatment search terms
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)

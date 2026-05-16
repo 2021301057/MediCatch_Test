@@ -265,9 +265,14 @@ public class PreTreatmentSearchService {
         if (normalizedTerm.length() < 2) {
             return Integer.MAX_VALUE;
         }
-        return normalizedQuery.contains(normalizedTerm) || normalizedTerm.contains(normalizedQuery)
-                ? partialScore
-                : Integer.MAX_VALUE;
+        if (normalizedQuery.contains(normalizedTerm) || normalizedTerm.contains(normalizedQuery)) {
+            int covered = Math.min(normalizedTerm.length(), normalizedQuery.length());
+            int coveragePct = covered * 100 / normalizedQuery.length();
+            // Coverage-weighted: longer relative match scores better (lower).
+            // Exact matches (scores 0, 1) are always preferred over partials (100+).
+            return 100 + (100 - coveragePct);
+        }
+        return Integer.MAX_VALUE;
     }
 
     private PreTreatmentSearchResponse.TreatmentClassificationDto toClassificationDto(TreatmentRule rule) {
