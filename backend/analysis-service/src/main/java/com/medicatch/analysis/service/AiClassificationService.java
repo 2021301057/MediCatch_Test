@@ -54,27 +54,74 @@ public class AiClassificationService {
               "nextQuestions": []
             }
 
-            분류 기준:
-            - injuryDiseaseType: 사고·외상·골절이면 INJURY / 내과 질환·만성병이면 DISEASE / 판단 불가이면 UNKNOWN
-            - careType: 일반 외래이면 OUTPATIENT / 수술이면 SURGERY / MRI·CT·내시경이면 TEST / 약제이면 MEDICATION / 입원이면 INPATIENT
-            - treatmentCategory: 도수치료·체외충격파이면 REHAB / MRI·CT·초음파이면 IMAGING / 주사치료이면 INJECTION / 그 외는 GENERAL
-            - actualLossCategory 선택 기준:
-                일반 외래 → GENERAL_OUTPATIENT
-                일반 입원 → GENERAL_INPATIENT
-                일반 수술 → GENERAL_SURGERY
-                도수·체외충격파·비급여주사·비급여MRI → NON_COVERED_THREE
-                치과 외상 → DENTAL_INJURY / 치과 질병 → DENTAL_DISEASE
-                한방 급여 → KOREAN_MEDICINE_COVERED / 한방 비급여 → KOREAN_MEDICINE / 한약 → KOREAN_MEDICINE_HERBAL
-                약제 처방 → MEDICATION
-                진단 담보 전용(치료 아님) → null
-            - fixedBenefitCategory 선택 기준:
-                골절·파열 진단이면 FRACTURE_DIAGNOSIS
-                수술 수반이면 SURGERY_BENEFIT
-                암 관련이면 CANCER
-                입원 필요이면 HOSPITALIZATION_DAILY
-                해당 없으면 null
-            - needsUserConfirmation: 추가 정보 없이 분류가 불확실하면 true
-            - nextQuestions: needsUserConfirmation=true이면 2~3개, false이면 빈 배열 []
+            ── injuryDiseaseType ──
+            - INJURY: 사고·외상·골절·인대파열·근육파열·염좌·타박상·찰과상·화상·탈구 등 외력에 의한 손상
+            - DISEASE: 감기·위염·당뇨·고혈압·비염·피부염·암 등 내과·만성 질환
+            - UNKNOWN: 도수치료·MRI 등 치료/검사 자체 입력처럼 상해/질병 구분 불가
+
+            ── careType ──
+            - SURGERY: 수술(절제·봉합·절개·내시경수술 등)
+            - TEST: MRI·CT·초음파·내시경(검사 목적)·혈액검사·조직검사
+            - MEDICATION: 약 처방·약제 단독
+            - INPATIENT: 입원 치료
+            - OUTPATIENT: 위에 해당 없는 일반 외래
+
+            ── treatmentCategory ──
+            - REHAB: 도수치료·체외충격파·재활치료
+            - IMAGING: MRI·CT·초음파·X-ray
+            - INJECTION: 주사치료(프롤로·신경주사·인대주사 등)
+            - DENTAL: 치아·잇몸·치과
+            - KOREAN_MEDICINE: 한방·침·뜸·추나·한약·첩약
+            - SURGERY: 수술
+            - CANCER: 암 관련
+            - GENERAL: 그 외 일반 진료
+
+            ── benefitType ──
+            - COVERED: 건강보험 급여 항목 (일반 외래, 일반 수술, 입원 등)
+            - NON_COVERED: 비급여 항목 (도수치료·체외충격파·비급여MRI·비급여주사·미용·임플란트 등)
+            - MIXED: 급여+비급여 혼재 가능 (예: MRI는 급여도 있고 비급여도 있음)
+            - UNKNOWN: 판단 불가
+
+            ── actualLossCategory ──
+            - GENERAL_OUTPATIENT: 일반 외래 (감기·위염·피부과·정형외과 일반 외래 등)
+            - GENERAL_INPATIENT: 일반 입원
+            - GENERAL_SURGERY: 일반 수술 (급여 수술)
+            - NON_COVERED_THREE: 도수치료·체외충격파·비급여주사·비급여MRI (3대 비급여)
+            - DENTAL_INJURY: 치과 외상 (사고로 인한 치아 파절·탈구)
+            - DENTAL_DISEASE: 치과 질병 (충치·신경치료·임플란트·잇몸질환)
+            - KOREAN_MEDICINE_COVERED: 한방 급여 (침·뜸 급여 항목)
+            - KOREAN_MEDICINE: 한방 비급여 (추나·비급여 침)
+            - KOREAN_MEDICINE_HERBAL: 한약·첩약·탕약
+            - MEDICATION: 약제 처방 단독
+            - null: 진단 담보 전용이거나 분류 불가
+
+            ── fixedBenefitCategory (정액형 담보 — 엄격하게 적용) ──
+            - FRACTURE_DIAGNOSIS: 뼈 골절이 X-ray·CT로 확인되거나 강하게 의심되는 경우만.
+              ※ 인대파열·연골파열·근육파열·염좌·타박상·삐끗·발목 삐끗은 반드시 null
+            - SURGERY_BENEFIT: 수술이 명백히 수반되는 경우 (절제·봉합·절개 수술).
+              ※ 단순 외래 처치·주사 시술·봉합 없는 외래는 제외
+            - CANCER: 암(악성종양) 진단·치료가 명확한 경우
+            - HOSPITALIZATION_DAILY: 입원이 명백히 필요한 중증 상태 (입원 치료 키워드가 있는 경우).
+              ※ 통원 가능한 경증·외래 치료이면 null
+            - null: 위 4가지 중 명백히 해당하는 것이 없으면 반드시 null
+
+            ── confidence ──
+            - HIGH: 검색어만으로 모든 필드를 확실히 분류 가능
+            - MEDIUM: 대부분 분류 가능하나 일부 필드 불확실
+            - LOW: 핵심 필드(injuryDiseaseType 또는 careType)가 UNKNOWN이거나 추가 정보 필요
+
+            ── needsUserConfirmation ──
+            - true: confidence=LOW이거나 benefitType=UNKNOWN이거나 중요 필드가 UNKNOWN인 경우
+            - false: confidence=HIGH이고 주요 필드 모두 확정된 경우
+
+            ── nextQuestions (보험 관련 질문만) ──
+            - needsUserConfirmation=true이면 아래 예시 중 관련 있는 2~3개 선택 (그대로 쓰거나 변형 가능):
+              "사고(외상)로 인한 치료인가요, 아니면 질병 치료인가요?"
+              "입원이 필요한 상황인가요, 아니면 외래로 치료 가능한가요?"
+              "수술을 받았거나 받을 예정인가요?"
+              "이 치료는 건강보험 급여 항목인가요, 비급여 항목인가요?"
+            - needsUserConfirmation=false이면 반드시 빈 배열 []
+            - 의학적 치료 방법·병원 선택·예후 관련 질문은 절대 포함하지 마세요
             """;
 
     public AiClassificationService(ObjectMapper objectMapper) {
@@ -175,7 +222,7 @@ public class AiClassificationService {
         body.put("model", model);
         body.put("messages", messages);
         body.put("temperature", 0);
-        body.put("max_tokens", 400);
+        body.put("max_tokens", 600);
 
         String jsonBody = objectMapper.writeValueAsString(body);
 
