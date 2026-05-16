@@ -84,9 +84,15 @@ const actualLossConditionLabel = (rule) => {
   }
 };
 
+const MATCH_SOURCE_LABELS = {
+  DB_RULE: 'DB 룰 기준',
+  AI_CLASSIFICATION: 'AI 분류 기준',
+  HEURISTIC: '휴리스틱 분류',
+};
+
 const userResultMessage = (result) => {
   if (!result) return '';
-  if (!result.matched) return '아직 등록된 기준으로는 바로 확인하기 어려운 검색어입니다.';
+  if (!result.matched) return result.message || '아직 등록된 기준으로는 바로 확인하기 어려운 검색어입니다.';
   if (result.actualLoss?.applicable && result.fixedBenefits?.applicable) {
     return '실손 보장과 정액형 담보를 함께 확인했습니다.';
   }
@@ -535,7 +541,7 @@ export default function PreTreatmentSearch() {
               <div className="mc-card-head">
                 <div>
                   <div className="mc-card-title">분류 결과</div>
-                  <div className="mc-card-sub">DB 룰 기준</div>
+                  <div className="mc-card-sub">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</div>
                 </div>
               </div>
               <div className="mc-card-body">

@@ -41,18 +41,24 @@ public class AiClassificationService {
 
             반드시 아래 JSON만 반환하세요. 마크다운, 설명, 추가 텍스트 금지:
             {
+              "isValidMedicalQuery": true 또는 false,
               "normalizedQuery": "표준 의학 용어로 표현한 검색어",
               "injuryDiseaseType": "INJURY 또는 DISEASE 또는 UNKNOWN",
               "careType": "OUTPATIENT 또는 INPATIENT 또는 SURGERY 또는 TEST 또는 MEDICATION 또는 DIAGNOSIS 또는 UNKNOWN",
               "benefitType": "COVERED 또는 NON_COVERED 또는 MIXED 또는 UNKNOWN",
-              "treatmentCategory": "GENERAL 또는 DENTAL 또는 KOREAN_MEDICINE 또는 REHAB 또는 IMAGING 또는 INJECTION 또는 SURGERY 또는 CANCER",
+              "treatmentCategory": "GENERAL 또는 DENTAL 또는 KOREAN_MEDICINE 또는 REHAB 또는 IMAGING 또는 INJECTION 또는 SURGERY 또는 CANCER 또는 FRACTURE 또는 BURN 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY",
               "actualLossCategory": "GENERAL_OUTPATIENT 또는 GENERAL_INPATIENT 또는 GENERAL_SURGERY 또는 NON_COVERED_THREE 또는 DENTAL_INJURY 또는 DENTAL_DISEASE 또는 KOREAN_MEDICINE_COVERED 또는 KOREAN_MEDICINE 또는 KOREAN_MEDICINE_HERBAL 또는 MEDICATION 또는 null",
-              "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 null",
+              "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 BURN_DIAGNOSIS 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY 또는 null",
               "confidence": "HIGH 또는 MEDIUM 또는 LOW",
               "needsUserConfirmation": true 또는 false,
               "reason": "분류 근거 한 문장 최대 80자",
               "nextQuestions": []
             }
+
+            ── isValidMedicalQuery ──
+            - false: 입력이 의료·보험과 명백히 무관한 경우 (인사말, 무의미한 텍스트, 욕설, 이모지만 있는 경우 등)
+            - true: 의료·보험과 관련 가능성이 있는 모든 경우 (증상·진단명·치료명·검사명 등)
+            ※ 애매한 경우 반드시 true로 설정할 것
 
             ── injuryDiseaseType ──
             - INJURY: 사고·외상·골절·인대파열·근육파열·염좌·타박상·찰과상·화상·탈구 등 외력에 의한 손상
@@ -74,6 +80,10 @@ public class AiClassificationService {
             - KOREAN_MEDICINE: 한방·침·뜸·추나·한약·첩약
             - SURGERY: 수술
             - CANCER: 암 관련
+            - FRACTURE: 골절(뼈 골절)이 확인되거나 강하게 의심되는 경우
+            - BURN: 화상 진단·치료
+            - CEREBROVASCULAR: 뇌졸중·뇌경색·뇌출혈 등 뇌혈관 질환
+            - DEATH_DISABILITY: 사망 또는 후유장해 관련
             - GENERAL: 그 외 일반 진료
 
             ── benefitType ──
@@ -103,7 +113,10 @@ public class AiClassificationService {
             - CANCER: 암(악성종양) 진단·치료가 명확한 경우
             - HOSPITALIZATION_DAILY: 입원이 명백히 필요한 중증 상태 (입원 치료 키워드가 있는 경우).
               ※ 통원 가능한 경증·외래 치료이면 null
-            - null: 위 4가지 중 명백히 해당하는 것이 없으면 반드시 null
+            - BURN_DIAGNOSIS: 화상 진단이 명확한 경우 (중증 화상)
+            - CEREBROVASCULAR: 뇌졸중·뇌경색·뇌출혈이 확인된 경우
+            - DEATH_DISABILITY: 사망 또는 후유장해가 명확한 경우 (상해/질병 구분 불가 시)
+            - null: 위 항목 중 명백히 해당하는 것이 없으면 반드시 null
 
             ── confidence ──
             - HIGH: 검색어만으로 모든 필드를 확실히 분류 가능
@@ -261,6 +274,7 @@ public class AiClassificationService {
             }
 
             return AiClassificationResult.builder()
+                    .isValidMedicalQuery(node.path("isValidMedicalQuery").asBoolean(true))
                     .normalizedQuery(textOrDefault(node, "normalizedQuery", originalQuery))
                     .injuryDiseaseType(textOrDefault(node, "injuryDiseaseType", "UNKNOWN"))
                     .careType(textOrDefault(node, "careType", "OUTPATIENT"))

@@ -22,4 +22,7 @@ public class AiClassificationResult {
     /** AI_CLASSIFICATION or HEURISTIC */
     @Builder.Default
     private String source = "AI_CLASSIFICATION";
+    /** false이면 의료/보험 무관 쿼리로 판단 — matched:false 처리 */
+    @Builder.Default
+    private boolean isValidMedicalQuery = true;
 }

@@ -66,12 +66,19 @@ public class PreTreatmentSearchService {
             return unmatched("", "검색어를 입력해주세요.");
         }
 
+        if (isObviouslyNonMedical(query)) {
+            return unmatched(query, "의료 또는 보험 관련 검색어를 입력해주세요.");
+        }
+
         Optional<TreatmentRule> matchedRule = findBestTreatmentRule(query);
         Long userId = request != null ? request.getUserId() : null;
 
         if (matchedRule.isEmpty()) {
             AiClassificationResult aiResult = aiClassificationService.classify(query);
             if (aiResult != null) {
+                if (!aiResult.isValidMedicalQuery()) {
+                    return unmatched(query, "의료 또는 보험 관련 검색어를 입력해주세요.");
+                }
                 boolean isHeuristic = "HEURISTIC".equals(aiResult.getSource());
                 List<PolicyInfo> activePolicies = loadActivePolicies(userId);
                 TreatmentRule syntheticRule = toSyntheticRule(query, aiResult);
@@ -225,6 +232,15 @@ public class PreTreatmentSearchService {
             return "질병 치료로, 급여/비급여 항목 구분에 따라 실손 보장 기준이 달라질 수 있습니다.";
         }
         return "상해/질병 구분과 급여/비급여 여부에 따라 실손 보장 기준이 달라질 수 있습니다.";
+    }
+
+    // 명백한 비의료 쿼리를 AI 호출 전에 차단 (순수 숫자, 1자, 특수문자/이모지만 있는 경우)
+    private boolean isObviouslyNonMedical(String query) {
+        String normalized = normalizeForMatch(query);
+        if (normalized.length() < 2) return true;
+        if (normalized.matches("[0-9]+")) return true;
+        if (normalized.matches("[^가-힣a-zA-Z0-9]+")) return true;
+        return false;
     }
 
     private Optional<TreatmentRule> findBestTreatmentRule(String query) {
