@@ -142,7 +142,7 @@ public class AiClassificationService {
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .writeTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -175,6 +175,12 @@ public class AiClassificationService {
         boolean isDental    = containsAny(n, "치아", "치과", "치수", "잇몸", "치주", "신경치료", "임플란트", "치아파절", "치아균열");
         boolean isKorean    = containsAny(n, "한방", "한의원", "침치료", "뜸", "추나", "첩약");
         boolean isHerbal    = containsAny(n, "한약", "탕약", "첩약");
+        boolean isCancer    = containsAny(n, "암", "악성종양", "암수술", "항암", "방사선치료");
+        boolean isFracture  = containsAny(n, "골절");
+        boolean isBurn      = containsAny(n, "화상");
+        boolean isCerebrovascular = containsAny(n, "뇌졸중", "뇌경색", "뇌출혈");
+        boolean isDeathDisability = containsAny(n, "사망", "후유장해");
+        boolean isInpatient = containsAny(n, "입원");
 
         // 상해/질병 구분
         boolean isInjury   = containsAny(n, "골절", "파열", "인대파열", "근육파열", "타박", "삐끗", "염좌",
@@ -191,6 +197,11 @@ public class AiClassificationService {
                 : isRehab || isInjection ? "REHAB"
                 : isDental ? "DENTAL"
                 : isKorean || isHerbal ? "KOREAN_MEDICINE"
+                : isCancer ? "CANCER"
+                : isFracture ? "FRACTURE"
+                : isBurn ? "BURN"
+                : isCerebrovascular ? "CEREBROVASCULAR"
+                : isDeathDisability ? "DEATH_DISABILITY"
                 : isSurgery ? "SURGERY"
                 : "GENERAL";
         String actualLossCategory = isHerbal ? "KOREAN_MEDICINE_HERBAL"
@@ -198,7 +209,16 @@ public class AiClassificationService {
                 : isDental ? (isInjury ? "DENTAL_INJURY" : "DENTAL_DISEASE")
                 : isRehab || isInjection ? "NON_COVERED_THREE"
                 : isSurgery ? "GENERAL_SURGERY"
+                : isInpatient ? "GENERAL_INPATIENT"
                 : "GENERAL_OUTPATIENT";
+        String fixedBenefitCategory = isCancer ? "CANCER"
+                : isFracture ? "FRACTURE_DIAGNOSIS"
+                : isBurn ? "BURN_DIAGNOSIS"
+                : isCerebrovascular ? "CEREBROVASCULAR"
+                : isDeathDisability ? "DEATH_DISABILITY"
+                : isSurgery ? "SURGERY_BENEFIT"
+                : isInpatient ? "HOSPITALIZATION_DAILY"
+                : null;
 
         return AiClassificationResult.builder()
                 .normalizedQuery(query)
@@ -207,7 +227,7 @@ public class AiClassificationService {
                 .benefitType("UNKNOWN")
                 .treatmentCategory(treatmentCategory)
                 .actualLossCategory(actualLossCategory)
-                .fixedBenefitCategory(null)
+                .fixedBenefitCategory(fixedBenefitCategory)
                 .confidence("LOW")
                 .needsUserConfirmation(true)
                 .reason("키워드 기반 추정 결과입니다. AI 분류를 사용할 수 없어 정확도가 낮을 수 있습니다.")

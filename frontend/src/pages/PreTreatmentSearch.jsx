@@ -88,6 +88,7 @@ const MATCH_SOURCE_LABELS = {
   DB_RULE: 'DB 룰 기준',
   AI_CLASSIFICATION: 'AI 분류 기준',
   HEURISTIC: '휴리스틱 분류',
+  NONE: '매칭 없음',
 };
 
 const userResultMessage = (result) => {
@@ -185,7 +186,7 @@ function SummaryTags({ result }) {
       <span style={tagStyle('good')}>{labelOf(INJURY_DISEASE_LABELS, classification.injuryDiseaseType)}</span>
       <span style={tagStyle('info')}>{labelOf(CARE_TYPE_LABELS, classification.careType)}</span>
       <span style={tagStyle('warn')}>{labelOf(BENEFIT_TYPE_LABELS, classification.benefitType)}</span>
-      <span style={tagStyle('info')}>{result.confidence === 'HIGH' ? '높은 일치도' : '확인 필요'}</span>
+      <span style={tagStyle('info')}>{result.confidence === 'HIGH' ? '높은 일치도' : result.confidence === 'MEDIUM' ? '보통 일치도' : '확인 필요'}</span>
     </div>
   );
 }
@@ -532,39 +533,41 @@ export default function PreTreatmentSearch() {
               )}
             </div>
 
-            <FixedBenefitSection fixedBenefits={result.fixedBenefits} />
-            <ActualLossSection actualLoss={result.actualLoss} />
+            {result.matched && <FixedBenefitSection fixedBenefits={result.fixedBenefits} />}
+            {result.matched && <ActualLossSection actualLoss={result.actualLoss} />}
           </div>
 
           <div className="mc-stack-sm">
-            <div className="mc-card">
-              <div className="mc-card-head">
-                <div>
-                  <div className="mc-card-title">분류 결과</div>
-                  <div className="mc-card-sub">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</div>
-                </div>
-              </div>
-              <div className="mc-card-body">
-                <div className="mc-stack-xs">
-                  <div className="mc-kv">
-                    <span className="mc-kv-key">상해/질병</span>
-                    <span className="mc-kv-val">{labelOf(INJURY_DISEASE_LABELS, result.classification?.injuryDiseaseType)}</span>
-                  </div>
-                  <div className="mc-kv">
-                    <span className="mc-kv-key">진료 유형</span>
-                    <span className="mc-kv-val">{labelOf(CARE_TYPE_LABELS, result.classification?.careType)}</span>
-                  </div>
-                  <div className="mc-kv">
-                    <span className="mc-kv-key">급여 여부</span>
-                    <span className="mc-kv-val">{labelOf(BENEFIT_TYPE_LABELS, result.classification?.benefitType)}</span>
-                  </div>
-                  <div className="mc-kv">
-                    <span className="mc-kv-key">매칭 출처</span>
-                    <span className="mc-kv-val">{result.matchSource}</span>
+            {result.matched && (
+              <div className="mc-card">
+                <div className="mc-card-head">
+                  <div>
+                    <div className="mc-card-title">분류 결과</div>
+                    <div className="mc-card-sub">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</div>
                   </div>
                 </div>
+                <div className="mc-card-body">
+                  <div className="mc-stack-xs">
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">상해/질병</span>
+                      <span className="mc-kv-val">{labelOf(INJURY_DISEASE_LABELS, result.classification?.injuryDiseaseType)}</span>
+                    </div>
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">진료 유형</span>
+                      <span className="mc-kv-val">{labelOf(CARE_TYPE_LABELS, result.classification?.careType)}</span>
+                    </div>
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">급여 여부</span>
+                      <span className="mc-kv-val">{labelOf(BENEFIT_TYPE_LABELS, result.classification?.benefitType)}</span>
+                    </div>
+                    <div className="mc-kv">
+                      <span className="mc-kv-key">매칭 출처</span>
+                      <span className="mc-kv-val">{result.matchSource}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
             {result.nextQuestions?.length > 0 && (
               <div className="mc-card">

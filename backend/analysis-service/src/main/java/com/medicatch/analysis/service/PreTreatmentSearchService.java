@@ -503,9 +503,8 @@ public class PreTreatmentSearchService {
         }
 
         String category = rule.getFixedBenefitCategory();
-        List<FixedBenefitMatchRule> rules = fixedBenefitMatchRuleRepository.findByIsActiveOrderByPriorityAsc(true).stream()
-                .filter(matchRule -> matchesFixedBenefitCategory(category, matchRule.getFixedBenefitCategory()))
-                .toList();
+        List<FixedBenefitMatchRule> rules = fixedBenefitMatchRuleRepository
+                .findByCategoryOrPrefixAndIsActive(category, category + "_%", true);
         List<String> contextTerms = rule.getKeyword() != null ? List.of(rule.getKeyword()) : List.of();
         List<PreTreatmentSearchResponse.FixedBenefitOwnedGroupDto> ownedGroups = rules.stream()
                 .map(matchRule -> buildOwnedGroup(matchRule, policies, contextTerms))
@@ -818,7 +817,7 @@ public class PreTreatmentSearchService {
             return ruleValue != null && ruleValue.startsWith("DENTAL");
         }
         if ("KOREAN_MEDICINE".equals(treatmentValue)) {
-            return "KOREAN_MEDICINE".equals(ruleValue) || "KOREAN_MEDICINE_COVERED".equals(ruleValue);
+            return ruleValue != null && ruleValue.startsWith("KOREAN_MEDICINE");
         }
         return false;
     }
