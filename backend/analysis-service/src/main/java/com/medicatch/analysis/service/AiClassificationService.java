@@ -48,7 +48,7 @@ public class AiClassificationService {
               "benefitType": "COVERED 또는 NON_COVERED 또는 MIXED 또는 UNKNOWN",
               "treatmentCategory": "GENERAL 또는 DENTAL 또는 KOREAN_MEDICINE 또는 REHAB 또는 IMAGING 또는 INJECTION 또는 SURGERY 또는 CANCER 또는 FRACTURE 또는 BURN 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY",
               "actualLossCategory": "GENERAL_OUTPATIENT 또는 GENERAL_INPATIENT 또는 GENERAL_SURGERY 또는 NON_COVERED_THREE 또는 DENTAL_INJURY 또는 DENTAL_DISEASE 또는 KOREAN_MEDICINE_COVERED 또는 KOREAN_MEDICINE 또는 KOREAN_MEDICINE_CHUNA 또는 KOREAN_MEDICINE_HERBAL 또는 MEDICATION 또는 null",
-              "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 BURN_DIAGNOSIS 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY 또는 null",
+              "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 OUTPATIENT_DAILY 또는 BURN_DIAGNOSIS 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY 또는 null",
               "confidence": "HIGH 또는 MEDIUM 또는 LOW",
               "needsUserConfirmation": true 또는 false,
               "reason": "분류 근거 한 문장 최대 80자",
@@ -114,6 +114,7 @@ public class AiClassificationService {
             - CANCER: 암(악성종양) 진단·치료가 명확한 경우
             - HOSPITALIZATION_DAILY: 입원이 명백히 필요한 중증 상태 (입원 치료 키워드가 있는 경우).
               ※ 통원 가능한 경증·외래 치료이면 null
+            - OUTPATIENT_DAILY: 통원(외래) 진료가 명확한 경우 (통원·외래 키워드가 있고 입원이 불필요한 경우)
             - BURN_DIAGNOSIS: 화상 진단이 명확한 경우 (중증 화상)
             - CEREBROVASCULAR: 뇌졸중·뇌경색·뇌출혈이 확인된 경우
             - DEATH_DISABILITY: 사망 또는 후유장해가 명확한 경우 (상해/질병 구분 불가 시)
@@ -210,6 +211,7 @@ public class AiClassificationService {
                 : isKorean ? "KOREAN_MEDICINE"
                 : isDental ? (isInjury ? "DENTAL_INJURY" : "DENTAL_DISEASE")
                 : isRehab || isInjection ? "NON_COVERED_THREE"
+                : isTest ? "NON_COVERED_THREE"
                 : isSurgery ? "GENERAL_SURGERY"
                 : isInpatient ? "GENERAL_INPATIENT"
                 : "GENERAL_OUTPATIENT";
@@ -220,6 +222,7 @@ public class AiClassificationService {
                 : isDeathDisability ? "DEATH_DISABILITY"
                 : isSurgery ? "SURGERY_BENEFIT"
                 : isInpatient ? "HOSPITALIZATION_DAILY"
+                : (!isSurgery && !isInpatient && !isTest) ? "OUTPATIENT_DAILY"
                 : null;
 
         return AiClassificationResult.builder()

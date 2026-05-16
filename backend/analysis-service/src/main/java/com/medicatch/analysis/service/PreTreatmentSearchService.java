@@ -798,6 +798,7 @@ public class PreTreatmentSearchService {
     private boolean sameOrUnknown(String treatmentValue, String ruleValue) {
         return "UNKNOWN".equals(treatmentValue)
                 || "DIAGNOSIS".equals(treatmentValue)
+                || "TEST".equals(treatmentValue)
                 || Objects.equals(treatmentValue, ruleValue);
     }
 

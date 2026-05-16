@@ -562,7 +562,7 @@ export default function PreTreatmentSearch() {
                     </div>
                     <div className="mc-kv">
                       <span className="mc-kv-key">매칭 출처</span>
-                      <span className="mc-kv-val">{result.matchSource}</span>
+                      <span className="mc-kv-val">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</span>
                     </div>
                   </div>
                 </div>

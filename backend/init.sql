@@ -325,8 +325,13 @@ SET actual_loss_category = 'NON_COVERED_THREE',
 WHERE keyword = '초음파'
   AND actual_loss_category = 'GENERAL_OUTPATIENT';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT 'CT', '컴퓨터단층촬영,씨티,CT검사,복부CT,흉부CT', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'GENERAL_OUTPATIENT', NULL, TRUE, 'CT 검사는 급여 인정 여부와 촬영 목적에 따라 실손 보장 기준이 달라질 수 있습니다.', 110
+SELECT 'CT', '컴퓨터단층촬영,씨티,CT검사,복부CT,흉부CT', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'NON_COVERED_THREE', NULL, TRUE, 'CT는 급여/비급여 여부에 따라 보장 기준이 다릅니다. 비급여 CT는 세대별 비급여 특약 조건을 확인하세요.', 110
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = 'CT');
+UPDATE treatment_rules
+SET actual_loss_category = 'NON_COVERED_THREE',
+    caution_message      = 'CT는 급여/비급여 여부에 따라 보장 기준이 다릅니다. 비급여 CT는 세대별 비급여 특약 조건을 확인하세요.'
+WHERE keyword = 'CT'
+  AND actual_loss_category = 'GENERAL_OUTPATIENT';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '치아파절', '치아 파절,치아깨짐,이빨 깨짐,치아 골절', 'INJURY', 'OUTPATIENT', 'MIXED', 'DENTAL', 'DENTAL_INJURY', 'FRACTURE_DIAGNOSIS', TRUE, '치아파절은 상해 치과 치료와 골절 담보가 함께 확인될 수 있으며, 담보별 제외 조건 확인이 필요합니다.', 111
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '치아파절');
