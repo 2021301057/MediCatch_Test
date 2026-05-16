@@ -181,8 +181,47 @@ public class PreTreatmentSearchService {
                 .actualLossCategory(ai.getActualLossCategory())
                 .fixedBenefitCategory(ai.getFixedBenefitCategory())
                 .needsUserConfirmation(ai.isNeedsUserConfirmation())
-                .cautionMessage(ai.getReason())
+                .cautionMessage(buildAiCautionMessage(ai))
                 .build();
+    }
+
+    private String buildAiCautionMessage(AiClassificationResult ai) {
+        String injuryDisease = ai.getInjuryDiseaseType();
+        String careType = ai.getCareType();
+        String treatmentCategory = ai.getTreatmentCategory();
+        String actualLossCategory = ai.getActualLossCategory();
+
+        if ("NON_COVERED_THREE".equals(actualLossCategory)) {
+            return "비급여 항목으로, 세대별 특약 가입 여부에 따라 보장 여부와 한도가 달라질 수 있습니다.";
+        }
+        if ("REHAB".equals(treatmentCategory)) {
+            return "재활치료는 급여/비급여 여부와 특약 가입 여부에 따라 보장 기준이 달라질 수 있습니다.";
+        }
+        if ("IMAGING".equals(treatmentCategory)) {
+            return "영상 검사는 급여 인정 여부에 따라 실손 보장 기준이 달라질 수 있습니다.";
+        }
+        if ("INJECTION".equals(treatmentCategory)) {
+            return "주사 치료는 급여/비급여 여부와 특약 가입 여부에 따라 보장 기준이 달라질 수 있습니다.";
+        }
+        if ("DENTAL".equals(treatmentCategory)) {
+            return "치과 치료는 상해/질병 구분과 급여/비급여 여부에 따라 보장 범위가 달라질 수 있습니다.";
+        }
+        if ("KOREAN_MEDICINE".equals(treatmentCategory)) {
+            return "한방 치료는 급여/비급여 여부와 세대별 면책 조건 확인이 필요합니다.";
+        }
+        if ("SURGERY".equals(careType)) {
+            return "수술 여부와 상해/질병 구분에 따라 실손 및 수술비 담보 보장 기준이 달라질 수 있습니다.";
+        }
+        if ("INPATIENT".equals(careType)) {
+            return "입원 치료의 경우 상해/질병 구분에 따라 적용 담보와 보장 기준이 달라질 수 있습니다.";
+        }
+        if ("INJURY".equals(injuryDisease)) {
+            return "상해 치료로, 급여/비급여 항목과 치료 방법에 따라 실손 보장 기준이 달라질 수 있습니다.";
+        }
+        if ("DISEASE".equals(injuryDisease)) {
+            return "질병 치료로, 급여/비급여 항목 구분에 따라 실손 보장 기준이 달라질 수 있습니다.";
+        }
+        return "상해/질병 구분과 급여/비급여 여부에 따라 실손 보장 기준이 달라질 수 있습니다.";
     }
 
     private Optional<TreatmentRule> findBestTreatmentRule(String query) {
@@ -721,7 +760,7 @@ public class PreTreatmentSearchService {
                         .rules(List.of())
                         .ownedGroups(List.of())
                         .build())
-                .nextQuestions(List.of("검색어를 더 구체적으로 입력하거나, DB 룰 또는 OpenAI 분류 보강이 필요합니다."))
+                .nextQuestions(List.of("검색어를 더 구체적으로 입력하거나, 정확한 진단명으로 다시 검색해보세요."))
                 .message(message)
                 .build();
     }

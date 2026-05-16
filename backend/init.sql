@@ -278,8 +278,12 @@ WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '사망후유장
 
 -- Expanded common pre-treatment search terms
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT '발목 인대 파열', '발목부상,발목 염좌,인대손상,인대파열,발목 통증', 'INJURY', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '상해 통원/입원 여부와 검사·치료 항목의 급여 여부에 따라 실손 보장 기준이 달라질 수 있습니다.', 101
+SELECT '발목 인대 파열', '발목부상,발목 염좌,인대손상,인대파열,발목 통증,발목삐끗,발목삐끗함,발목접질림,접질림,염좌,발목염좌', 'INJURY', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '상해 통원/입원 여부와 검사·치료 항목의 급여 여부에 따라 실손 보장 기준이 달라질 수 있습니다.', 101
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '발목 인대 파열');
+UPDATE treatment_rules
+SET synonyms = '발목부상,발목 염좌,인대손상,인대파열,발목 통증,발목삐끗,발목삐끗함,발목접질림,접질림,염좌,발목염좌'
+WHERE keyword = '발목 인대 파열'
+  AND synonyms NOT LIKE '%삐끗%';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '허리디스크', '추간판탈출증,디스크,요추디스크,목디스크,요통,허리 통증', 'DISEASE', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '검사, 주사, 수술, 물리치료 등 실제 치료 항목에 따라 급여/비급여와 보장 기준이 달라질 수 있습니다.', 102
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '허리디스크');
