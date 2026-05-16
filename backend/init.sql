@@ -240,8 +240,12 @@ INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, 
 SELECT '약제', '약,처방약,처방전,조제약,복약', 'UNKNOWN', 'MEDICATION', 'COVERED', 'MEDICATION', 'MEDICATION', NULL, TRUE, '약제는 처방 조제 여부와 급여/비급여 여부 확인이 필요합니다.', 32
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '약제');
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT '수술', '수술비,질병수술,상해수술,암수술', 'UNKNOWN', 'SURGERY', 'MIXED', 'SURGERY', 'GENERAL_SURGERY', 'SURGERY_BENEFIT', TRUE, '질병/상해/암 수술 여부와 수술 분류에 따라 정액형 담보가 달라질 수 있습니다.', 40
+SELECT '수술', '수술비,질병수술,상해수술', 'UNKNOWN', 'SURGERY', 'MIXED', 'SURGERY', 'GENERAL_SURGERY', 'SURGERY_BENEFIT', TRUE, '질병/상해/암 수술 여부와 수술 분류에 따라 정액형 담보가 달라질 수 있습니다.', 40
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '수술');
+UPDATE treatment_rules
+SET synonyms = '수술비,질병수술,상해수술'
+WHERE keyword = '수술'
+  AND synonyms LIKE '%암수술%';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '도수치료', '도수,수기치료,재활도수', 'UNKNOWN', 'OUTPATIENT', 'NON_COVERED', 'REHAB', 'NON_COVERED_THREE', NULL, TRUE, '도수치료는 세대와 특약 가입 여부에 따라 보장 여부와 한도가 크게 달라질 수 있습니다.', 50
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '도수치료');
@@ -393,6 +397,12 @@ WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_ca
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
 SELECT 'OUTPATIENT_DAILY', '통원 담보', '통원,외래,통원의료비,암통원', '실손의료비', '정액형 통원 담보를 찾습니다.', 100
 WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'OUTPATIENT_DAILY');
+INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
+SELECT 'DEATH_DISABILITY', '사망·후유장해', '사망보험금,사망,후유장해,상해사망,질병사망,상해후유장해,재해사망,일반사망', NULL, '사망 및 후유장해 관련 정액형 담보를 찾습니다.', 85
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'DEATH_DISABILITY');
+INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
+SELECT 'CEREBROVASCULAR', '뇌혈관 진단비', '뇌혈관진단,뇌졸중진단,뇌경색진단,뇌출혈진단,뇌혈관', NULL, '뇌졸중/뇌혈관 관련 정액형 진단비 담보를 찾습니다.', 95
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'CEREBROVASCULAR');
 
 -- Initial actual loss benefit rules
 INSERT INTO insurance_benefit_rules (generation_code, care_type, benefit_type, treatment_category, actual_loss_category, reimbursement_rate, patient_copay_rate, fixed_deductible, deductible_method, requires_rider, is_excluded, note, priority)

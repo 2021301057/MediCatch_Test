@@ -194,6 +194,9 @@ public class PreTreatmentSearchService {
         if ("NON_COVERED_THREE".equals(actualLossCategory)) {
             return "비급여 항목으로, 세대별 특약 가입 여부에 따라 보장 여부와 한도가 달라질 수 있습니다.";
         }
+        if ("CANCER".equals(treatmentCategory)) {
+            return "암 진단·치료 관련으로, 암 종류와 면책기간·감액기간에 따라 보장 여부가 크게 달라질 수 있습니다.";
+        }
         if ("REHAB".equals(treatmentCategory)) {
             return "재활치료는 급여/비급여 여부와 특약 가입 여부에 따라 보장 기준이 달라질 수 있습니다.";
         }
