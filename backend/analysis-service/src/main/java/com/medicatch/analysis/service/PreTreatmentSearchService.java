@@ -672,13 +672,6 @@ public class PreTreatmentSearchService {
                 .build();
     }
 
-    private boolean matchesFixedBenefitCategory(String treatmentCategory, String ruleCategory) {
-        if (isBlank(treatmentCategory) || isBlank(ruleCategory)) {
-            return false;
-        }
-        return ruleCategory.equals(treatmentCategory) || ruleCategory.startsWith(treatmentCategory + "_");
-    }
-
     private List<String> buildNextQuestions(TreatmentRule rule,
                                             PreTreatmentSearchResponse.ActualLossResultDto actualLoss,
                                             PreTreatmentSearchResponse.FixedBenefitResultDto fixedBenefits) {
@@ -803,7 +796,9 @@ public class PreTreatmentSearchService {
     }
 
     private boolean sameOrUnknown(String treatmentValue, String ruleValue) {
-        return "UNKNOWN".equals(treatmentValue) || Objects.equals(treatmentValue, ruleValue);
+        return "UNKNOWN".equals(treatmentValue)
+                || "DIAGNOSIS".equals(treatmentValue)
+                || Objects.equals(treatmentValue, ruleValue);
     }
 
     private boolean sameOrMixed(String treatmentValue, String ruleValue) {

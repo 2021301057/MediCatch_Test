@@ -234,8 +234,12 @@ INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, 
 SELECT '입원', '입원치료,병실,중환자실', 'UNKNOWN', 'INPATIENT', 'COVERED', 'GENERAL', 'GENERAL_INPATIENT', 'HOSPITALIZATION_DAILY', TRUE, '상해 입원인지 질병 입원인지에 따라 적용 담보가 달라질 수 있습니다.', 30
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '입원');
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT '통원', '외래,외래진료,병원진료,의원진료', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '통원은 급여/비급여와 병원 규모에 따라 공제금이 달라질 수 있습니다.', 31
+SELECT '통원', '외래,외래진료,병원진료,의원진료', 'UNKNOWN', 'OUTPATIENT', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', 'OUTPATIENT_DAILY', TRUE, '통원은 급여/비급여와 병원 규모에 따라 공제금이 달라질 수 있습니다.', 31
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '통원');
+UPDATE treatment_rules
+SET fixed_benefit_category = 'OUTPATIENT_DAILY'
+WHERE keyword = '통원'
+  AND fixed_benefit_category IS NULL;
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '약제', '약,처방약,처방전,조제약,복약', 'UNKNOWN', 'MEDICATION', 'COVERED', 'MEDICATION', 'MEDICATION', NULL, TRUE, '약제는 처방 조제 여부와 급여/비급여 여부 확인이 필요합니다.', 32
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '약제');
@@ -313,8 +317,13 @@ INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, 
 SELECT '내시경', '위내시경,대장내시경,수면내시경,용종절제', 'DISEASE', 'TEST', 'MIXED', 'GENERAL', 'GENERAL_OUTPATIENT', NULL, TRUE, '검사 목적, 수면 여부, 용종 제거 등 처치 여부에 따라 급여/비급여와 보장 기준이 달라질 수 있습니다.', 108
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '내시경');
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT '초음파', '복부초음파,갑상선초음파,유방초음파,심장초음파', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'GENERAL_OUTPATIENT', NULL, TRUE, '초음파는 진단 목적과 급여 인정 여부에 따라 실손 보장 기준이 달라질 수 있습니다.', 109
+SELECT '초음파', '복부초음파,갑상선초음파,유방초음파,심장초음파', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'NON_COVERED_THREE', NULL, TRUE, '초음파는 급여/비급여 여부에 따라 보장 기준이 다릅니다. 비급여 초음파는 세대별 비급여 특약 조건을 확인하세요.', 109
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '초음파');
+UPDATE treatment_rules
+SET actual_loss_category = 'NON_COVERED_THREE',
+    caution_message      = '초음파는 급여/비급여 여부에 따라 보장 기준이 다릅니다. 비급여 초음파는 세대별 비급여 특약 조건을 확인하세요.'
+WHERE keyword = '초음파'
+  AND actual_loss_category = 'GENERAL_OUTPATIENT';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT 'CT', '컴퓨터단층촬영,씨티,CT검사,복부CT,흉부CT', 'UNKNOWN', 'TEST', 'MIXED', 'IMAGING', 'GENERAL_OUTPATIENT', NULL, TRUE, 'CT 검사는 급여 인정 여부와 촬영 목적에 따라 실손 보장 기준이 달라질 수 있습니다.', 110
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = 'CT');
@@ -392,11 +401,17 @@ INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, mat
 SELECT 'BURN_DIAGNOSIS', '화상 진단비', '화상진단,화상 진단,중증화상', NULL, '화상 진단 관련 정액형 담보를 찾습니다.', 70
 WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'BURN_DIAGNOSIS');
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
-SELECT 'INJURY_DEATH_DISABILITY', '상해 사망·후유장해', '상해사망,상해후유장해,일반상해 사망후유장해,상해50%이상후유장해', '질병', '상해 사망 및 후유장해 관련 정액형 담보를 찾습니다.', 80
-WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'INJURY_DEATH_DISABILITY');
+SELECT 'DEATH_DISABILITY_INJURY', '상해 사망·후유장해', '상해사망,상해후유장해,일반상해 사망후유장해,상해50%이상후유장해', '질병', '상해 사망 및 후유장해 관련 정액형 담보를 찾습니다.', 80
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'DEATH_DISABILITY_INJURY');
+UPDATE fixed_benefit_match_rules
+SET fixed_benefit_category = 'DEATH_DISABILITY_INJURY'
+WHERE fixed_benefit_category = 'INJURY_DEATH_DISABILITY';
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
-SELECT 'DISEASE_DEATH', '질병 사망', '질병사망,질병 사망', '상해', '질병 사망 관련 정액형 담보를 찾습니다.', 90
-WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'DISEASE_DEATH');
+SELECT 'DEATH_DISABILITY_DISEASE', '질병 사망', '질병사망,질병 사망', '상해', '질병 사망 관련 정액형 담보를 찾습니다.', 90
+WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'DEATH_DISABILITY_DISEASE');
+UPDATE fixed_benefit_match_rules
+SET fixed_benefit_category = 'DEATH_DISABILITY_DISEASE'
+WHERE fixed_benefit_category = 'DISEASE_DEATH';
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
 SELECT 'OUTPATIENT_DAILY', '통원 담보', '통원,외래,통원의료비,암통원', '실손의료비', '정액형 통원 담보를 찾습니다.', 100
 WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'OUTPATIENT_DAILY');

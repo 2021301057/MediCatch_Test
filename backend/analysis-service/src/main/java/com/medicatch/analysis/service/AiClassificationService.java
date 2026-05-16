@@ -44,10 +44,10 @@ public class AiClassificationService {
               "isValidMedicalQuery": true 또는 false,
               "normalizedQuery": "표준 의학 용어로 표현한 검색어",
               "injuryDiseaseType": "INJURY 또는 DISEASE 또는 UNKNOWN",
-              "careType": "OUTPATIENT 또는 INPATIENT 또는 SURGERY 또는 TEST 또는 MEDICATION 또는 DIAGNOSIS 또는 UNKNOWN",
+              "careType": "OUTPATIENT 또는 INPATIENT 또는 SURGERY 또는 TEST 또는 MEDICATION 또는 UNKNOWN",
               "benefitType": "COVERED 또는 NON_COVERED 또는 MIXED 또는 UNKNOWN",
               "treatmentCategory": "GENERAL 또는 DENTAL 또는 KOREAN_MEDICINE 또는 REHAB 또는 IMAGING 또는 INJECTION 또는 SURGERY 또는 CANCER 또는 FRACTURE 또는 BURN 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY",
-              "actualLossCategory": "GENERAL_OUTPATIENT 또는 GENERAL_INPATIENT 또는 GENERAL_SURGERY 또는 NON_COVERED_THREE 또는 DENTAL_INJURY 또는 DENTAL_DISEASE 또는 KOREAN_MEDICINE_COVERED 또는 KOREAN_MEDICINE 또는 KOREAN_MEDICINE_HERBAL 또는 MEDICATION 또는 null",
+              "actualLossCategory": "GENERAL_OUTPATIENT 또는 GENERAL_INPATIENT 또는 GENERAL_SURGERY 또는 NON_COVERED_THREE 또는 DENTAL_INJURY 또는 DENTAL_DISEASE 또는 KOREAN_MEDICINE_COVERED 또는 KOREAN_MEDICINE 또는 KOREAN_MEDICINE_CHUNA 또는 KOREAN_MEDICINE_HERBAL 또는 MEDICATION 또는 null",
               "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 BURN_DIAGNOSIS 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY 또는 null",
               "confidence": "HIGH 또는 MEDIUM 또는 LOW",
               "needsUserConfirmation": true 또는 false,
@@ -69,8 +69,8 @@ public class AiClassificationService {
             - SURGERY: 수술(절제·봉합·절개·내시경수술 등)
             - TEST: MRI·CT·초음파·내시경(검사 목적)·혈액검사·조직검사
             - MEDICATION: 약 처방·약제 단독
-            - INPATIENT: 입원 치료
-            - OUTPATIENT: 위에 해당 없는 일반 외래
+            - INPATIENT: 입원 치료 (입원 키워드가 명확한 경우)
+            - OUTPATIENT: 위에 해당 없는 일반 외래 (진단 전용 키워드 포함)
 
             ── treatmentCategory ──
             - REHAB: 도수치료·체외충격파·재활치료
@@ -101,6 +101,7 @@ public class AiClassificationService {
             - DENTAL_DISEASE: 치과 질병 (충치·신경치료·임플란트·잇몸질환)
             - KOREAN_MEDICINE_COVERED: 한방 급여 (침·뜸 급여 항목)
             - KOREAN_MEDICINE: 한방 비급여 (추나·비급여 침)
+            - KOREAN_MEDICINE_CHUNA: 추나요법 (2019.04 급여화, 급여 기준 적용)
             - KOREAN_MEDICINE_HERBAL: 한약·첩약·탕약
             - MEDICATION: 약제 처방 단독
             - null: 진단 담보 전용이거나 분류 불가
@@ -192,6 +193,7 @@ public class AiClassificationService {
         String injuryDiseaseType = isInjury ? "INJURY" : isDisease ? "DISEASE" : "UNKNOWN";
         String careType = isSurgery ? "SURGERY"
                 : isTest ? "TEST"
+                : isInpatient ? "INPATIENT"
                 : "OUTPATIENT";
         String treatmentCategory = isTest ? "IMAGING"
                 : isRehab || isInjection ? "REHAB"

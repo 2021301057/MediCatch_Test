@@ -46,7 +46,8 @@ public final class InsuranceGenerationUtils {
     public static boolean isLifeInsurer(PolicyInfo policy) {
         String target = normalize(
                 nullToBlank(policy.getCompanyName()) + " " + nullToBlank(policy.getPolicyType()));
-        return target.contains("생명") || target.contains("생보") || target.contains("life");
+        return target.contains("생명") || target.contains("생보")
+                || (target.contains("life") && !target.contains("nonlife") && !target.contains("non-life"));
     }
 
     /**
