@@ -237,7 +237,11 @@ public class PreTreatmentSearchService {
     // 명백한 비의료 쿼리를 AI 호출 전에 차단 (순수 숫자, 1자, 특수문자/이모지만 있는 경우)
     private boolean isObviouslyNonMedical(String query) {
         String normalized = normalizeForMatch(query);
-        if (normalized.length() < 2) return true;
+        if (normalized.isEmpty()) return true;
+        if (normalized.length() == 1) {
+            // 한글 1글자는 의료 키워드 가능 (암, 열, 뼈 등) — DB/AI 판단에 맡김
+            return !normalized.matches("[가-힣]");
+        }
         if (normalized.matches("[0-9]+")) return true;
         if (normalized.matches("[^가-힣a-zA-Z0-9]+")) return true;
         return false;
