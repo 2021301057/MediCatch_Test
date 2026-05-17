@@ -685,7 +685,7 @@ CREATE TABLE IF NOT EXISTS chat_history (
 -- Insert sample user for testing
 USE medicatch_user;
 INSERT INTO users (email, password_hash, name, birth_date, gender)
-VALUES ('test@medicatch.com', '$2a$10$test', '김건강', '1989-05-15', 'M')
+VALUES ('test@medicatch.com', '$2b$10$Nt6r8LmhSKhZmD60LqPZ2.EWb62KpEup5wiiXKKX55c3YDjRCZNmC', '김건강', '1989-05-15', 'M')
 ON DUPLICATE KEY UPDATE email=VALUES(email);
 
 -- Insert sample policies
