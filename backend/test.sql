@@ -18,36 +18,36 @@ DELETE FROM policies WHERE user_id = 2;
 
 -- ── 보험 계약 (policies) ────────────────────────────────────
 -- 케이스1: 삼성화재 정액형 건강보험 (활성, 보험료 정상, 주력 보장 상품)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'SS-2019-00123456', '삼성화재해상보험', 'HEALTH', '2019-03-01', '2049-03-01', TRUE, 87500, 87500, '월납', '10년납', FALSE, '무배당 삼성화재 건강보험(갱신형)');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'SS-2019-00123456', '삼성화재해상보험', 'HEALTH', '2019-03-01', '2049-03-01', TRUE, 87500, 87500, '월납', '10년납', FALSE, '무배당 삼성화재 건강보험(갱신형)', NOW(), NOW());
 
 -- 케이스2: DB손보 그린라이프 1세대 실손보험 (활성, 1세대 실손으로 보장 범위 넓음)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'DB-2009-00567890', 'DB손해보험', 'SUPPLEMENTARY', '2009-05-01', '2029-05-01', TRUE, 32000, 32000, '월납', '전기납', TRUE, 'DB 그린라이프 실손의료보험(1세대)');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'DB-2009-00567890', 'DB손해보험', 'SUPPLEMENTARY', '2009-05-01', '2029-05-01', TRUE, 32000, 32000, '월납', '전기납', TRUE, 'DB 그린라이프 실손의료보험(1세대)', NOW(), NOW());
 
 -- 케이스3: 한화생명 복합 건강보험 (활성, 정액형 + 실손 포함)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'HW-2015-00234567', '한화생명', 'HEALTH', '2015-08-15', '2045-08-15', TRUE, 125000, 125000, '월납', '20년납', TRUE, '한화생명 뉴라이프 건강보험');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'HW-2015-00234567', '한화생명', 'HEALTH', '2015-08-15', '2045-08-15', TRUE, 125000, 125000, '월납', '20년납', TRUE, '한화생명 뉴라이프 건강보험', NOW(), NOW());
 
 -- 케이스4: KB손보 2세대 실손 (활성, 도수치료 등 비급여 특약 있음)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'KB-2017-00345678', 'KB손해보험', 'SUPPLEMENTARY', '2017-04-01', '2037-04-01', TRUE, 45000, 45000, '월납', '전기납', TRUE, 'KB 실손의료보험(2세대, 비급여특약 포함)');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'KB-2017-00345678', 'KB손해보험', 'SUPPLEMENTARY', '2017-04-01', '2037-04-01', TRUE, 45000, 45000, '월납', '전기납', TRUE, 'KB 실손의료보험(2세대, 비급여특약 포함)', NOW(), NOW());
 
 -- 케이스5: 삼성화재 만기 정액형 (만료됨 - 오래된 상품)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'SS-2001-00011111', '삼성화재해상보험', 'HEALTH', '2001-01-01', '2021-01-01', FALSE, NULL, NULL, NULL, NULL, FALSE, '삼성화재 암보험(만기)');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'SS-2001-00011111', '삼성화재해상보험', 'HEALTH', '2001-01-01', '2021-01-01', FALSE, NULL, NULL, NULL, NULL, FALSE, '삼성화재 암보험(만기)', NOW(), NOW());
 
 -- 케이스6: 메리츠화재 해지된 보험 (해지)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'MZ-2012-00022222', '메리츠화재', 'HEALTH', '2012-06-01', '2032-06-01', FALSE, NULL, NULL, NULL, NULL, FALSE, '메리츠 무배당 건강보험(해지)');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'MZ-2012-00022222', '메리츠화재', 'HEALTH', '2012-06-01', '2032-06-01', FALSE, NULL, NULL, NULL, NULL, FALSE, '메리츠 무배당 건강보험(해지)', NOW(), NOW());
 
 -- 케이스7: 현대해상 재물보험 (만기, 재물 타입)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'HD-2018-00033333', '현대해상', 'PROPERTY', '2018-01-01', '2023-01-01', FALSE, NULL, 50000, '연납', NULL, FALSE, '현대해상 화재보험');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'HD-2018-00033333', '현대해상', 'PROPERTY', '2018-01-01', '2023-01-01', FALSE, NULL, 50000, '연납', NULL, FALSE, '현대해상 화재보험', NOW(), NOW());
 
 -- 케이스8: 교보생명 저축성 보험 (활성, 저축형)
-INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details)
-VALUES (2, 'test', 'KY-2020-00044444', '교보생명', 'SAVINGS', '2020-09-01', '2040-09-01', TRUE, 200000, 200000, '월납', '10년납', FALSE, '교보생명 무배당 저축보험');
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'KY-2020-00044444', '교보생명', 'SAVINGS', '2020-09-01', '2040-09-01', TRUE, 200000, 200000, '월납', '10년납', FALSE, '교보생명 무배당 저축보험', NOW(), NOW());
 
 -- ── 담보 항목 (coverage_items) ──────────────────────────────
 -- 케이스1 (삼성화재 정액형): 암/골절/수술/입원일당 등 다양한 정액 담보
@@ -118,27 +118,27 @@ SELECT id, 'MRI/MRA', 'OUTPATIENT', 3000000, '연간 300만원 한도', TRUE, 7 
 --   - 0 < self < avg * 0.8 : 부족 (LOW)
 --   - self = 0 : 미가입 (MISSING)
 
-INSERT INTO coverage_comparison (user_id, codef_id, coverage_name, coverage_code, self_coverage_amount, avg_group_coverage_amount)
+INSERT INTO coverage_comparison (user_id, codef_id, coverage_name, coverage_code, self_coverage_amount, avg_group_coverage_amount, created_at, updated_at)
 VALUES
 -- GOOD: 암진단 보장 충분 (동일연령 평균 2천만원, 내 보장 3천만원)
-(1, 'test', '암진단비', 'CANCER_DIAG', 30000000, 20000000),
+(2, 'test', '암진단비', 'CANCER_DIAG', 30000000, 20000000, NOW(), NOW()),
 -- NORMAL: 골절진단 적정 (평균 50만원, 내 보장 50만원)
-(1, 'test', '골절진단비', 'FRACTURE_DIAG', 500000, 500000),
+(2, 'test', '골절진단비', 'FRACTURE_DIAG', 500000, 500000, NOW(), NOW()),
 -- LOW: 질병입원일당 부족 (평균 10만원, 내 보장 5만원)
-(1, 'test', '질병입원일당', 'DISEASE_INPATIENT', 50000, 100000),
+(2, 'test', '질병입원일당', 'DISEASE_INPATIENT', 50000, 100000, NOW(), NOW()),
 -- LOW: 상해입원일당 부족 (평균 8만원, 내 보장 5만원)
-(1, 'test', '상해입원일당', 'INJURY_INPATIENT', 50000, 80000),
+(2, 'test', '상해입원일당', 'INJURY_INPATIENT', 50000, 80000, NOW(), NOW()),
 -- MISSING: 뇌혈관질환 진단비 미가입
-(1, 'test', '뇌혈관질환진단비', 'CEREBROVASCULAR_DIAG', 0, 25000000),
+(2, 'test', '뇌혈관질환진단비', 'CEREBROVASCULAR_DIAG', 0, 25000000, NOW(), NOW()),
 -- MISSING: 치매간병 전혀 없음
-(1, 'test', '치매간병비', 'DEMENTIA_CARE', 0, 15000000),
+(2, 'test', '치매간병비', 'DEMENTIA_CARE', 0, 15000000, NOW(), NOW()),
 -- GOOD: 상해사망 충분 (평균 5천만원, 내 보장 1억원)
-(1, 'test', '상해사망보험금', 'INJURY_DEATH', 100000000, 50000000),
+(2, 'test', '상해사망보험금', 'INJURY_DEATH', 100000000, 50000000, NOW(), NOW()),
 -- LOW: 수술비 부족 (평균 100만원, 내 보장 30만원)
-(1, 'test', '질병수술비', 'DISEASE_SURGERY', 300000, 1000000),
+(2, 'test', '질병수술비', 'DISEASE_SURGERY', 300000, 1000000, NOW(), NOW()),
 -- MISSING: 통원의료비(비급여) 미가입
-(1, 'test', '통원의료비(비급여)', 'OUTPATIENT_NON_COVERED', 0, 20000000),
+(2, 'test', '통원의료비(비급여)', 'OUTPATIENT_NON_COVERED', 0, 20000000, NOW(), NOW()),
 -- NORMAL: 입원의료비 실손 보장 (평균 1억, 내 보장 1억)
-(1, 'test', '입원의료비(실손)', 'INPATIENT_ACTUAL_LOSS', 100000000, 100000000);
+(2, 'test', '입원의료비(실손)', 'INPATIENT_ACTUAL_LOSS', 100000000, 100000000, NOW(), NOW());
 
 COMMIT;
