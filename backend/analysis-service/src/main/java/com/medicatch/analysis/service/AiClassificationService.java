@@ -48,7 +48,7 @@ public class AiClassificationService {
               "benefitType": "COVERED 또는 NON_COVERED 또는 MIXED 또는 UNKNOWN",
               "treatmentCategory": "GENERAL 또는 DENTAL 또는 KOREAN_MEDICINE 또는 REHAB 또는 IMAGING 또는 INJECTION 또는 SURGERY 또는 CANCER 또는 FRACTURE 또는 BURN 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY",
               "actualLossCategory": "GENERAL_OUTPATIENT 또는 GENERAL_INPATIENT 또는 GENERAL_SURGERY 또는 NON_COVERED_THREE 또는 DENTAL_INJURY 또는 DENTAL_DISEASE 또는 KOREAN_MEDICINE_COVERED 또는 KOREAN_MEDICINE 또는 KOREAN_MEDICINE_CHUNA 또는 KOREAN_MEDICINE_HERBAL 또는 MEDICATION 또는 null",
-              "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 OUTPATIENT_DAILY 또는 BURN_DIAGNOSIS 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY 또는 null",
+              "fixedBenefitCategory": "CANCER 또는 FRACTURE_DIAGNOSIS 또는 TOOTH_FRACTURE_DIAGNOSIS 또는 SURGERY_BENEFIT 또는 HOSPITALIZATION_DAILY 또는 OUTPATIENT_DAILY 또는 BURN_DIAGNOSIS 또는 CEREBROVASCULAR 또는 DEATH_DISABILITY 또는 null",
               "confidence": "HIGH 또는 MEDIUM 또는 LOW",
               "needsUserConfirmation": true 또는 false,
               "reason": "분류 근거 한 문장 최대 80자",
@@ -96,7 +96,8 @@ public class AiClassificationService {
             - GENERAL_OUTPATIENT: 일반 외래 (감기·위염·피부과·정형외과 일반 외래 등)
             - GENERAL_INPATIENT: 일반 입원
             - GENERAL_SURGERY: 일반 수술 (급여 수술)
-            - NON_COVERED_THREE: 도수치료·체외충격파·비급여주사·비급여MRI (3대 비급여)
+            - NON_COVERED_THREE: 도수치료·체외충격파·증식치료·비급여주사·비급여MRI/MRA (3대 비급여)
+              ※ CT·초음파·X-ray·내시경 검사는 NON_COVERED_THREE가 아니라 GENERAL_OUTPATIENT 또는 GENERAL_INPATIENT
             - DENTAL_INJURY: 치과 외상 (사고로 인한 치아 파절·탈구)
             - DENTAL_DISEASE: 치과 질병 (충치·신경치료·임플란트·잇몸질환)
             - KOREAN_MEDICINE_COVERED: 한방 급여 (침·뜸 급여 항목)
@@ -109,6 +110,8 @@ public class AiClassificationService {
             ── fixedBenefitCategory (정액형 담보 — 엄격하게 적용) ──
             - FRACTURE_DIAGNOSIS: 뼈 골절이 X-ray·CT로 확인되거나 강하게 의심되는 경우만.
               ※ 인대파열·연골파열·근육파열·염좌·타박상·삐끗·발목 삐끗은 반드시 null
+              ※ 치아파절은 일반 골절이 아니라 TOOTH_FRACTURE_DIAGNOSIS 사용
+            - TOOTH_FRACTURE_DIAGNOSIS: 사고로 인한 치아파절·치아 골절이 명확한 경우만
             - SURGERY_BENEFIT: 수술이 명백히 수반되는 경우 (절제·봉합·절개 수술).
               ※ 단순 외래 처치·주사 시술·봉합 없는 외래는 제외
             - CANCER: 암(악성종양) 진단·치료가 명확한 경우
@@ -175,6 +178,7 @@ public class AiClassificationService {
         boolean isRehab     = containsAny(n, "도수치료", "도수", "체외충격파", "충격파", "재활치료");
         boolean isInjection = containsAny(n, "주사치료", "프롤로", "인대주사", "신경주사");
         boolean isDental    = containsAny(n, "치아", "치과", "치수", "잇몸", "치주", "신경치료", "임플란트", "치아파절", "치아균열");
+        boolean isToothFracture = containsAny(n, "치아파절", "치아골절", "치아깨짐", "이빨깨짐");
         boolean isKorean    = containsAny(n, "한방", "한의원", "침치료", "뜸", "추나", "첩약");
         boolean isHerbal    = containsAny(n, "한약", "탕약", "첩약");
         boolean isCancer    = containsAny(n, "암", "악성종양", "암수술", "항암", "방사선치료");
@@ -211,11 +215,12 @@ public class AiClassificationService {
                 : isKorean ? "KOREAN_MEDICINE"
                 : isDental ? (isInjury ? "DENTAL_INJURY" : "DENTAL_DISEASE")
                 : isRehab || isInjection ? "NON_COVERED_THREE"
-                : isTest ? "NON_COVERED_THREE"
+                : isTest ? (containsAny(n, "mri", "mra") ? "NON_COVERED_THREE" : "GENERAL_OUTPATIENT")
                 : isSurgery ? "GENERAL_SURGERY"
                 : isInpatient ? "GENERAL_INPATIENT"
                 : "GENERAL_OUTPATIENT";
         String fixedBenefitCategory = isCancer ? "CANCER"
+                : isToothFracture ? "TOOTH_FRACTURE_DIAGNOSIS"
                 : isFracture ? "FRACTURE_DIAGNOSIS"
                 : isBurn ? "BURN_DIAGNOSIS"
                 : isCerebrovascular ? "CEREBROVASCULAR"

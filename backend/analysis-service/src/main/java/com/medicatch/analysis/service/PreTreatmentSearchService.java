@@ -282,15 +282,21 @@ public class PreTreatmentSearchService {
         if (normalizedTerm.equals(normalizedQuery)) {
             return exactScore;
         }
-        if (normalizedTerm.length() < 2) {
+
+        // 짧은 의학 키워드(예: 암, CT)는 포함 관계만으로 매칭하면 오타/조사까지 과매칭된다.
+        // exact/synonym exact만 허용하고, 부분 매칭은 비교적 긴 키워드에서만 허용한다.
+        if (normalizedTerm.length() < 3 || normalizedQuery.length() < 3) {
             return Integer.MAX_VALUE;
         }
         if (normalizedQuery.contains(normalizedTerm) || normalizedTerm.contains(normalizedQuery)) {
             int covered = Math.min(normalizedTerm.length(), normalizedQuery.length());
             int coveragePct = covered * 100 / normalizedQuery.length();
+            if (coveragePct < 70) {
+                return Integer.MAX_VALUE;
+            }
             // Coverage-weighted: longer relative match scores better (lower).
             // Exact matches (scores 0, 1) are always preferred over partials (100+).
-            return 100 + (100 - coveragePct);
+            return 100 + partialScore + (100 - coveragePct);
         }
         return Integer.MAX_VALUE;
     }
