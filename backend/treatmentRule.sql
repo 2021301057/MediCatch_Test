@@ -223,6 +223,11 @@ WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_ca
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
 SELECT 'TOOTH_FRACTURE_DIAGNOSIS', '치아파절 진단비', '치아파절,치아 파절,치아골절,치아 골절,치아깨짐', '치아파절 제외,치아 파절 제외,5대골절,중대골절,특정골절,대재해골절', '치아파절을 명시적으로 포함하는 담보만 찾습니다.', 61
 WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'TOOTH_FRACTURE_DIAGNOSIS');
+UPDATE fixed_benefit_match_rules
+SET match_keywords = '치아파절,치아 파절,치아골절,치아 골절,치아깨짐,골절진단,골절 진단,골절화상진단',
+    exclude_keywords = '치아파절 제외,치아 파절 제외,치아골절 제외,치아 골절 제외,5대골절,중대골절,특정골절,대재해골절',
+    description = '치아파절 명시 담보 또는 제외 문구가 없는 일반 골절 진단 담보를 찾습니다.'
+WHERE fixed_benefit_category = 'TOOTH_FRACTURE_DIAGNOSIS';
 INSERT INTO fixed_benefit_match_rules (fixed_benefit_category, display_name, match_keywords, exclude_keywords, description, priority)
 SELECT 'BURN_DIAGNOSIS', '화상 진단비', '화상진단,화상 진단,중증화상', NULL, '화상 진단 관련 정액형 담보를 찾습니다.', 70
 WHERE NOT EXISTS (SELECT 1 FROM fixed_benefit_match_rules WHERE fixed_benefit_category = 'BURN_DIAGNOSIS');

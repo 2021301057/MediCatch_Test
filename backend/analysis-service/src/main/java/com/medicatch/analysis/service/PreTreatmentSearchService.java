@@ -554,7 +554,7 @@ public class PreTreatmentSearchService {
                 .filter(Objects::nonNull)
                 .flatMap(policy -> safeCoverageItems(policy).stream()
                         .filter(PolicyInfo.CoverageItemInfo::isCovered)
-                        .filter(item -> matchesCoverageItem(item, matchKeywords, excludeKeywords))
+                        .filter(item -> matchesCoverageItem(item, rule.getFixedBenefitCategory(), matchKeywords, excludeKeywords))
                         .filter(item -> !isContextTermExcluded(item, contextTerms))
                         .map(item -> toMatchedCoverageItem(policy, item)))
                 .toList();
@@ -579,12 +579,19 @@ public class PreTreatmentSearchService {
         return policy.getCoverageItems() != null ? policy.getCoverageItems() : List.of();
     }
 
-    private boolean matchesCoverageItem(PolicyInfo.CoverageItemInfo item, List<String> matchKeywords, List<String> excludeKeywords) {
+    private boolean matchesCoverageItem(PolicyInfo.CoverageItemInfo item,
+                                        String fixedBenefitCategory,
+                                        List<String> matchKeywords,
+                                        List<String> excludeKeywords) {
         String target = normalizeForMatch(String.join(" ",
                 nullToBlank(item.getName()),
                 nullToBlank(item.getCategory()),
                 nullToBlank(item.getAgreementType())
         ));
+
+        if ("TOOTH_FRACTURE_DIAGNOSIS".equals(fixedBenefitCategory)) {
+            return matchesToothFractureBenefit(target);
+        }
 
         boolean matched = matchKeywords.stream()
                 .map(this::normalizeForMatch)
@@ -598,6 +605,22 @@ public class PreTreatmentSearchService {
         return excludeKeywords.stream()
                 .map(this::normalizeForMatch)
                 .noneMatch(keyword -> !keyword.isBlank() && target.contains(keyword));
+    }
+
+    private boolean matchesToothFractureBenefit(String target) {
+        if (target.isBlank()) {
+            return false;
+        }
+        if (containsAny(target, "치아파절 제외", "치아 파절 제외", "치아골절 제외", "치아 골절 제외")) {
+            return false;
+        }
+        if (containsAny(target, "5대골절", "중대골절", "특정골절", "대재해골절")) {
+            return false;
+        }
+        if (containsAny(target, "치아파절", "치아골절", "치아깨짐", "치아 파절", "치아 골절")) {
+            return true;
+        }
+        return containsAny(target, "골절진단", "골절 진단", "골절화상진단", "골절 화상 진단");
     }
 
     /**
