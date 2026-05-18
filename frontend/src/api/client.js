@@ -22,15 +22,13 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res.data,
   async err => {
-    const originalRequest = err.config;
-    if (err.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    if (err.response?.status === 401) {
       try {
         const refresh = localStorage.getItem('refreshToken');
         const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: refresh });
         localStorage.setItem('accessToken', data.accessToken);
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
-        return api(originalRequest);
+        err.config.headers.Authorization = `Bearer ${data.accessToken}`;
+        return api(err.config);
       } catch {
         localStorage.clear();
         window.location.href = '/login';
