@@ -169,4 +169,203 @@ VALUES
 -- NORMAL: 입원의료비 실손 보장 (평균 1억, 내 보장 1억)
 (2, 'test', '입원의료비(실손)', 'INPATIENT_ACTUAL_LOSS', 100000000, 100000000, NOW(), NOW());
 
+-- ── 진료 기록 (medical_records) ─────────────────────────────
+USE medicatch_health;
+DELETE FROM medication_details WHERE user_id = 2;
+DELETE FROM medical_records WHERE user_id = 2;
+
+-- ============================================================
+-- 치과 (AK 코드) - 세대별 보장 차이 테스트
+-- 1세대: 치과 질병 완전 면책
+-- 2세대+: 급여 본인부담분만 보장 (비급여 제외)
+-- ============================================================
+
+-- AK021 충치 외래 의원 (급여만, 비급여 없음)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-11-10', '한빛치과의원', '치과보존과', '(양방)상아질의 우식', 'AK021', '외래', 38500, 55000, 16500, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- AK0401 치수염 외래 의원 (급여만)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-10-15', '한빛치과의원', '치과보존과', '(양방)비가역적 치수염', 'AK0401', '외래', 57000, 81300, 24300, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- AK0520 치주농양 외래 의원 (급여만)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-09-20', '한빛치과의원', '치주과', '(양방)동이 없는 잇몸 기원의 치주농양', 'AK0520', '외래', 72800, 104000, 31200, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- AK0119 매복치 외래 종합병원 (급여+비급여 혼합 - 수술료 비급여 포함)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-08-05', '연세대학교치과병원', '구강악안면외과', '(양방)상세불명의 매복치', 'AK0119', '외래', 158000, 264000, 106000, 68000, 'UNCLAIMED', NOW(), NOW());
+
+-- AK0800 임플란트 치과의원 (비급여 전액 - 전 세대 실손 미보장)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-07-15', '한빛치과의원', '치과보철과', '(양방)치아 및 지지구조의 기타 장애', 'AK0800', '외래', 0, 0, 0, 1200000, 'UNCLAIMED', NOW(), NOW());
+
+-- ============================================================
+-- 상해 (AS 코드) - 모든 세대 실손 보장
+-- 세대별 자기부담률 차이: 1세대 100%, 2/3세대 80%, 4세대 70%
+-- ============================================================
+
+-- AS824 발목 골절 외래 의원 (급여만, 비급여 없음)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-12-01', '튼튼정형외과의원', '정형외과', '(양방)발목 및 발 부분의 골절', 'AS824', '외래', 31000, 44200, 13200, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- AS824 발목 골절 수술 입원 3일 (급여+비급여 혼합, 입원 케이스)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-12-05', '서울성모병원', '정형외과', '(양방)발목 및 발 부분의 골절-수술적 치료', 'AS824', '입원', 820000, 1170000, 350000, 85000, 'UNCLAIMED', NOW(), NOW());
+
+-- AS622 손목 골절 외래 병원 (비급여 포함 - 깁스·재료대)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-11-20', '강남성심병원', '정형외과', '(양방)손목 및 손 부분의 골절', 'AS622', '외래', 42000, 60000, 18000, 35000, 'UNCLAIMED', NOW(), NOW());
+
+-- AS400 어깨 타박상 외래 의원 (급여만)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-10-01', '튼튼정형외과의원', '정형외과', '(양방)어깨 및 위팔의 타박상', 'AS400', '외래', 14500, 20700, 6200, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- AS836 무릎 인대 손상 외래 병원 (비급여 도수치료 포함 - 3세대 특약 필요)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-09-10', '강남성심병원', '정형외과', '(양방)무릎의 내측 측부인대 염좌 및 긴장', 'AS836', '외래', 35000, 50000, 15000, 120000, 'UNCLAIMED', NOW(), NOW());
+
+-- AS824 요양병원 재활 입원 (골절 후 장기 재활, 비급여 포함)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-07-01', '강남요양병원', '재활의학과', '(양방)발목 골절 후 재활치료', 'AS824', '입원', 380000, 542000, 162000, 95000, 'UNCLAIMED', NOW(), NOW());
+
+-- ============================================================
+-- 비급여 집중 케이스 - 세대별 보장 한도 차이 테스트
+-- 1세대: 비급여 100% / 2세대: 80% / 3세대: 도수특약시 80% / 4세대: 70%+연한도
+-- ============================================================
+
+-- M545 도수치료 외래 의원 (비급여 전액 - 3세대 특약, 4세대 연한도 적용)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-11-05', '강남재활의학과의원', '재활의학과', '(양방)하요부통', 'M545', '외래', 0, 0, 0, 150000, 'UNCLAIMED', NOW(), NOW());
+
+-- AS824 MRI 검사 (상해 후 비급여 - 3/4세대 MRI특약 필요)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-12-02', '강남성심병원', '정형외과', '(양방)발목 및 발 부분의 골절-MRI 검사', 'AS824', '외래', 0, 0, 0, 480000, 'UNCLAIMED', NOW(), NOW());
+
+-- M751 비급여 관절 내 주사 (프롤로테라피 - 세대별 보장 다름)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-10-20', '강남재활의학과의원', '재활의학과', '(양방)어깨의 병변', 'M751', '외래', 8000, 11400, 3400, 80000, 'UNCLAIMED', NOW(), NOW());
+
+-- ============================================================
+-- 내과 만성질환 - 통원 급여 중심 케이스
+-- ============================================================
+
+-- I10 고혈압 외래 의원 (만성질환 관리, 급여)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-12-10', '서울내과의원', '내과', '(양방)본태성(원발성) 고혈압', 'I10', '외래', 9800, 14000, 4200, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- E119 당뇨 외래 의원 (만성질환 관리, 급여)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-11-25', '서울내과의원', '내과', '(양방)인슐린-비의존 당뇨병', 'E119', '외래', 12300, 17600, 5300, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- J069 급성 감기 외래 의원 (급여)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-10-05', '서울내과의원', '내과', '(양방)급성 상기도 감염', 'J069', '외래', 8100, 11600, 3500, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- $ 약국 조제약 (감기, 약제비 외래)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-10-05', '서울약국', '일반의', '해당없음', '$', '외래', 8400, 12000, 3600, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- J189 폐렴 외래 병원 (급여+비급여 혼합, 종합병원급)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-09-15', '강남성심병원', '내과', '(양방)상세불명의 병원체에 의한 폐렴', 'J189', '외래', 45200, 64500, 19300, 12000, 'UNCLAIMED', NOW(), NOW());
+
+-- J300 알레르기 비염 외래 의원 (급여)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-08-20', '서울이비인후과의원', '이비인후과', '(양방)혈관운동성 비염', 'J300', '외래', 7200, 10300, 3100, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- AT212 화상 외래 의원 (상해, 급여)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-07-30', '서울내과의원', '내과', '(양방)몸통의 2도 화상', 'AT212', '외래', 38000, 54300, 16300, 0, 'UNCLAIMED', NOW(), NOW());
+
+-- L309 피부염 외래 피부과 (급여+비급여 연고)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-08-15', '서울피부과의원', '피부과', '(양방)상세불명의 피부염', 'L309', '외래', 9800, 14000, 4200, 15000, 'UNCLAIMED', NOW(), NOW());
+
+-- ============================================================
+-- 수술/입원 케이스
+-- ============================================================
+
+-- K37 맹장염 수술 입원 (COMPLETED - 이미 청구 완료)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-08-10', '서울성모병원', '외과', '(양방)기타 맹장염', 'K37', '입원', 1250000, 1785000, 535000, 320000, 'COMPLETED', NOW(), NOW());
+
+-- K802 담낭결석 복강경수술 입원 (비급여 선택진료비 포함, UNCLAIMED)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-06-20', '강남성심병원', '외과', '(양방)급성 담낭염을 동반한 담낭 결석', 'K802', '입원', 1680000, 2400000, 720000, 580000, 'UNCLAIMED', NOW(), NOW());
+
+-- ============================================================
+-- 암 관련 (정액 담보 + 실손 이중 보장 테스트)
+-- CLAIMED/COMPLETED claim_status 테스트
+-- ============================================================
+
+-- C169 위암 최초 진단 종합병원 외래 (CLAIMED - 보험금 청구 진행 중)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2025-05-01', '삼성서울병원', '종양내과', '(양방)위의 악성 신생물-최초진단', 'C169', '외래', 185000, 264000, 79000, 45000, 'CLAIMED', NOW(), NOW());
+
+-- C73 갑상선암 수술 입원 (COMPLETED - 정액+실손 청구 완료)
+INSERT INTO medical_records (user_id, visit_date, hospital, department, diagnosis, disease_code, treatment_details, medical_cost, insurance_coverage, out_of_pocket, non_covered_amount, claim_status, created_at, updated_at)
+VALUES (2, '2024-09-15', '삼성서울병원', '외과', '(양방)갑상선의 악성 신생물', 'C73', '입원', 2100000, 3000000, 900000, 420000, 'COMPLETED', NOW(), NOW());
+
+-- ── 약 처방 (medication_details) ──────────────────────────
+-- 발목 골절 소염진통제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '세레콕시브캡슐200밀리그램(세레콕시브)', '1캡슐', '1일 2회', '7일', '2025-12-01', '2025-12-07', '발목 골절 통증', NOW(), NOW());
+
+-- 발목 골절 수술 후 항생제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '맥시크란정625밀리그람(아목시실린-클라불란산칼륨)', '1정', '1일 3회', '5일', '2025-12-05', '2025-12-09', '수술 후 감염 예방', NOW(), NOW());
+
+-- 발목 골절 수술 후 진통제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '써스펜8시간이알서방정650밀리그램(아세트아미노펜)', '1정', '1일 3회', '5일', '2025-12-05', '2025-12-09', '수술 후 통증', NOW(), NOW());
+
+-- 무릎 인대 손상 소염제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '대웅바이오록소프로펜정(록소프로펜나트륨수화물)_(68.1mg/1정)', '1정', '1일 3회', '5일', '2025-09-10', '2025-09-14', '무릎 인대 손상 통증', NOW(), NOW());
+
+-- 고혈압약 (장기 복용 30일)
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '아모잘탄정5/50밀리그램(암로디핀베실산염/로사르탄칼륨)', '1정', '1일 1회', '30일', '2025-12-10', '2026-01-08', '본태성 고혈압', NOW(), NOW());
+
+-- 당뇨약 (장기 복용 30일)
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '메트포르민염산염서방정500밀리그램', '1정', '1일 2회', '30일', '2025-11-25', '2025-12-24', '인슐린-비의존 당뇨병', NOW(), NOW());
+
+-- 감기약 (소염진통제)
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '슈다페드정60밀리그램(슈도에페드린염산염)', '1정', '1일 3회', '5일', '2025-10-05', '2025-10-09', '급성 상기도 감염', NOW(), NOW());
+
+-- 맹장염 수술 후 항생제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '세포탁심나트륨주사제(세포탁심나트륨)', '1g', '1일 2회', '3일', '2025-08-10', '2025-08-12', '수술 후 감염 예방', NOW(), NOW());
+
+-- 맹장염 수술 후 진통제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '케토로락트로메타민주사(케토로락트로메타민)', '30mg', '1일 3회', '2일', '2025-08-10', '2025-08-11', '수술 후 통증', NOW(), NOW());
+
+-- 위암 항암제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '젤로다정500밀리그램(카페시타빈)', '2정', '1일 2회', '14일', '2025-05-01', '2025-05-14', '위암 항암화학요법', NOW(), NOW());
+
+-- 갑상선 수술 후 호르몬제 (장기 복용)
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '씬지로이드정100mcg(레보티록신나트륨)', '1정', '1일 1회', '90일', '2024-09-20', '2024-12-18', '갑상선 수술 후 호르몬 보충', NOW(), NOW());
+
+-- 알레르기 비염 항히스타민제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '알레그라정60밀리그램(펙소페나딘염산염)', '1정', '1일 2회', '14일', '2025-08-20', '2025-09-02', '혈관운동성 비염', NOW(), NOW());
+
+-- 치주농양 항생제
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '아목시실린캡슐500밀리그램(아목시실린)', '1캡슐', '1일 3회', '5일', '2025-09-20', '2025-09-24', '치주농양', NOW(), NOW());
+
+-- 화상 항생연고
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '베아로반연고(무피로신)_(0.2g/10g)', '적량', '1일 1회', '7일', '2025-07-30', '2025-08-05', '2도 화상 처치', NOW(), NOW());
+
+-- 리도카인 마취주사 (치과 처치용)
+INSERT INTO medication_details (user_id, medication_name, dosage, frequency, duration, prescribed_date, end_date, indication, created_at, updated_at)
+VALUES (2, '휴온스리도카인염산염수화물-에피네프린주(1:100,000)_(1.8mL)', '1앰플', '1일 1회', '1일', '2025-10-15', '2025-10-15', '치수염 처치 국소마취', NOW(), NOW());
+
 COMMIT;
