@@ -83,7 +83,7 @@ public class CodefSyncService {
             nhisParams.put("userName",        userName);
             nhisParams.put("phoneNo",         phoneNo);
             nhisParams.put("identity",        identity8);
-            nhisParams.put("searchStartYear", "2020");
+            nhisParams.put("searchStartYear", "2023");
             nhisParams.put("searchEndYear",   currentYear);
             nhisParams.put("id",              sharedId);
             if ("5".equals(loginTypeLevel)) nhisParams.put("telecom", telecom);
@@ -490,7 +490,7 @@ public class CodefSyncService {
             params.put("userName",        userName);
             params.put("phoneNo",         phoneNo);
             params.put("identity",        identity8);
-            params.put("searchStartYear", "2020");
+            params.put("searchStartYear", "2023");
             params.put("searchEndYear",   currentYear);
             params.put("id",              "mc_nhis_" + userId);
             if ("5".equals(loginTypeLevel)) params.put("telecom", telecom);
