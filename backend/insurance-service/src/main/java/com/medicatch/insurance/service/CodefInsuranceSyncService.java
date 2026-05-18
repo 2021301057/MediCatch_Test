@@ -115,8 +115,10 @@ public class CodefInsuranceSyncService {
         Set<String> otherTypeKeys = new java.util.HashSet<>();
         for (Policy p : toSave) {
             Set<String> keys = "SUPPLEMENTARY".equals(p.getInsuranceType()) ? supplementaryKeys : otherTypeKeys;
+            String hiddenNumberKey = policyNumberHidKey(p);
             String numberKey = policyNumberKey(p);
             String identityKey = policyIdentityKey(p);
+            if (hiddenNumberKey != null) keys.add(hiddenNumberKey);
             if (numberKey != null) keys.add(numberKey);
             if (identityKey != null) keys.add(identityKey);
         }
@@ -128,7 +130,9 @@ public class CodefInsuranceSyncService {
         for (Policy p : toSave) {
             String existingKey = findExistingPolicyKey(p, numberIndex, identityIndex);
             if (existingKey == null) {
-                String primaryKey = Optional.ofNullable(policyNumberKey(p)).orElse(policyIdentityKey(p));
+                String primaryKey = Optional.ofNullable(policyNumberHidKey(p))
+                        .or(() -> Optional.ofNullable(policyNumberKey(p)))
+                        .orElse(policyIdentityKey(p));
                 if (primaryKey == null) continue;
                 deduped.put(primaryKey, p);
                 indexPolicy(p, primaryKey, numberIndex, identityIndex);
@@ -150,11 +154,14 @@ public class CodefInsuranceSyncService {
         // - 실손 리스트에만 있는 경우: SUPPLEMENTARY
         // - 실손 + 다른 리스트 동시 존재(복합 상품): 다른 리스트 타입 유지 + hasSupplementaryCoverage = true
         deduped.values().forEach(p -> {
+            String hiddenNumberKey = policyNumberHidKey(p);
             String numberKey = policyNumberKey(p);
             String identityKey = policyIdentityKey(p);
-            boolean inSupplementary = (numberKey != null && supplementaryKeys.contains(numberKey))
+            boolean inSupplementary = (hiddenNumberKey != null && supplementaryKeys.contains(hiddenNumberKey))
+                    || (numberKey != null && supplementaryKeys.contains(numberKey))
                     || (identityKey != null && supplementaryKeys.contains(identityKey));
-            boolean inOther = (numberKey != null && otherTypeKeys.contains(numberKey))
+            boolean inOther = (hiddenNumberKey != null && otherTypeKeys.contains(hiddenNumberKey))
+                    || (numberKey != null && otherTypeKeys.contains(numberKey))
                     || (identityKey != null && otherTypeKeys.contains(identityKey));
             if (inSupplementary && !inOther) {
                 p.setInsuranceType("SUPPLEMENTARY");
@@ -254,6 +261,11 @@ public class CodefInsuranceSyncService {
 
     private String findExistingPolicyKey(Policy policy, Map<String, String> numberIndex,
                                          Map<String, String> identityIndex) {
+        String hiddenNumberKey = policyNumberHidKey(policy);
+        if (hiddenNumberKey != null && numberIndex.containsKey(hiddenNumberKey)) {
+            return numberIndex.get(hiddenNumberKey);
+        }
+
         String numberKey = policyNumberKey(policy);
         if (numberKey != null && numberIndex.containsKey(numberKey)) {
             return numberIndex.get(numberKey);
@@ -269,8 +281,10 @@ public class CodefInsuranceSyncService {
 
     private void indexPolicy(Policy policy, String primaryKey, Map<String, String> numberIndex,
                              Map<String, String> identityIndex) {
+        String hiddenNumberKey = policyNumberHidKey(policy);
         String numberKey = policyNumberKey(policy);
         String identityKey = policyIdentityKey(policy);
+        if (hiddenNumberKey != null) numberIndex.put(hiddenNumberKey, primaryKey);
         if (numberKey != null) numberIndex.put(numberKey, primaryKey);
         if (identityKey != null) identityIndex.put(identityKey, primaryKey);
     }
@@ -288,6 +302,10 @@ public class CodefInsuranceSyncService {
     }
 
     private void mergePolicy(Policy target, Policy source) {
+        if ((target.getPolicyNumberHid() == null || target.getPolicyNumberHid().isBlank())
+                && source.getPolicyNumberHid() != null) {
+            target.setPolicyNumberHid(source.getPolicyNumberHid());
+        }
         if (target.getStartDate() == null && source.getStartDate() != null)
             target.setStartDate(source.getStartDate());
         if (target.getEndDate() == null && source.getEndDate() != null)
@@ -352,6 +370,10 @@ public class CodefInsuranceSyncService {
 
     private String policyNumberKey(Policy policy) {
         return keyWithPrefix("N", policy.getPolicyNumber());
+    }
+
+    private String policyNumberHidKey(Policy policy) {
+        return keyWithPrefix("H", policy.getPolicyNumberHid());
     }
 
     private String policyIdentityKey(Policy policy) {
@@ -440,6 +462,7 @@ public class CodefInsuranceSyncService {
                     .userId(userId)
                     .codefId(codefId)
                     .policyNumber(policyNumber)
+                    .policyNumberHid(str(item.get("resPolicyNumberHid")))
                     .insurerName(strOrDefault(item.get("resCompanyNm"), "미상"))
                     .insuranceType(resolvedType)
                     .startDate(startDate)

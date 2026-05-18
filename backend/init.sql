@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS policies (
     user_id BIGINT NOT NULL,
     codef_id VARCHAR(255),
     policy_number VARCHAR(100) NOT NULL,
+    policy_number_hid VARCHAR(255),
     insurer_name VARCHAR(200) NOT NULL,
     insurance_type VARCHAR(50) NOT NULL,
     start_date DATE,
@@ -146,6 +147,22 @@ CREATE TABLE IF NOT EXISTS coverage_comparison (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
     INDEX idx_codef_id (codef_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Claim Payments table
+CREATE TABLE IF NOT EXISTS claim_payments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    codef_id VARCHAR(255) NOT NULL,
+    occurrence_date DATE NOT NULL,
+    payment_date DATE,
+    company_name VARCHAR(200),
+    reason_for_payment TEXT,
+    judge_result VARCHAR(100),
+    paid_amount DECIMAL(15,2),
+    INDEX idx_user_id (user_id),
+    INDEX idx_codef_id (codef_id),
+    INDEX idx_occurrence_date (occurrence_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================

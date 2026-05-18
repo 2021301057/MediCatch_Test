@@ -31,6 +31,9 @@ public class Policy {
     @Column(nullable = false)
     private String policyNumber;
 
+    @Column
+    private String policyNumberHid;
+
     @Column(nullable = false)
     private String insurerName;  // 보험사명
 
