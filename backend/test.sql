@@ -29,9 +29,17 @@ VALUES (2, 'test', 'DB-2009-00567890', 'DB손해보험', 'SUPPLEMENTARY', '2009-
 INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
 VALUES (2, 'test', 'HW-2015-00234567', '한화생명', 'HEALTH', '2015-08-15', '2045-08-15', TRUE, 125000, 125000, '월납', '20년납', TRUE, '한화생명 뉴라이프 건강보험', NOW(), NOW());
 
--- 케이스4: KB손보 2세대 실손 (활성, 도수치료 등 비급여 특약 있음)
+-- 케이스4: 현대해상 2세대 실손 (활성, 2009.10~2017.03 가입)
 INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
-VALUES (2, 'test', 'KB-2017-00345678', 'KB손해보험', 'SUPPLEMENTARY', '2017-04-01', '2037-04-01', TRUE, 45000, 45000, '월납', '전기납', TRUE, 'KB 실손의료보험(2세대, 비급여특약 포함)', NOW(), NOW());
+VALUES (2, 'test', 'HD-2013-00456789', '현대해상', 'SUPPLEMENTARY', '2013-06-01', '2033-06-01', TRUE, 28000, 28000, '월납', '전기납', TRUE, '현대해상 실손의료보험(2세대)', NOW(), NOW());
+
+-- 케이스4-2: KB손보 3세대 실손 (활성, 2017.04~2021.06 가입, 도수치료 등 비급여 특약)
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'KB-2017-00345678', 'KB손해보험', 'SUPPLEMENTARY', '2017-04-01', '2037-04-01', TRUE, 45000, 45000, '월납', '전기납', TRUE, 'KB 실손의료보험(3세대, 비급여특약 포함)', NOW(), NOW());
+
+-- 케이스4-3: 메리츠화재 4세대 실손 (활성, 2021.07 이후 가입, 급여/비급여 분리)
+INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
+VALUES (2, 'test', 'MZ-2022-00078901', '메리츠화재', 'SUPPLEMENTARY', '2022-03-01', '2042-03-01', TRUE, 38000, 38000, '월납', '전기납', TRUE, '메리츠화재 실손의료보험(4세대)', NOW(), NOW());
 
 -- 케이스5: 삼성화재 만기 정액형 (만료됨 - 오래된 상품)
 INSERT INTO policies (user_id, codef_id, policy_number, insurer_name, insurance_type, start_date, end_date, is_active, monthly_premium, premium_amount, payment_cycle, payment_period, has_supplementary_coverage, policy_details, created_at, updated_at)
@@ -109,6 +117,26 @@ INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, 
 SELECT id, '비급여주사제', 'MEDICATION', 2500000, '연간 250만원 한도', TRUE, 6 FROM policies WHERE policy_number = 'KB-2017-00345678' AND user_id = 2;
 INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
 SELECT id, 'MRI/MRA', 'OUTPATIENT', 3000000, '연간 300만원 한도', TRUE, 7 FROM policies WHERE policy_number = 'KB-2017-00345678' AND user_id = 2;
+
+-- 케이스4 (현대해상 2세대 실손): 입원/통원 비급여 80% 보장, 통원 한도 없음
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(입원)', 'INPATIENT', 100000000, '급여+비급여80%, 공제금 없음', TRUE, 1 FROM policies WHERE policy_number = 'HD-2013-00456789' AND user_id = 2;
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(통원-의원)', 'OUTPATIENT', 100000, '급여+비급여80%, 공제금 1만원', TRUE, 2 FROM policies WHERE policy_number = 'HD-2013-00456789' AND user_id = 2;
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(통원-병원)', 'OUTPATIENT', 150000, '급여+비급여80%, 공제금 1.5만원', TRUE, 3 FROM policies WHERE policy_number = 'HD-2013-00456789' AND user_id = 2;
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(약제)', 'MEDICATION', 100000, '급여+비급여80%, 공제금 8천원', TRUE, 4 FROM policies WHERE policy_number = 'HD-2013-00456789' AND user_id = 2;
+
+-- 케이스4-3 (메리츠화재 4세대 실손): 급여/비급여 완전 분리, 비급여 자기부담 30%
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(급여-입원)', 'INPATIENT', 100000000, '급여90%', TRUE, 1 FROM policies WHERE policy_number = 'MZ-2022-00078901' AND user_id = 2;
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(비급여-입원)', 'INPATIENT', 100000000, '비급여70%, 연간 한도', TRUE, 2 FROM policies WHERE policy_number = 'MZ-2022-00078901' AND user_id = 2;
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(급여-통원)', 'OUTPATIENT', 200000, '급여90%, 공제금1만원', TRUE, 3 FROM policies WHERE policy_number = 'MZ-2022-00078901' AND user_id = 2;
+INSERT INTO coverage_items (policy_id, item_name, category, max_benefit_amount, conditions, is_covered, priority)
+SELECT id, '실손의료비(비급여-통원)', 'OUTPATIENT', 200000, '비급여70%, 공제금3만원', TRUE, 4 FROM policies WHERE policy_number = 'MZ-2022-00078901' AND user_id = 2;
 
 -- ── 보장 비교 통계 (coverage_comparison) ───────────────────
 -- 실 Codef API resFlatRateStatisticsList 기반
