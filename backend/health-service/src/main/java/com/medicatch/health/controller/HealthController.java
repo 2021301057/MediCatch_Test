@@ -120,62 +120,7 @@ public class HealthController {
         }
     }
 
-    /**
-     * CODEF 건강 데이터 동기화 1단계: 건강검진(NHIS) + 진료정보(HIRA) 1차 요청
-     */
-    @PostMapping("/sync/step1")
-    public ResponseEntity<Map<String, Object>> syncStep1(@RequestBody Map<String, Object> body) {
-        Object userIdObj = body.get("userId");
-        if (userIdObj == null) return ResponseEntity.badRequest().body(Map.of("message", "userId가 필요합니다."));
-        Long userId = Long.parseLong(userIdObj.toString());
-        log.info("POST /api/health/sync/step1 - userId: {}", userId);
-        try {
-            CodefSyncService.SyncStep1Response resp = codefSyncService.syncStep1(
-                    userId,
-                    (String) body.get("userName"),
-                    (String) body.get("phoneNo"),
-                    (String) body.get("identity13"),
-                    (String) body.get("telecom"),
-                    (String) body.get("loginTypeLevel")
-            );
-            return ResponseEntity.ok(Map.of(
-                    "sessionKey",      resp.getSessionKey(),
-                    "loginTypeLevel",  resp.getLoginTypeLevel(),
-                    "requiresTwoWay",  resp.isRequiresTwoWay()
-            ));
-        } catch (Exception e) {
-            log.error("건강 데이터 동기화 1차 실패: {}", e.getMessage(), e);
-            Map<String, Object> err = new HashMap<>();
-            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류가 발생했습니다.");
-            return ResponseEntity.badRequest().body(err);
-        }
-    }
-
-    /**
-     * CODEF 건강 데이터 동기화 2단계: 인증 확인 + DB 저장
-     */
-    @PostMapping("/sync/step2")
-    public ResponseEntity<Map<String, Object>> syncStep2(@RequestBody Map<String, Object> body) {
-        log.info("POST /api/health/sync/step2");
-        try {
-            String sessionKey = (String) body.get("sessionKey");
-            CodefSyncService.SyncStep2Result result = codefSyncService.syncStep2(sessionKey, "");
-            return ResponseEntity.ok(Map.of(
-                    "message",           "건강 데이터 동기화가 완료되었습니다.",
-                    "savedCheckups",     result.getSavedCheckups(),
-                    "savedMedicals",     result.getSavedMedicals(),
-                    "savedMedications",  result.getSavedMedications(),
-                    "updatedNonCovered", result.getUpdatedNonCovered()
-            ));
-        } catch (Exception e) {
-            log.error("건강 데이터 동기화 2차 실패: {}", e.getMessage(), e);
-            Map<String, Object> err = new HashMap<>();
-            err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류가 발생했습니다.");
-            return ResponseEntity.badRequest().body(err);
-        }
-    }
-
-    // ── 건강검진(NHIS) 단독 ──────────────────────────────────────────────
+    // ── 건강검진(NHIS) ────────────────────────────────────────────────────
 
     @PostMapping("/sync/checkup/step1")
     public ResponseEntity<Map<String, Object>> syncCheckupStep1(@RequestBody Map<String, Object> body) {
