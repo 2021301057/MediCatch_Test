@@ -200,6 +200,16 @@ const mergeDiseases = (apiRows) => {
         year: c.year,
         predictedState: parseRatio(c.predictedState),
       }));
+      // factors: severityType 4(주의) / 5(관리필요)만 추려서 표시
+      const factors = Array.isArray(latest[t].factors) ? latest[t].factors : [];
+      const alertFactors = factors
+        .filter((f) => f.severityType === '4' || f.severityType === '5')
+        .map((f) => ({
+          riskFactor: f.riskFactor,
+          currentState: f.currentState,
+          averageValue: f.averageValue,
+          severityType: f.severityType,
+        }));
       return {
         predictionType: t,
         typeLabel: PREDICTION_TYPE_LABEL[t],
@@ -207,9 +217,13 @@ const mergeDiseases = (apiRows) => {
         riskRatio: parseRatio(latest[t].riskRatio),
         averageRatio: parseRatio(latest[t].averageRatio),
         recentCompares: recent3,
+        alertFactors,
       };
     });
 };
+
+const SEVERITY_LABEL = { '4': '주의', '5': '관리필요' };
+const SEVERITY_CLASS = { '4': 'mc-tag-warning', '5': 'mc-tag-danger' };
 
 const yearOf = (isoDate) => {
   if (!isoDate) return null;
@@ -456,6 +470,23 @@ const CheckupRecords = () => {
             {d.averageRatio > 0 && (
               <div className="mc-card-sub" style={{ marginTop: 6 }}>
                 같은 성별·연령대 100명 중 <b>{d.averageRatio}</b>번째
+              </div>
+            )}
+            {d.alertFactors.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div className="mc-card-sub" style={{ marginBottom: 6 }}>
+                  관리가 필요한 위험요인
+                </div>
+                <div className="mc-row-wrap" style={{ gap: 6 }}>
+                  {d.alertFactors.map((f, i) => (
+                    <span key={i} className={`mc-tag ${SEVERITY_CLASS[f.severityType]}`}>
+                      <Ic d={P.warn} size={10}/>
+                      &nbsp;{f.riskFactor} {f.currentState}
+                      {f.averageValue ? ` (평균 ${f.averageValue})` : ''}
+                      &nbsp;· {SEVERITY_LABEL[f.severityType]}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
             {d.recentCompares.length >= 2 && (
