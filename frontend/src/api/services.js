@@ -23,13 +23,18 @@ const normalizeMedicalRecord = (row) => withAliases(row, {
 
 const normalizeCheckupResult = (row) => withAliases(row, {
   checkup_date: 'checkupDate',
-  blood_pressure: 'bloodPressure',
-  glucose: 'bloodSugar',
-  total_cholesterol: 'cholesterol',
+  checkup_type: 'checkupType',
+  blood_pressure_systolic: 'bloodPressureSystolic',
+  blood_pressure_diastolic: 'bloodPressureDiastolic',
+  total_cholesterol: 'totalCholesterol',
   hdl_cholesterol: 'hdlCholesterol',
   ldl_cholesterol: 'ldlCholesterol',
-  abnormal_findings: 'opinion',
-  recommendations: 'judgement',
+  urinary_protein: 'urinaryProtein',
+  serum_creatinine: 'serumCreatinine',
+  gamma_gtp: 'gammaGtp',
+  tb_chest_disease: 'tbChestDisease',
+  organization_name: 'organizationName',
+  abnormal_findings: 'abnormalFindings',
 });
 
 const normalizePolicy = (row) => {
@@ -88,6 +93,7 @@ export const healthAPI = {
   getCheckupResults: () => api.get('/health/checkup-results')
     .then((rows) => Array.isArray(rows) ? rows.map(normalizeCheckupResult) : rows),
   getDiseasePredictions: () => api.get('/health/disease-predictions'),
+  getHealthAge: () => api.get('/health/health-age'),
   getCheckupTargets: () => api.get('/health/checkup-targets'),
   syncCheckupStep1: (data) => api.post('/health/sync/checkup/step1', withSyncRequestAliases(data), { timeout: 120000 }),
   syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
