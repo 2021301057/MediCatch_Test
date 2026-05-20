@@ -2,7 +2,9 @@ package com.medicatch.health.controller;
 
 import com.medicatch.health.dto.CheckupResultDto;
 import com.medicatch.health.dto.MedicalRecordDto;
+import com.medicatch.health.entity.HealthPrediction;
 import com.medicatch.health.entity.MedicationDetail;
+import com.medicatch.health.repository.HealthPredictionRepository;
 import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
 import lombok.extern.slf4j.Slf4j;
@@ -22,10 +24,14 @@ public class HealthController {
 
     private final HealthService healthService;
     private final CodefSyncService codefSyncService;
+    private final HealthPredictionRepository healthPredictionRepo;
 
-    public HealthController(HealthService healthService, CodefSyncService codefSyncService) {
+    public HealthController(HealthService healthService,
+                            CodefSyncService codefSyncService,
+                            HealthPredictionRepository healthPredictionRepo) {
         this.healthService = healthService;
         this.codefSyncService = codefSyncService;
+        this.healthPredictionRepo = healthPredictionRepo;
     }
 
     /**
@@ -209,8 +215,13 @@ public class HealthController {
     public ResponseEntity<Map<String, Object>> syncCheckupStep2(@RequestBody Map<String, Object> body) {
         log.info("POST /api/health/sync/checkup/step2");
         try {
-            int saved = codefSyncService.syncCheckupStep2((String) body.get("sessionKey"));
-            return ResponseEntity.ok(Map.of("message", "건강검진 동기화 완료", "savedCheckups", saved));
+            CodefSyncService.CheckupStep2Result result = codefSyncService.syncCheckupStep2((String) body.get("sessionKey"));
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("message", "건강검진 동기화 완료");
+            resp.put("savedCheckups", result.getSavedCheckups());
+            resp.put("savedPredictions", result.getSavedPredictions());
+            resp.put("failedPredictions", result.getFailedPredictions());
+            return ResponseEntity.ok(resp);
         } catch (Exception e) {
             log.error("건강검진 2차 실패: {}", e.getMessage(), e);
             HashMap<String, Object> err = new HashMap<>();
@@ -311,6 +322,31 @@ public class HealthController {
             HashMap<String, Object> err = new HashMap<>();
             err.put("message", e.getMessage() != null ? e.getMessage() : "알 수 없는 오류");
             return ResponseEntity.badRequest().body(err);
+        }
+    }
+
+    /**
+     * Get disease predictions (건강나이, 뇌졸중, 당뇨, 심뇌혈관)
+     */
+    @GetMapping("/disease-predictions")
+    public ResponseEntity<List<Map<String, Object>>> getDiseasePredictions(@RequestParam Long userId) {
+        log.info("GET /api/health/disease-predictions - userId: {}", userId);
+        try {
+            List<HealthPrediction> rows = healthPredictionRepo.findByUserIdOrderByCheckupDateDesc(userId);
+            List<Map<String, Object>> resp = rows.stream().map(p -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("predictionType", p.getPredictionType());
+                m.put("checkupDate",    p.getCheckupDate());
+                m.put("riskGrade",      p.getRiskGrade());
+                m.put("riskRatio",      p.getRiskRatio());
+                m.put("averageAge",     p.getAverageAge());
+                m.put("averageRatio",   p.getAverageRatio());
+                return m;
+            }).collect(Collectors.toList());
+            return ResponseEntity.ok(resp);
+        } catch (Exception e) {
+            log.error("Error getting disease predictions: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
         }
     }
 

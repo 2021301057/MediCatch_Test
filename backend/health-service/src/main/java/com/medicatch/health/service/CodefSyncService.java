@@ -2,9 +2,11 @@ package com.medicatch.health.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medicatch.health.entity.CheckupResult;
+import com.medicatch.health.entity.HealthPrediction;
 import com.medicatch.health.entity.MedicalRecord;
 import com.medicatch.health.entity.MedicationDetail;
 import com.medicatch.health.repository.CheckupResultRepository;
+import com.medicatch.health.repository.HealthPredictionRepository;
 import com.medicatch.health.repository.MedicalRecordRepository;
 import com.medicatch.health.repository.MedicationDetailRepository;
 import io.codef.api.EasyCodef;
@@ -29,10 +31,21 @@ import java.util.concurrent.TimeoutException;
 @Service
 public class CodefSyncService {
 
-    private static final String NHIS_URL = "/v1/kr/public/pp/nhis-health-checkup/result";
+    private static final String NHIS_URL        = "/v1/kr/public/pp/nhis-health-checkup/result";
+    private static final String HEALTH_AGE_URL  = "/v1/kr/public/pp/hi-nhis-list/review-health-age";
+    private static final String STROKE_URL      = "/v1/kr/public/pp/hi-nhis-list/stroke";
+    private static final String DIABETES_URL    = "/v1/kr/public/pp/hi-nhis-list/diabetes";
+    private static final String CARDIO_URL      = "/v1/kr/public/pp/hi-nhis-list/cardio-cerebrovascular";
     private static final String HIRA_URL = "/v1/kr/public/hw/hira-list/my-medical-information";
     private static final String NTS_URL  = "/v1/kr/public/nt/etc-yearend-tax/income-tax-credit";
     private static final int SESSION_TIMEOUT_MINUTES = 10;
+
+    // 질병 예측 타입 식별자
+    private static final String API_CHECKUP    = "CHECKUP";
+    private static final String API_HEALTH_AGE = "HEALTH_AGE";
+    private static final String API_STROKE     = "STROKE";
+    private static final String API_DIABETES   = "DIABETES";
+    private static final String API_CARDIO     = "CARDIO";
 
     @Value("${codef.api-client-id:YOUR_API_CLIENT_ID}")
     private String clientId;
@@ -51,19 +64,24 @@ public class CodefSyncService {
     private final MedicalRecordRepository medicalRecordRepo;
     private final CheckupResultRepository checkupResultRepo;
     private final MedicationDetailRepository medicationDetailRepo;
+    private final HealthPredictionRepository healthPredictionRepo;
     private final ConcurrentHashMap<String, SyncSession>                              sessions         = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, List<NtsYearSession>>                     ntsMultiSessions = new ConcurrentHashMap<>();
     /** step1에서 20초 내 미완료된 NTS futures → step2에서 사용자 인증 후 수집 */
     private final ConcurrentHashMap<String, List<CompletableFuture<NtsYearSession>>>  pendingNtsFutures = new ConcurrentHashMap<>();
+    /** 건강검진 + 예측 4개 멀티 세션 (sessionKey → 5개 API 컨텍스트) */
+    private final ConcurrentHashMap<String, CheckupMultiSession>                      checkupMultiSessions = new ConcurrentHashMap<>();
 
     public CodefSyncService(ObjectMapper objectMapper,
                             MedicalRecordRepository medicalRecordRepo,
                             CheckupResultRepository checkupResultRepo,
-                            MedicationDetailRepository medicationDetailRepo) {
+                            MedicationDetailRepository medicationDetailRepo,
+                            HealthPredictionRepository healthPredictionRepo) {
         this.objectMapper = objectMapper;
         this.medicalRecordRepo = medicalRecordRepo;
         this.checkupResultRepo = checkupResultRepo;
         this.medicationDetailRepo = medicationDetailRepo;
+        this.healthPredictionRepo = healthPredictionRepo;
     }
 
     // ── Step1: 1차 요청 (건강검진 + 진료정보 병렬 트리거) ──────────────────
@@ -475,81 +493,294 @@ public class CodefSyncService {
         return s;
     }
 
-    // ── 건강검진(NHIS) 단독 ──────────────────────────────────────────────
+    // ── 건강검진(NHIS) + 질병 예측 4개 ──────────────────────────────────
+    // 옵션 B: 건강검진은 필수, 예측은 옵션 (부분 실패 허용)
 
     public String syncCheckupStep1(Long userId, String userName, String phoneNo,
                                    String identity13, String telecom, String loginTypeLevel) {
         try {
             String identity8   = deriveIdentity8(identity13);
             String currentYear = String.valueOf(LocalDate.now().getYear());
+            String sharedId    = "mc_nhis_" + userId;
+            EasyCodefServiceType svcType = serviceType();
 
-            HashMap<String, Object> params = new HashMap<>();
-            params.put("organization",    "0002");
-            params.put("loginType",       "5");
-            params.put("loginTypeLevel",  loginTypeLevel);
-            params.put("userName",        userName);
-            params.put("phoneNo",         phoneNo);
-            params.put("identity",        identity8);
-            params.put("searchStartYear", "2020");
-            params.put("searchEndYear",   currentYear);
-            params.put("id",              "mc_nhis_" + userId);
-            if ("5".equals(loginTypeLevel)) params.put("telecom", telecom);
+            // 1) 건강검진 파라미터 (searchStartYear/EndYear 사용)
+            HashMap<String, Object> checkupParams = new HashMap<>();
+            checkupParams.put("organization",    "0002");
+            checkupParams.put("loginType",       "5");
+            checkupParams.put("loginTypeLevel",  loginTypeLevel);
+            checkupParams.put("userName",        userName);
+            checkupParams.put("phoneNo",         phoneNo);
+            checkupParams.put("identity",        identity8);
+            checkupParams.put("searchStartYear", "2020");
+            checkupParams.put("searchEndYear",   currentYear);
+            checkupParams.put("id",              sharedId);
+            if ("5".equals(loginTypeLevel)) checkupParams.put("telecom", telecom);
 
-            log.info("NHIS 건강검진 1차 요청 - userId: {}", userId);
-            String result = createCodef().requestProduct(NHIS_URL, serviceType(), params);
-            log.info("NHIS 건강검진 1차 응답: {}", result);
+            // 2) 예측 API 4개 공통 파라미터 빌더 (type="0" 사용, searchStartYear 없음)
+            String[] predictionTypes = { API_HEALTH_AGE, API_STROKE, API_DIABETES, API_CARDIO };
+            String[] predictionUrls  = { HEALTH_AGE_URL, STROKE_URL, DIABETES_URL, CARDIO_URL };
 
-            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
-            Map<String, Object> resultField = toMap(respMap.get("result"));
-            String code = (String) resultField.get("code");
-            if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
-                String msg = (String) resultField.getOrDefault("message", "건강검진 조회 실패");
-                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: " + msg);
+            List<CompletableFuture<CheckupApiContext>> futures = new ArrayList<>();
+
+            // 건강검진 future
+            futures.add(CompletableFuture.supplyAsync(() ->
+                fireFirstRequest(API_CHECKUP, NHIS_URL, checkupParams, svcType)));
+
+            // 예측 4개 future
+            for (int i = 0; i < predictionTypes.length; i++) {
+                final String pType = predictionTypes[i];
+                final String pUrl  = predictionUrls[i];
+                HashMap<String, Object> predParams = new HashMap<>();
+                predParams.put("organization",   "0002");
+                predParams.put("loginType",      "5");
+                predParams.put("loginTypeLevel", loginTypeLevel);
+                predParams.put("userName",       userName);
+                predParams.put("phoneNo",        phoneNo);
+                predParams.put("identity",       identity8);
+                predParams.put("type",           "0");
+                predParams.put("id",             sharedId);
+                if ("5".equals(loginTypeLevel)) predParams.put("telecom", telecom);
+
+                futures.add(CompletableFuture.supplyAsync(() ->
+                    fireFirstRequest(pType, pUrl, predParams, svcType)));
             }
 
+            // 모든 1차 요청 완료 대기 (최대 30초)
+            try {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .get(30, TimeUnit.SECONDS);
+            } catch (TimeoutException te) {
+                log.warn("건강검진+예측 1차 요청 일부 타임아웃");
+            }
+
+            // 결과 수집
+            CheckupApiContext checkupCtx = null;
+            List<CheckupApiContext> predictionCtxs = new ArrayList<>();
+            List<String> failedAtStep1 = new ArrayList<>();
+
+            for (CompletableFuture<CheckupApiContext> f : futures) {
+                CheckupApiContext ctx;
+                try {
+                    ctx = f.isDone() ? f.join() : null;
+                } catch (Exception e) {
+                    ctx = null;
+                }
+                if (ctx == null) continue;
+
+                if (API_CHECKUP.equals(ctx.getName())) {
+                    checkupCtx = ctx;
+                } else {
+                    if (ctx.getFirstResponseCode() != null
+                        && ("CF-00000".equals(ctx.getFirstResponseCode())
+                         || "CF-03002".equals(ctx.getFirstResponseCode()))) {
+                        predictionCtxs.add(ctx);
+                    } else {
+                        failedAtStep1.add(ctx.getName());
+                        log.warn("예측 1차 실패 - type: {}, code: {}", ctx.getName(), ctx.getFirstResponseCode());
+                    }
+                }
+            }
+
+            // 건강검진 1차 실패 → 전체 실패 (옵션 B)
+            if (checkupCtx == null
+                || (!"CF-00000".equals(checkupCtx.getFirstResponseCode())
+                 && !"CF-03002".equals(checkupCtx.getFirstResponseCode()))) {
+                String code = checkupCtx != null ? checkupCtx.getFirstResponseCode() : "UNKNOWN";
+                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: 건강검진 정보를 불러올 수 없습니다.");
+            }
+
+            // 타임아웃된 예측은 실패 목록에 추가
+            for (int i = 0; i < futures.size(); i++) {
+                if (!futures.get(i).isDone()) {
+                    String name = (i == 0) ? API_CHECKUP : predictionTypes[i - 1];
+                    if (!API_CHECKUP.equals(name) && !failedAtStep1.contains(name)) {
+                        boolean alreadyCollected = false;
+                        for (CheckupApiContext c : predictionCtxs) {
+                            if (c.getName().equals(name)) { alreadyCollected = true; break; }
+                        }
+                        if (!alreadyCollected) failedAtStep1.add(name);
+                    }
+                }
+            }
+
+            // 세션 구성
+            List<CheckupApiContext> allApis = new ArrayList<>();
+            allApis.add(checkupCtx);
+            allApis.addAll(predictionCtxs);
+
             String sessionKey = UUID.randomUUID().toString();
-            singleSessions.put(sessionKey, new SingleSession(userId, params, toMap(respMap.get("data")), LocalDateTime.now()));
-            log.info("NHIS 건강검진 1차 완료 - sessionKey: {}", sessionKey);
+            checkupMultiSessions.put(sessionKey,
+                    new CheckupMultiSession(userId, allApis, failedAtStep1, LocalDateTime.now()));
+            log.info("건강검진+예측 1차 완료 - sessionKey: {}, 수집: {}, 1차실패: {}",
+                    sessionKey, allApis.size(), failedAtStep1);
             return sessionKey;
 
         } catch (RuntimeException e) { throw e;
         } catch (Exception e) {
-            log.error("NHIS 건강검진 1차 실패: {}", e.getMessage(), e);
+            log.error("건강검진+예측 1차 실패: {}", e.getMessage(), e);
             throw new RuntimeException("건강검진 요청 중 오류: " + e.getMessage(), e);
         }
     }
 
-    @Transactional
-    public int syncCheckupStep2(String sessionKey) {
-        SingleSession session = getValidSingleSession(sessionKey);
+    /** 단일 API의 1차 요청 처리 → CheckupApiContext 반환 (실패해도 null 아님, code로 구분) */
+    private CheckupApiContext fireFirstRequest(String name, String apiUrl,
+                                               HashMap<String, Object> params,
+                                               EasyCodefServiceType svcType) {
         try {
-            HashMap<String, Object> certMap = new HashMap<>(session.getParams());
-            certMap.put("twoWayInfo", new HashMap<>(session.getTwoWayData()));
-            certMap.put("is2Way",    true);
-            certMap.put("simpleAuth","1");
+            log.info("[{}] 1차 요청", name);
+            String raw = createCodef().requestProduct(apiUrl, svcType, params);
+            log.debug("[{}] 1차 응답: {}", name, raw);
 
-            log.info("NHIS 건강검진 2차 요청 - sessionKey: {}", sessionKey);
-            String result = createCodef().requestCertification(NHIS_URL, serviceType(), certMap);
-            log.info("NHIS 건강검진 2차 응답: {}", result);
+            Map<String, Object> respMap = objectMapper.readValue(raw, Map.class);
+            Map<String, Object> resultField = toMap(respMap.get("result"));
+            String code = (String) resultField.get("code");
 
-            Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
+            if ("CF-03002".equals(code)) {
+                return new CheckupApiContext(name, apiUrl, params, code, toMap(respMap.get("data")), null);
+            } else if ("CF-00000".equals(code)) {
+                return new CheckupApiContext(name, apiUrl, params, code, null, raw);
+            } else {
+                log.warn("[{}] 1차 비정상 응답 - code: {}, message: {}", name, code, resultField.get("message"));
+                return new CheckupApiContext(name, apiUrl, params, code, null, null);
+            }
+        } catch (Exception e) {
+            log.warn("[{}] 1차 예외: {}", name, e.getMessage());
+            return new CheckupApiContext(name, apiUrl, params, "EXCEPTION", null, null);
+        }
+    }
+
+    @Transactional
+    public CheckupStep2Result syncCheckupStep2(String sessionKey) {
+        CheckupMultiSession session = getValidCheckupMultiSession(sessionKey);
+
+        // 건강검진 컨텍스트 우선 추출 + 인증/저장 (필수)
+        CheckupApiContext checkupCtx = null;
+        List<CheckupApiContext> predictionCtxs = new ArrayList<>();
+        for (CheckupApiContext c : session.getApis()) {
+            if (API_CHECKUP.equals(c.getName())) checkupCtx = c;
+            else predictionCtxs.add(c);
+        }
+        if (checkupCtx == null) {
+            throw new RuntimeException("세션에 건강검진 정보가 없습니다. 처음부터 다시 시도해주세요.");
+        }
+
+        int savedCheckups;
+        try {
+            String checkupResult = certifyOrUseRaw(checkupCtx);
+            // 코드 검증
+            Map<String, Object> respMap = objectMapper.readValue(checkupResult, Map.class);
             Map<String, Object> resultField = toMap(respMap.get("result"));
             String code = (String) resultField.get("code");
             if (!"CF-00000".equals(code)) {
                 String msg = (String) resultField.getOrDefault("message", "건강검진 인증 실패");
                 throw new RuntimeException("건강검진(NHIS) 인증 오류 [" + code + "]: " + msg);
             }
-
-            int count = saveCheckupResults(session.getUserId(), result);
-            singleSessions.remove(sessionKey);
-            log.info("NHIS 건강검진 동기화 완료 - userId: {}, count: {}", session.getUserId(), count);
-            return count;
-
-        } catch (RuntimeException e) { throw e;
+            savedCheckups = saveCheckupResults(session.getUserId(), checkupResult);
+        } catch (RuntimeException e) {
+            // 건강검진 실패 → 전체 실패 (트랜잭션 롤백)
+            checkupMultiSessions.remove(sessionKey);
+            throw e;
         } catch (Exception e) {
-            log.error("NHIS 건강검진 2차 실패: {}", e.getMessage(), e);
+            checkupMultiSessions.remove(sessionKey);
+            log.error("건강검진 2차 실패: {}", e.getMessage(), e);
             throw new RuntimeException("건강검진 인증 중 오류: " + e.getMessage(), e);
         }
+
+        // 예측 4개 개별 처리 (부분 실패 허용)
+        int savedPredictions = 0;
+        List<String> failedPredictions = new ArrayList<>(session.getFailedPredictionsAtStep1());
+
+        for (CheckupApiContext pCtx : predictionCtxs) {
+            try {
+                String predResult = certifyOrUseRaw(pCtx);
+                Map<String, Object> respMap = objectMapper.readValue(predResult, Map.class);
+                Map<String, Object> resultField = toMap(respMap.get("result"));
+                String code = (String) resultField.get("code");
+                if (!"CF-00000".equals(code)) {
+                    log.warn("[{}] 2차 비정상 응답 - code: {}", pCtx.getName(), code);
+                    failedPredictions.add(pCtx.getName());
+                    continue;
+                }
+                savePredictionResult(session.getUserId(), pCtx.getName(), predResult);
+                savedPredictions++;
+            } catch (Exception e) {
+                log.warn("[{}] 2차 예외 - 건너뜀: {}", pCtx.getName(), e.getMessage());
+                failedPredictions.add(pCtx.getName());
+            }
+        }
+
+        checkupMultiSessions.remove(sessionKey);
+        log.info("건강검진+예측 동기화 완료 - userId: {}, checkups: {}, predictions: {}, failed: {}",
+                session.getUserId(), savedCheckups, savedPredictions, failedPredictions);
+        return new CheckupStep2Result(savedCheckups, savedPredictions, failedPredictions);
+    }
+
+    /** CF-00000이면 rawResult 그대로, CF-03002면 requestCertification 호출 */
+    private String certifyOrUseRaw(CheckupApiContext ctx) throws Exception {
+        if ("CF-00000".equals(ctx.getFirstResponseCode()) && ctx.getRawResult() != null) {
+            log.info("[{}] CF-00000 → 1차 응답 직접 사용", ctx.getName());
+            return ctx.getRawResult();
+        }
+        HashMap<String, Object> certMap = new HashMap<>(ctx.getParams());
+        certMap.put("twoWayInfo", buildTwoWayInfo(ctx.getTwoWayData()));
+        certMap.put("is2Way",    true);
+        certMap.put("simpleAuth","1");
+        log.info("[{}] 2차 인증 요청", ctx.getName());
+        return createCodef().requestCertification(ctx.getApiUrl(), serviceType(), certMap);
+    }
+
+    private CheckupMultiSession getValidCheckupMultiSession(String sessionKey) {
+        CheckupMultiSession s = checkupMultiSessions.get(sessionKey);
+        if (s == null) throw new RuntimeException("세션이 없거나 만료되었습니다. 처음부터 다시 시도해주세요.");
+        if (s.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(SESSION_TIMEOUT_MINUTES))) {
+            checkupMultiSessions.remove(sessionKey);
+            throw new RuntimeException("인증 시간이 초과되었습니다. 처음부터 다시 시도해주세요.");
+        }
+        return s;
+    }
+
+    /**
+     * 예측 결과 1건 파싱 + 저장
+     * - 뇌졸중/당뇨/심뇌혈관: resRiskGrade, resRatio, resAverageAge, resAverageRatio
+     * - 건강나이(HEALTH_AGE): 응답 구조 다름 → resAge(건강나이), resChronologicalAge(실제나이) 매핑
+     */
+    @SuppressWarnings("unchecked")
+    private void savePredictionResult(Long userId, String predictionType, String rawResult) throws Exception {
+        Map<String, Object> respMap = objectMapper.readValue(rawResult, Map.class);
+        Map<String, Object> data = toMap(respMap.get("data"));
+
+        LocalDate checkupDate = parseDate8(str(data.get("resCheckupDate")));
+
+        String riskGrade, riskRatio, averageAge, averageRatio;
+        if (API_HEALTH_AGE.equals(predictionType)) {
+            // 건강나이는 등급/비율 개념 없음 → resAge/resChronologicalAge만 핵심
+            riskGrade    = null;
+            riskRatio    = str(data.get("resAge"));               // 건강나이
+            averageAge   = str(data.get("resChronologicalAge"));  // 실제나이
+            averageRatio = null;
+        } else {
+            riskGrade    = str(data.get("resRiskGrade"));
+            riskRatio    = str(data.get("resRatio"));
+            averageAge   = str(data.get("resAverageAge"));
+            averageRatio = str(data.get("resAverageRatio"));
+        }
+
+        // 같은 (userId, type) 기존 데이터 삭제 → 최신만 유지
+        healthPredictionRepo.deleteByUserIdAndPredictionType(userId, predictionType);
+
+        HealthPrediction pred = HealthPrediction.builder()
+                .userId(userId)
+                .predictionType(predictionType)
+                .checkupDate(checkupDate)
+                .riskGrade(riskGrade)
+                .riskRatio(riskRatio)
+                .averageAge(averageAge)
+                .averageRatio(averageRatio)
+                .rawJson(rawResult)
+                .build();
+        healthPredictionRepo.save(pred);
+        log.info("[{}] 저장 완료 - userId: {}, date: {}", predictionType, userId, checkupDate);
     }
 
     // ── 진료정보(HIRA) 단독 ──────────────────────────────────────────────
@@ -888,6 +1119,35 @@ public class CodefSyncService {
         private int savedMedicals;
         private int savedMedications;
         private int updatedNonCovered;
+    }
+
+    /** 건강검진 + 예측 4개 API 컨텍스트 */
+    @Data
+    @AllArgsConstructor
+    private static class CheckupApiContext {
+        private String name;                    // CHECKUP / HEALTH_AGE / STROKE / DIABETES / CARDIO
+        private String apiUrl;
+        private HashMap<String, Object> params; // 1차 요청 파라미터 (2차에 재사용)
+        private String firstResponseCode;       // CF-00000 / CF-03002 / 기타
+        private Map<String, Object> twoWayData; // CF-03002일 때만
+        private String rawResult;               // CF-00000일 때 1차 응답
+    }
+
+    @Data
+    @AllArgsConstructor
+    private static class CheckupMultiSession {
+        private Long userId;
+        private List<CheckupApiContext> apis;            // 건강검진 + 성공한 예측들
+        private List<String> failedPredictionsAtStep1;   // 1차에서 실패한 예측 타입
+        private LocalDateTime createdAt;
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class CheckupStep2Result {
+        private int savedCheckups;
+        private int savedPredictions;
+        private List<String> failedPredictions;
     }
 
     /** 연말정산 단년도 요청 세션 (params + 2차 twoWayData) */

@@ -90,6 +90,24 @@ CREATE TABLE IF NOT EXISTS medication_details (
     INDEX idx_prescribed_date (prescribed_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Health Predictions table (건강나이/뇌졸중/당뇨/심뇌혈관 NHIS 예측)
+CREATE TABLE IF NOT EXISTS health_predictions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    prediction_type VARCHAR(30) NOT NULL,
+    checkup_date DATE,
+    risk_grade VARCHAR(2),
+    risk_ratio VARCHAR(20),
+    average_age VARCHAR(10),
+    average_ratio VARCHAR(20),
+    raw_json LONGTEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_prediction_type (prediction_type),
+    UNIQUE KEY uk_user_type_date (user_id, prediction_type, checkup_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================
 -- medicatch_insurance database
 -- ============================================
