@@ -521,13 +521,12 @@ public class CodefSyncService {
             String[] predictionTypes = { API_HEALTH_AGE, API_STROKE, API_DIABETES, API_CARDIO };
             String[] predictionUrls  = { HEALTH_AGE_URL, STROKE_URL, DIABETES_URL, CARDIO_URL };
 
-            List<CompletableFuture<CheckupApiContext>> futures = new ArrayList<>();
-
-            // 건강검진 future
-            futures.add(CompletableFuture.supplyAsync(() ->
-                fireFirstRequest(API_CHECKUP, NHIS_URL, checkupParams, svcType)));
+            // 건강검진 future (필수, 별도 변수로 관리)
+            CompletableFuture<CheckupApiContext> checkupFuture = CompletableFuture.supplyAsync(() ->
+                    fireFirstRequest(API_CHECKUP, NHIS_URL, checkupParams, svcType));
 
             // 예측 4개 future
+            List<CompletableFuture<CheckupApiContext>> predictionFutures = new ArrayList<>();
             for (int i = 0; i < predictionTypes.length; i++) {
                 final String pType = predictionTypes[i];
                 final String pUrl  = predictionUrls[i];
@@ -542,47 +541,21 @@ public class CodefSyncService {
                 predParams.put("id",             sharedId);
                 if ("5".equals(loginTypeLevel)) predParams.put("telecom", telecom);
 
-                futures.add(CompletableFuture.supplyAsync(() ->
-                    fireFirstRequest(pType, pUrl, predParams, svcType)));
+                predictionFutures.add(CompletableFuture.supplyAsync(() ->
+                        fireFirstRequest(pType, pUrl, predParams, svcType)));
             }
 
-            // 모든 1차 요청 완료 대기 (최대 30초)
+            // 1) 건강검진 응답 우선 대기 (최대 90초) — 필수이므로 충분히 기다림
+            CheckupApiContext checkupCtx;
             try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .get(30, TimeUnit.SECONDS);
+                checkupCtx = checkupFuture.get(90, TimeUnit.SECONDS);
             } catch (TimeoutException te) {
-                log.warn("건강검진+예측 1차 요청 일부 타임아웃");
+                throw new RuntimeException("건강검진(NHIS) 오류 [TIMEOUT]: 응답이 너무 늦어 다시 시도해주세요.");
+            } catch (Exception e) {
+                throw new RuntimeException("건강검진(NHIS) 오류 [EXCEPTION]: " + e.getMessage(), e);
             }
 
-            // 결과 수집
-            CheckupApiContext checkupCtx = null;
-            List<CheckupApiContext> predictionCtxs = new ArrayList<>();
-            List<String> failedAtStep1 = new ArrayList<>();
-
-            for (CompletableFuture<CheckupApiContext> f : futures) {
-                CheckupApiContext ctx;
-                try {
-                    ctx = f.isDone() ? f.join() : null;
-                } catch (Exception e) {
-                    ctx = null;
-                }
-                if (ctx == null) continue;
-
-                if (API_CHECKUP.equals(ctx.getName())) {
-                    checkupCtx = ctx;
-                } else {
-                    if (ctx.getFirstResponseCode() != null
-                        && ("CF-00000".equals(ctx.getFirstResponseCode())
-                         || "CF-03002".equals(ctx.getFirstResponseCode()))) {
-                        predictionCtxs.add(ctx);
-                    } else {
-                        failedAtStep1.add(ctx.getName());
-                        log.warn("예측 1차 실패 - type: {}, code: {}", ctx.getName(), ctx.getFirstResponseCode());
-                    }
-                }
-            }
-
-            // 건강검진 1차 실패 → 전체 실패 (옵션 B)
+            // 건강검진 응답코드 검증 (옵션 B)
             if (checkupCtx == null
                 || (!"CF-00000".equals(checkupCtx.getFirstResponseCode())
                  && !"CF-03002".equals(checkupCtx.getFirstResponseCode()))) {
@@ -590,17 +563,33 @@ public class CodefSyncService {
                 throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: 건강검진 정보를 불러올 수 없습니다.");
             }
 
-            // 타임아웃된 예측은 실패 목록에 추가
-            for (int i = 0; i < futures.size(); i++) {
-                if (!futures.get(i).isDone()) {
-                    String name = (i == 0) ? API_CHECKUP : predictionTypes[i - 1];
-                    if (!API_CHECKUP.equals(name) && !failedAtStep1.contains(name)) {
-                        boolean alreadyCollected = false;
-                        for (CheckupApiContext c : predictionCtxs) {
-                            if (c.getName().equals(name)) { alreadyCollected = true; break; }
-                        }
-                        if (!alreadyCollected) failedAtStep1.add(name);
-                    }
+            // 2) 예측 4개 결과 수집 — 건강검진 완료 후 추가로 최대 30초 더 대기
+            try {
+                CompletableFuture.allOf(predictionFutures.toArray(new CompletableFuture[0]))
+                        .get(30, TimeUnit.SECONDS);
+            } catch (TimeoutException te) {
+                log.warn("예측 API 일부 타임아웃 - 완료된 것만 수집");
+            } catch (Exception ignored) {}
+
+            List<CheckupApiContext> predictionCtxs = new ArrayList<>();
+            List<String> failedAtStep1 = new ArrayList<>();
+            for (int i = 0; i < predictionFutures.size(); i++) {
+                CompletableFuture<CheckupApiContext> f = predictionFutures.get(i);
+                String pName = predictionTypes[i];
+                CheckupApiContext ctx = null;
+                if (f.isDone()) {
+                    try { ctx = f.join(); } catch (Exception ignored) {}
+                }
+                if (ctx == null) {
+                    failedAtStep1.add(pName);
+                    continue;
+                }
+                if ("CF-00000".equals(ctx.getFirstResponseCode())
+                 || "CF-03002".equals(ctx.getFirstResponseCode())) {
+                    predictionCtxs.add(ctx);
+                } else {
+                    failedAtStep1.add(pName);
+                    log.warn("예측 1차 실패 - type: {}, code: {}", pName, ctx.getFirstResponseCode());
                 }
             }
 
