@@ -501,7 +501,9 @@ public class CodefSyncService {
         try {
             String identity8   = deriveIdentity8(identity13);
             String currentYear = String.valueOf(LocalDate.now().getYear());
-            String sharedId    = "mc_nhis_" + userId;
+            // SSO 그룹핑 키 — 매 호출마다 새 UUID. 같은 호출 내 5개 API가 공유.
+            // 고정값 사용 시 이전 미완료 세션과 충돌해 CF-12001 (사용자 입력 시간 초과) 발생.
+            String sharedId    = "mc_" + userId + "_" + UUID.randomUUID().toString().substring(0, 8);
             EasyCodefServiceType svcType = serviceType();
 
             // 1) 건강검진 파라미터 (searchStartYear/EndYear 사용)
@@ -560,7 +562,13 @@ public class CodefSyncService {
                 || (!"CF-00000".equals(checkupCtx.getFirstResponseCode())
                  && !"CF-03002".equals(checkupCtx.getFirstResponseCode()))) {
                 String code = checkupCtx != null ? checkupCtx.getFirstResponseCode() : "UNKNOWN";
-                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: 건강검진 정보를 불러올 수 없습니다.");
+                String userMsg;
+                if ("CF-12001".equals(code)) {
+                    userMsg = "이전 인증이 완료되지 않았습니다. 잠시 후 다시 시도해주세요.";
+                } else {
+                    userMsg = "건강검진 정보를 불러올 수 없습니다.";
+                }
+                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: " + userMsg);
             }
 
             // 2) 예측 4개 결과 수집 — 건강검진 완료 후 추가로 최대 30초 더 대기
