@@ -579,46 +579,14 @@ public class CodefSyncService {
                 throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: " + userMsg);
             }
 
-            // 2) 예측 4개 결과 수집 — 건강검진 완료 후 추가로 최대 30초 더 대기
-            try {
-                CompletableFuture.allOf(predictionFutures.toArray(new CompletableFuture[0]))
-                        .get(30, TimeUnit.SECONDS);
-            } catch (TimeoutException te) {
-                log.warn("예측 API 일부 타임아웃 - 완료된 것만 수집");
-            } catch (Exception ignored) {}
-
-            List<CheckupApiContext> predictionCtxs = new ArrayList<>();
-            List<String> failedAtStep1 = new ArrayList<>();
-            for (int i = 0; i < predictionFutures.size(); i++) {
-                CompletableFuture<CheckupApiContext> f = predictionFutures.get(i);
-                String pName = predictionTypes[i];
-                CheckupApiContext ctx = null;
-                if (f.isDone()) {
-                    try { ctx = f.join(); } catch (Exception ignored) {}
-                }
-                if (ctx == null) {
-                    failedAtStep1.add(pName);
-                    continue;
-                }
-                if ("CF-00000".equals(ctx.getFirstResponseCode())
-                 || "CF-03002".equals(ctx.getFirstResponseCode())) {
-                    predictionCtxs.add(ctx);
-                } else {
-                    failedAtStep1.add(pName);
-                    log.warn("예측 1차 실패 - type: {}, code: {}", pName, ctx.getFirstResponseCode());
-                }
-            }
-
-            // 세션 구성
-            List<CheckupApiContext> allApis = new ArrayList<>();
-            allApis.add(checkupCtx);
-            allApis.addAll(predictionCtxs);
-
+            // 예측 4개 응답은 step1에서 기다리지 않고 백그라운드로 유지.
+            // 사용자 폰 인증 동안 응답이 오므로 step2에서 join하면 추가 대기 없음.
             String sessionKey = UUID.randomUUID().toString();
             checkupMultiSessions.put(sessionKey,
-                    new CheckupMultiSession(userId, allApis, failedAtStep1, LocalDateTime.now()));
-            log.info("건강검진+예측 1차 완료 - sessionKey: {}, 수집: {}, 1차실패: {}",
-                    sessionKey, allApis.size(), failedAtStep1);
+                    new CheckupMultiSession(userId, checkupCtx,
+                            Arrays.asList(predictionTypes), predictionFutures, LocalDateTime.now()));
+            log.info("건강검진 1차 완료 - sessionKey: {}, CHECKUP code: {}, 예측 4개는 백그라운드 진행",
+                    sessionKey, checkupCtx.getFirstResponseCode());
             return sessionKey;
 
         } catch (RuntimeException e) { throw e;
@@ -658,14 +626,7 @@ public class CodefSyncService {
     @Transactional
     public CheckupStep2Result syncCheckupStep2(String sessionKey) {
         CheckupMultiSession session = getValidCheckupMultiSession(sessionKey);
-
-        // 건강검진 컨텍스트 우선 추출 + 인증/저장 (필수)
-        CheckupApiContext checkupCtx = null;
-        List<CheckupApiContext> predictionCtxs = new ArrayList<>();
-        for (CheckupApiContext c : session.getApis()) {
-            if (API_CHECKUP.equals(c.getName())) checkupCtx = c;
-            else predictionCtxs.add(c);
-        }
+        CheckupApiContext checkupCtx = session.getCheckupCtx();
         if (checkupCtx == null) {
             throw new RuntimeException("세션에 건강검진 정보가 없습니다. 처음부터 다시 시도해주세요.");
         }
@@ -692,9 +653,36 @@ public class CodefSyncService {
             throw new RuntimeException("건강검진 인증 중 오류: " + e.getMessage(), e);
         }
 
+        // step1에서 백그라운드로 진행된 예측 4개 1차 응답 수집 (최대 30초 추가 대기)
+        List<CheckupApiContext> predictionCtxs = new ArrayList<>();
+        List<String> failedPredictions = new ArrayList<>();
+        List<CompletableFuture<CheckupApiContext>> pFutures = session.getPredictionFutures();
+        List<String> pTypes = session.getPredictionTypes();
+        try {
+            CompletableFuture.allOf(pFutures.toArray(new CompletableFuture[0]))
+                    .get(30, TimeUnit.SECONDS);
+        } catch (TimeoutException te) {
+            log.warn("예측 API 일부 타임아웃 - 완료된 것만 수집");
+        } catch (Exception ignored) {}
+        for (int i = 0; i < pFutures.size(); i++) {
+            CompletableFuture<CheckupApiContext> f = pFutures.get(i);
+            String pName = pTypes.get(i);
+            CheckupApiContext ctx = null;
+            if (f.isDone()) {
+                try { ctx = f.join(); } catch (Exception ignored) {}
+            }
+            if (ctx == null) { failedPredictions.add(pName); continue; }
+            if ("CF-00000".equals(ctx.getFirstResponseCode())
+             || "CF-03002".equals(ctx.getFirstResponseCode())) {
+                predictionCtxs.add(ctx);
+            } else {
+                log.warn("예측 1차 실패 - type: {}, code: {}", pName, ctx.getFirstResponseCode());
+                failedPredictions.add(pName);
+            }
+        }
+
         // 예측 4개 개별 처리 (부분 실패 허용)
         int savedPredictions = 0;
-        List<String> failedPredictions = new ArrayList<>(session.getFailedPredictionsAtStep1());
 
         for (CheckupApiContext pCtx : predictionCtxs) {
             try {
@@ -1144,8 +1132,9 @@ public class CodefSyncService {
     @AllArgsConstructor
     private static class CheckupMultiSession {
         private Long userId;
-        private List<CheckupApiContext> apis;            // 건강검진 + 성공한 예측들
-        private List<String> failedPredictionsAtStep1;   // 1차에서 실패한 예측 타입
+        private CheckupApiContext checkupCtx;                              // 건강검진 (필수, 1차 응답 받은 상태)
+        private List<String> predictionTypes;                              // 예측 타입 순서 (futures와 매칭)
+        private List<CompletableFuture<CheckupApiContext>> predictionFutures; // 예측 1차 응답 비동기 (step2에서 join)
         private LocalDateTime createdAt;
     }
 
