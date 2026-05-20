@@ -18,84 +18,6 @@ const P = {
   chart:  (<><path d="M3 13V7M8 13V3M13 13V9"/></>),
 };
 
-// Mock 데이터 형태는 백엔드 필드명 그대로 유지
-// (checkup_results 테이블 컬럼명 = CheckupResult 엔티티 = API 응답 키)
-const MOCK_CHECKUPS = [
-  {
-    checkupDate: '2025-09-11',
-    checkupType: 'REGULAR',
-    height: 161.2,
-    weight: 61.0,
-    waist: 73.5,
-    bmi: 23.5,
-    sight: '1.0/1.2',
-    hearing: '정상/정상',
-    bloodPressureSystolic: 135,
-    bloodPressureDiastolic: 96,
-    glucose: 98,
-    totalCholesterol: 280,
-    hdlCholesterol: 71,
-    ldlCholesterol: 171,
-    triglycerides: 186,
-    urinaryProtein: '음성',
-    hemoglobin: 15.5,
-    serumCreatinine: 0.9,
-    gfr: 71,
-    ast: 23,
-    alt: 20,
-    gammaGtp: 22,
-    organizationName: '성애의료재단 성애병원',
-    recommendations: '의심',
-    abnormalFindings: '',
-  },
-  {
-    checkupDate: '2024-07-20',
-    checkupType: 'REGULAR',
-    height: 161.6,
-    weight: 61.8,
-    waist: 80.3,
-    bmi: 23.7,
-    sight: '0.4/1.0',
-    hearing: '정상/정상',
-    bloodPressureSystolic: 122,
-    bloodPressureDiastolic: 86,
-    glucose: 107,
-    totalCholesterol: null,
-    hdlCholesterol: null,
-    ldlCholesterol: null,
-    triglycerides: null,
-    urinaryProtein: '음성',
-    hemoglobin: 14.6,
-    serumCreatinine: 0.9,
-    gfr: 72,
-    ast: 19,
-    alt: 11,
-    gammaGtp: 23,
-    organizationName: '속편한내과의원',
-    recommendations: '정B',
-    abnormalFindings: '',
-  },
-];
-
-// 건강나이 Mock (HealthAgeResult 엔티티 = /health/health-age 응답 키)
-const MOCK_HEALTH_AGE = {
-  checkupDate: '2025-09-11',
-  biologicalAge: 47,
-  chronologicalAge: 50,
-  summaryNote: '당신의 건강나이는 실제 나이보다 3살 적습니다.',
-  detailMessage: '와우! 건강나이가 실제 나이보다 더 젊어요!',
-  changeAfterMessage: '위험요인 조절 시 건강나이 45세 실제나이 50세',
-  gender: '여성',
-  height: 161.2,
-  weight: 61.0,
-  factors: [],
-};
-
-const MOCK_TARGETS = [
-  { name: '위암검진',   dueDate: '2026-06', status: 'DUE' },
-  { name: '대장암검진', dueDate: '2026-06', status: 'DUE' },
-  { name: '구강검진',   dueDate: '2026-06', status: 'OVERDUE' },
-];
 
 const STATUS_LABEL = { NORMAL: '정상', WARNING: '주의', DANGER: '경고' };
 const STATUS_CLASS = { NORMAL: 'mc-tag-success', WARNING: 'mc-tag-warning', DANGER: 'mc-tag-danger' };
@@ -232,11 +154,11 @@ const yearOf = (isoDate) => {
 };
 
 const CheckupRecords = () => {
-  const [checkups, setCheckups] = useState(MOCK_CHECKUPS);
-  const [healthAge, setHealthAge] = useState(MOCK_HEALTH_AGE);
+  const [checkups, setCheckups] = useState([]);
+  const [healthAge, setHealthAge] = useState(null);
   const [diseases, setDiseases] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(MOCK_CHECKUPS[0]?.checkupDate);
-  const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchCheckups = async () => {
@@ -295,31 +217,39 @@ const CheckupRecords = () => {
 
       {/* 건강나이 카드 + 주요 지표 요약 */}
       <div className="mc-two-col" style={{ gridTemplateColumns: '360px 1fr' }}>
-        <div className={`mc-card mc-card-body ${isYounger ? 'mc-card-accent-success' : 'mc-card-accent-warning'}`}>
-          <div className="mc-field-label">건강나이</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
-            <div style={{
-              fontSize: 36, fontWeight: 800, letterSpacing: '-0.5px',
-              color: isYounger ? '#3A7A62' : '#8A7040',
-            }}>
-              {healthAge?.biologicalAge ?? '-'}세
+        {healthAge ? (
+          <div className={`mc-card mc-card-body ${isYounger ? 'mc-card-accent-success' : 'mc-card-accent-warning'}`}>
+            <div className="mc-field-label">건강나이</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
+              <div style={{
+                fontSize: 36, fontWeight: 800, letterSpacing: '-0.5px',
+                color: isYounger ? '#3A7A62' : '#8A7040',
+              }}>
+                {healthAge.biologicalAge}세
+              </div>
+              {ageDelta !== 0 && (
+                <span className={`mc-tag ${isYounger ? 'mc-tag-success' : 'mc-tag-warning'}`}>
+                  {ageDelta > 0 ? `+${ageDelta}세` : `${ageDelta}세`}
+                </span>
+              )}
             </div>
-            {ageDelta !== 0 && (
-              <span className={`mc-tag ${isYounger ? 'mc-tag-success' : 'mc-tag-warning'}`}>
-                {ageDelta > 0 ? `+${ageDelta}세` : `${ageDelta}세`}
-              </span>
+            <div className="mc-card-sub" style={{ marginTop: 8 }}>
+              실제나이 {healthAge.chronologicalAge}세
+              {healthAge.checkupDate ? ` · ${yearOf(healthAge.checkupDate)}년 기준` : ''}
+            </div>
+            {healthAge.summaryNote && (
+              <div className="mc-card-sub" style={{ marginTop: 10 }}>
+                {healthAge.summaryNote}
+              </div>
             )}
           </div>
-          <div className="mc-card-sub" style={{ marginTop: 8 }}>
-            실제나이 {healthAge?.chronologicalAge ?? '-'}세
-            {healthAge?.checkupDate ? ` · ${yearOf(healthAge.checkupDate)}년 기준` : ''}
+        ) : (
+          <div className="mc-card mc-card-body" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 8, minHeight: 140, color: '#9AA3B2' }}>
+            <div className="mc-field-label">건강나이</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>-세</div>
+            <div style={{ fontSize: 12 }}>건강나이 데이터가 없습니다</div>
           </div>
-          {healthAge?.summaryNote && (
-            <div className="mc-card-sub" style={{ marginTop: 10 }}>
-              {healthAge.summaryNote}
-            </div>
-          )}
-        </div>
+        )}
 
         <div className="mc-grid-2">
           <div className="mc-card mc-card-body">
@@ -353,17 +283,23 @@ const CheckupRecords = () => {
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
         <span className="mc-sec-title">검진 일자</span>
       </div>
-      <div className="mc-row-wrap">
-        {checkups.map((c) => (
-          <button
-            key={c.checkupDate}
-            className={`mc-chip ${selectedDate === c.checkupDate ? 'active' : ''}`}
-            onClick={() => setSelectedDate(c.checkupDate)}
-          >
-            <Ic d={P.cal} size={10}/> {c.checkupDate}
-          </button>
-        ))}
-      </div>
+      {checkups.length === 0 ? (
+        <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: '#9AA3B2', padding: '24px 0' }}>
+          검진 기록이 없습니다. CODEF 연동 후 데이터가 표시됩니다.
+        </div>
+      ) : (
+        <div className="mc-row-wrap">
+          {checkups.map((c) => (
+            <button
+              key={c.checkupDate}
+              className={`mc-chip ${selectedDate === c.checkupDate ? 'active' : ''}`}
+              onClick={() => setSelectedDate(c.checkupDate)}
+            >
+              <Ic d={P.cal} size={10}/> {c.checkupDate}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 검사 결과 테이블 */}
       {results.length > 0 && (
@@ -403,39 +339,45 @@ const CheckupRecords = () => {
         </>
       )}
 
-      {/* 최근 추이 (검진 데이터 기반은 다음 단계에서 동적화) */}
+      {/* 최근 추이 분석 */}
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
         <span className="mc-sec-title">최근 추이 분석</span>
       </div>
-      <div className="mc-card mc-card-body">
-        <div className="mc-chart-wrap">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart
-              data={checkups.slice(0, 3).map((c) => ({
-                checkupDate: c.checkupDate,
-                bloodPressureSystolic: c.bloodPressureSystolic,
-                glucose: c.glucose,
-                totalCholesterol: c.totalCholesterol,
-              })).reverse()}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
-              <XAxis dataKey="checkupDate" tick={{ fill: '#4A5568', fontSize: 11 }} axisLine={{ stroke: '#DDE1EA' }}/>
-              <YAxis tick={{ fill: '#9AA3B2', fontSize: 11 }} axisLine={{ stroke: '#DDE1EA' }}/>
-              <Tooltip
-                contentStyle={{
-                  background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
-                  fontSize: 12, color: '#0D1520',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#4A5568' }}/>
-              <Bar dataKey="bloodPressureSystolic" fill="#9A6060" name="수축기혈압"/>
-              <Bar dataKey="glucose"               fill="#8A7040" name="공복혈당"/>
-              <Bar dataKey="totalCholesterol"      fill="#2F6FE8" name="총콜레스테롤"/>
-            </BarChart>
-          </ResponsiveContainer>
+      {checkups.length < 2 ? (
+        <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: '#9AA3B2', padding: '24px 0' }}>
+          추이 분석을 위한 검진 데이터가 부족합니다. (최소 2회 이상 필요)
         </div>
-      </div>
+      ) : (
+        <div className="mc-card mc-card-body">
+          <div className="mc-chart-wrap">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart
+                data={checkups.slice(0, 3).map((c) => ({
+                  checkupDate: c.checkupDate,
+                  bloodPressureSystolic: c.bloodPressureSystolic,
+                  glucose: c.glucose,
+                  totalCholesterol: c.totalCholesterol,
+                })).reverse()}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
+                <XAxis dataKey="checkupDate" tick={{ fill: '#4A5568', fontSize: 11 }} axisLine={{ stroke: '#DDE1EA' }}/>
+                <YAxis tick={{ fill: '#9AA3B2', fontSize: 11 }} axisLine={{ stroke: '#DDE1EA' }}/>
+                <Tooltip
+                  contentStyle={{
+                    background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
+                    fontSize: 12, color: '#0D1520',
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12, color: '#4A5568' }}/>
+                <Bar dataKey="bloodPressureSystolic" fill="#9A6060" name="수축기혈압"/>
+                <Bar dataKey="glucose"               fill="#8A7040" name="공복혈당"/>
+                <Bar dataKey="totalCholesterol"      fill="#2F6FE8" name="총콜레스테롤"/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* 질병 위험도 */}
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
@@ -524,28 +466,6 @@ const CheckupRecords = () => {
         ))}
       </div>
       )}
-
-      {/* 필수 검진 대상 */}
-      <div className="mc-sec-head" style={{ marginTop: 18 }}>
-        <span className="mc-sec-title">필수 검진 대상</span>
-      </div>
-      <div className="mc-grid-auto-sm">
-        {MOCK_TARGETS.map((t, idx) => (
-          <div key={idx} className={`mc-card mc-card-body ${t.status === 'OVERDUE' ? 'mc-card-accent-danger' : 'mc-card-accent-warning'}`}>
-            <div className="mc-row-between">
-              <div>
-                <div className="mc-card-title" style={{ fontSize: 14 }}>{t.name}</div>
-                <div className="mc-card-sub" style={{ marginTop: 4 }}>
-                  <Ic d={P.cal} size={10}/> {t.dueDate}
-                </div>
-              </div>
-              <span className={`mc-tag ${t.status === 'OVERDUE' ? 'mc-tag-danger' : 'mc-tag-warning'}`}>
-                {t.status === 'OVERDUE' ? '기한 경과' : '예정'}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
 
       {loading && (
         <div className="mc-alert mc-alert-blue" style={{ marginTop: 16 }}>
