@@ -36,12 +36,6 @@ const MOCK_CHECKUPS = [
   },
 ];
 
-const MOCK_DISEASES = [
-  { type: '뇌졸중',   riskGrade: 'LOW',    avgProbability: 18.5, riskFactors: ['고혈압 경계', '흡연력'] },
-  { type: '당뇨',     riskGrade: 'MEDIUM', avgProbability: 28.5, riskFactors: ['복부비만', '경계성 혈당', '가족력'] },
-  { type: '심뇌혈관', riskGrade: 'LOW',    avgProbability: 20.3, riskFactors: ['고혈압 경계'] },
-];
-
 const MOCK_TARGETS = [
   { name: '위암검진',   dueDate: '2026-06', status: 'DUE' },
   { name: '대장암검진', dueDate: '2026-06', status: 'DUE' },
@@ -60,10 +54,43 @@ const GRADE_LABEL  = { LOW: '낮음', MEDIUM: '중간', HIGH: '높음' };
 const GRADE_CLASS  = { LOW: 'mc-tag-success', MEDIUM: 'mc-tag-warning', HIGH: 'mc-tag-danger' };
 const PBAR_CLASS = { LOW: 'success', MEDIUM: 'warning', HIGH: 'danger' };
 
+// CODEF 예측 API 응답 → 화면 카드 모양으로 변환
+const PREDICTION_TYPE_LABEL = { STROKE: '뇌졸중', DIABETES: '당뇨', CARDIO: '심뇌혈관' };
+const gradeToBucket = (g) => {
+  const n = parseInt(g, 10);
+  if (Number.isNaN(n)) return 'LOW';
+  if (n <= 2) return 'LOW';
+  if (n === 3) return 'MEDIUM';
+  return 'HIGH';
+};
+const parseRatio = (s) => {
+  if (s == null) return 0;
+  const str = String(s);
+  // "21/100" 형식이면 분자만 사용, 단일 숫자면 그대로
+  const num = parseFloat(str.includes('/') ? str.split('/')[0] : str);
+  return Number.isNaN(num) ? 0 : num;
+};
+const mergeDiseases = (apiRows) => {
+  if (!Array.isArray(apiRows) || apiRows.length === 0) return [];
+  // predictionType별 최신 row만 사용 (백엔드가 DESC 정렬해서 반환)
+  const latest = {};
+  for (const r of apiRows) {
+    if (!latest[r.predictionType]) latest[r.predictionType] = r;
+  }
+  return ['STROKE', 'DIABETES', 'CARDIO']
+    .filter((t) => latest[t])
+    .map((t) => ({
+      type: PREDICTION_TYPE_LABEL[t],
+      riskGrade: gradeToBucket(latest[t].riskGrade),
+      avgProbability: parseRatio(latest[t].riskRatio),
+      riskFactors: [],
+    }));
+};
+
 const CheckupRecords = () => {
   const [selectedYear, setSelectedYear] = useState(2025);
   const [checkups, setCheckups] = useState(MOCK_CHECKUPS);
-  const [diseases] = useState(MOCK_DISEASES);
+  const [diseases, setDiseases] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -78,7 +105,16 @@ const CheckupRecords = () => {
         setLoading(false);
       }
     };
+    const fetchDiseases = async () => {
+      try {
+        const rows = await healthAPI.getDiseasePredictions();
+        setDiseases(mergeDiseases(rows));
+      } catch (error) {
+        console.error('Failed to fetch disease predictions:', error);
+      }
+    };
     fetchCheckups();
+    fetchDiseases();
   }, []);
 
   const currentCheckup = checkups.find((c) => c.year === selectedYear) || checkups[0];
@@ -228,6 +264,11 @@ const CheckupRecords = () => {
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
         <span className="mc-sec-title">질병 위험도</span>
       </div>
+      {diseases.length === 0 ? (
+        <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: '#888' }}>
+          예측 데이터가 없습니다.
+        </div>
+      ) : (
       <div className="mc-grid-auto-sm">
         {diseases.map((d, idx) => (
           <div key={idx} className="mc-card mc-card-body">
@@ -249,12 +290,15 @@ const CheckupRecords = () => {
                 style={{ width: `${Math.min(d.avgProbability * 2, 100)}%` }}
               />
             </div>
-            <div className="mc-card-sub" style={{ marginTop: 10 }}>
-              위험요인: {d.riskFactors.join(', ')}
-            </div>
+            {d.riskFactors?.length > 0 && (
+              <div className="mc-card-sub" style={{ marginTop: 10 }}>
+                위험요인: {d.riskFactors.join(', ')}
+              </div>
+            )}
           </div>
         ))}
       </div>
+      )}
 
       {/* 필수 검진 대상 */}
       <div className="mc-sec-head" style={{ marginTop: 18 }}>
