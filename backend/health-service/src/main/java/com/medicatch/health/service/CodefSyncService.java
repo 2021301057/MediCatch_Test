@@ -523,15 +523,21 @@ public class CodefSyncService {
             String[] predictionTypes = { API_HEALTH_AGE, API_STROKE, API_DIABETES, API_CARDIO };
             String[] predictionUrls  = { HEALTH_AGE_URL, STROKE_URL, DIABETES_URL, CARDIO_URL };
 
-            // 건강검진 future (필수, 별도 변수로 관리)
-            CompletableFuture<CheckupApiContext> checkupFuture = CompletableFuture.supplyAsync(() ->
-                    fireFirstRequest(API_CHECKUP, NHIS_URL, checkupParams, svcType));
+            // SSO 그룹핑: 5개 API는 단일 EasyCodef 인스턴스 + 800ms 간격 순차 발사로 묶어야
+            // CODEF 서버가 같은 SSO id로 그룹핑 (인증 push 1회만 발생).
+            // 병렬 발사하거나 인스턴스를 분리하면 각각 별도 세션이 생성되어 push가 5회 옴.
+            final EasyCodef sharedCodef = createCodef();
 
-            // 예측 4개 future
+            // 건강검진 future (필수, 가장 먼저 발사)
+            CompletableFuture<CheckupApiContext> checkupFuture = CompletableFuture.supplyAsync(() ->
+                    fireFirstRequest(sharedCodef, API_CHECKUP, NHIS_URL, checkupParams, svcType));
+
+            // 예측 4개 future (각각 800ms 지연 후 발사)
             List<CompletableFuture<CheckupApiContext>> predictionFutures = new ArrayList<>();
             for (int i = 0; i < predictionTypes.length; i++) {
                 final String pType = predictionTypes[i];
                 final String pUrl  = predictionUrls[i];
+                final int    delay = 800 * (i + 1); // 800ms, 1600ms, 2400ms, 3200ms
                 HashMap<String, Object> predParams = new HashMap<>();
                 predParams.put("organization",   "0002");
                 predParams.put("loginType",      "5");
@@ -543,8 +549,10 @@ public class CodefSyncService {
                 predParams.put("id",             sharedId);
                 if ("5".equals(loginTypeLevel)) predParams.put("telecom", telecom);
 
-                predictionFutures.add(CompletableFuture.supplyAsync(() ->
-                        fireFirstRequest(pType, pUrl, predParams, svcType)));
+                predictionFutures.add(CompletableFuture.supplyAsync(() -> {
+                    try { Thread.sleep(delay); } catch (InterruptedException ignored) {}
+                    return fireFirstRequest(sharedCodef, pType, pUrl, predParams, svcType);
+                }));
             }
 
             // 1) 건강검진 응답 우선 대기 (최대 90초) — 필수이므로 충분히 기다림
@@ -621,12 +629,12 @@ public class CodefSyncService {
     }
 
     /** 단일 API의 1차 요청 처리 → CheckupApiContext 반환 (실패해도 null 아님, code로 구분) */
-    private CheckupApiContext fireFirstRequest(String name, String apiUrl,
+    private CheckupApiContext fireFirstRequest(EasyCodef codef, String name, String apiUrl,
                                                HashMap<String, Object> params,
                                                EasyCodefServiceType svcType) {
         try {
             log.info("[{}] 1차 요청", name);
-            String raw = createCodef().requestProduct(apiUrl, svcType, params);
+            String raw = codef.requestProduct(apiUrl, svcType, params);
             log.debug("[{}] 1차 응답: {}", name, raw);
 
             Map<String, Object> respMap = objectMapper.readValue(raw, Map.class);
