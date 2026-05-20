@@ -2,9 +2,15 @@ package com.medicatch.health.controller;
 
 import com.medicatch.health.dto.CheckupResultDto;
 import com.medicatch.health.dto.MedicalRecordDto;
-import com.medicatch.health.entity.HealthPrediction;
+import com.medicatch.health.entity.DiseasePrediction;
+import com.medicatch.health.entity.DiseasePredictionCompare;
+import com.medicatch.health.entity.DiseasePredictionFactor;
+import com.medicatch.health.entity.DiseasePredictionYearly;
+import com.medicatch.health.entity.HealthAgeFactor;
+import com.medicatch.health.entity.HealthAgeResult;
 import com.medicatch.health.entity.MedicationDetail;
-import com.medicatch.health.repository.HealthPredictionRepository;
+import com.medicatch.health.repository.DiseasePredictionRepository;
+import com.medicatch.health.repository.HealthAgeResultRepository;
 import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,14 +31,17 @@ public class HealthController {
 
     private final HealthService healthService;
     private final CodefSyncService codefSyncService;
-    private final HealthPredictionRepository healthPredictionRepo;
+    private final DiseasePredictionRepository diseasePredictionRepo;
+    private final HealthAgeResultRepository healthAgeResultRepo;
 
     public HealthController(HealthService healthService,
                             CodefSyncService codefSyncService,
-                            HealthPredictionRepository healthPredictionRepo) {
+                            DiseasePredictionRepository diseasePredictionRepo,
+                            HealthAgeResultRepository healthAgeResultRepo) {
         this.healthService = healthService;
         this.codefSyncService = codefSyncService;
-        this.healthPredictionRepo = healthPredictionRepo;
+        this.diseasePredictionRepo = diseasePredictionRepo;
+        this.healthAgeResultRepo = healthAgeResultRepo;
     }
 
     /**
@@ -326,26 +336,116 @@ public class HealthController {
     }
 
     /**
-     * Get disease predictions (건강나이, 뇌졸중, 당뇨, 심뇌혈관)
+     * Get disease predictions (뇌졸중 / 당뇨 / 심뇌혈관)
+     * - factors (위험요인 + 연도별 추이) 와 compares (연도별 예측값) 포함
      */
     @GetMapping("/disease-predictions")
     public ResponseEntity<List<Map<String, Object>>> getDiseasePredictions(@RequestParam Long userId) {
         log.info("GET /api/health/disease-predictions - userId: {}", userId);
         try {
-            List<HealthPrediction> rows = healthPredictionRepo.findByUserIdOrderByCheckupDateDesc(userId);
+            List<DiseasePrediction> rows = diseasePredictionRepo.findByUserIdOrderByCheckupDateDesc(userId);
             List<Map<String, Object>> resp = rows.stream().map(p -> {
                 Map<String, Object> m = new HashMap<>();
-                m.put("predictionType", p.getPredictionType());
-                m.put("checkupDate",    p.getCheckupDate());
-                m.put("riskGrade",      p.getRiskGrade());
-                m.put("riskRatio",      p.getRiskRatio());
-                m.put("averageAge",     p.getAverageAge());
-                m.put("averageRatio",   p.getAverageRatio());
+                m.put("predictionType",  p.getPredictionType());
+                m.put("checkupDate",     p.getCheckupDate());
+                m.put("riskGrade",       p.getRiskGrade());
+                m.put("riskRatio",       p.getRiskRatio());
+                m.put("averageRatio",    p.getAverageRatio());
+                m.put("averageAgeGroup", p.getAverageAgeGroup());
+
+                List<DiseasePredictionFactor> factors = p.getFactors();
+                if (factors != null) {
+                    m.put("factors", factors.stream()
+                            .sorted(Comparator.comparing(
+                                    DiseasePredictionFactor::getSortOrder,
+                                    Comparator.nullsLast(Comparator.naturalOrder())))
+                            .map(f -> {
+                                Map<String, Object> fm = new HashMap<>();
+                                fm.put("riskFactor",    f.getRiskFactor());
+                                fm.put("currentState",  f.getCurrentState());
+                                fm.put("severityType",  f.getSeverityType());
+                                fm.put("averageValue",  f.getAverageValue());
+                                List<DiseasePredictionYearly> yearly = f.getYearly();
+                                if (yearly != null) {
+                                    fm.put("yearly", yearly.stream()
+                                            .sorted(Comparator.comparing(
+                                                    DiseasePredictionYearly::getYear,
+                                                    Comparator.nullsLast(Comparator.naturalOrder())))
+                                            .map(y -> {
+                                                Map<String, Object> ym = new HashMap<>();
+                                                ym.put("year",          y.getYear());
+                                                ym.put("myAmount",      y.getMyAmount());
+                                                ym.put("averageAmount", y.getAverageAmount());
+                                                return ym;
+                                            }).collect(Collectors.toList()));
+                                }
+                                return fm;
+                            }).collect(Collectors.toList()));
+                }
+
+                List<DiseasePredictionCompare> compares = p.getCompares();
+                if (compares != null) {
+                    m.put("compares", compares.stream()
+                            .sorted(Comparator.comparing(
+                                    DiseasePredictionCompare::getYear,
+                                    Comparator.nullsLast(Comparator.naturalOrder())))
+                            .map(c -> {
+                                Map<String, Object> cm = new HashMap<>();
+                                cm.put("year",           c.getYear());
+                                cm.put("predictedState", c.getPredictedState());
+                                return cm;
+                            }).collect(Collectors.toList()));
+                }
                 return m;
             }).collect(Collectors.toList());
             return ResponseEntity.ok(resp);
         } catch (Exception e) {
             log.error("Error getting disease predictions: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Get health age (건강나이)
+     * - 최신 1건 반환. factors 포함. 데이터 없으면 204 No Content
+     */
+    @GetMapping("/health-age")
+    public ResponseEntity<Map<String, Object>> getHealthAge(@RequestParam Long userId) {
+        log.info("GET /api/health/health-age - userId: {}", userId);
+        try {
+            List<HealthAgeResult> rows = healthAgeResultRepo.findByUserIdOrderByCheckupDateDesc(userId);
+            if (rows.isEmpty()) return ResponseEntity.noContent().build();
+            HealthAgeResult r = rows.get(0);
+            Map<String, Object> m = new HashMap<>();
+            m.put("checkupDate",        r.getCheckupDate());
+            m.put("biologicalAge",      r.getBiologicalAge());
+            m.put("chronologicalAge",   r.getChronologicalAge());
+            m.put("summaryNote",        r.getSummaryNote());
+            m.put("detailMessage",      r.getDetailMessage());
+            m.put("changeAfterMessage", r.getChangeAfterMessage());
+            m.put("gender",             r.getGender());
+            m.put("height",             r.getHeight());
+            m.put("weight",             r.getWeight());
+
+            List<HealthAgeFactor> factors = r.getFactors();
+            if (factors != null) {
+                m.put("factors", factors.stream()
+                        .sorted(Comparator.comparing(
+                                HealthAgeFactor::getSortOrder,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(f -> {
+                            Map<String, Object> fm = new HashMap<>();
+                            fm.put("riskFactor",     f.getRiskFactor());
+                            fm.put("currentState",   f.getCurrentState());
+                            fm.put("message",        f.getMessage());
+                            fm.put("recommendValue", f.getRecommendValue());
+                            fm.put("decreaseValue",  f.getDecreaseValue());
+                            return fm;
+                        }).collect(Collectors.toList()));
+            }
+            return ResponseEntity.ok(m);
+        } catch (Exception e) {
+            log.error("Error getting health age: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }

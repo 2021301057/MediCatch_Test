@@ -8,14 +8,15 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
-@Table(name = "health_predictions")
+@Table(name = "disease_predictions")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class HealthPrediction {
+public class DiseasePrediction {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,26 +25,29 @@ public class HealthPrediction {
     @Column(nullable = false)
     private Long userId;
 
-    @Column(nullable = false, length = 30)
-    private String predictionType;  // HEALTH_AGE / STROKE / DIABETES / CARDIO
+    @Column(nullable = false, length = 20)
+    private String predictionType;   // STROKE / DIABETES / CARDIO
 
     @Column
-    private LocalDate checkupDate;
+    private LocalDate checkupDate;   // resCheckupDate
 
     @Column(length = 2)
-    private String riskGrade;       // "1"~"5"
+    private String riskGrade;        // resRiskGrade (1~5)
 
     @Column(length = 20)
-    private String riskRatio;       // resRatio (예: "1")
+    private String riskRatio;        // resRatio (3년 내 발병 확률 %)
+
+    @Column(length = 20)
+    private String averageRatio;     // resAverageRatio (100명 중 위치)
 
     @Column(length = 10)
-    private String averageAge;      // resAverageAge (예: "30")
+    private String averageAgeGroup;  // resAverageAge (연령대)
 
-    @Column(length = 20)
-    private String averageRatio;    // resAverageRatio (예: "21/100")
+    @OneToMany(mappedBy = "prediction", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DiseasePredictionFactor> factors;   // resDetailList
 
-    @Column(columnDefinition = "LONGTEXT")
-    private String rawJson;
+    @OneToMany(mappedBy = "prediction", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DiseasePredictionCompare> compares; // resCompareList
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

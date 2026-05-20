@@ -2,11 +2,17 @@ package com.medicatch.health.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medicatch.health.entity.CheckupResult;
-import com.medicatch.health.entity.HealthPrediction;
+import com.medicatch.health.entity.DiseasePrediction;
+import com.medicatch.health.entity.DiseasePredictionCompare;
+import com.medicatch.health.entity.DiseasePredictionFactor;
+import com.medicatch.health.entity.DiseasePredictionYearly;
+import com.medicatch.health.entity.HealthAgeFactor;
+import com.medicatch.health.entity.HealthAgeResult;
 import com.medicatch.health.entity.MedicalRecord;
 import com.medicatch.health.entity.MedicationDetail;
 import com.medicatch.health.repository.CheckupResultRepository;
-import com.medicatch.health.repository.HealthPredictionRepository;
+import com.medicatch.health.repository.DiseasePredictionRepository;
+import com.medicatch.health.repository.HealthAgeResultRepository;
 import com.medicatch.health.repository.MedicalRecordRepository;
 import com.medicatch.health.repository.MedicationDetailRepository;
 import io.codef.api.EasyCodef;
@@ -64,7 +70,8 @@ public class CodefSyncService {
     private final MedicalRecordRepository medicalRecordRepo;
     private final CheckupResultRepository checkupResultRepo;
     private final MedicationDetailRepository medicationDetailRepo;
-    private final HealthPredictionRepository healthPredictionRepo;
+    private final DiseasePredictionRepository diseasePredictionRepo;
+    private final HealthAgeResultRepository healthAgeResultRepo;
     private final ConcurrentHashMap<String, SyncSession>                              sessions         = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, List<NtsYearSession>>                     ntsMultiSessions = new ConcurrentHashMap<>();
     /** step1에서 20초 내 미완료된 NTS futures → step2에서 사용자 인증 후 수집 */
@@ -76,12 +83,14 @@ public class CodefSyncService {
                             MedicalRecordRepository medicalRecordRepo,
                             CheckupResultRepository checkupResultRepo,
                             MedicationDetailRepository medicationDetailRepo,
-                            HealthPredictionRepository healthPredictionRepo) {
+                            DiseasePredictionRepository diseasePredictionRepo,
+                            HealthAgeResultRepository healthAgeResultRepo) {
         this.objectMapper = objectMapper;
         this.medicalRecordRepo = medicalRecordRepo;
         this.checkupResultRepo = checkupResultRepo;
         this.medicationDetailRepo = medicationDetailRepo;
-        this.healthPredictionRepo = healthPredictionRepo;
+        this.diseasePredictionRepo = diseasePredictionRepo;
+        this.healthAgeResultRepo = healthAgeResultRepo;
     }
 
     // ── Step1: 1차 요청 (건강검진 + 진료정보 병렬 트리거) ──────────────────
@@ -328,13 +337,27 @@ public class CodefSyncService {
                     .checkupType("REGULAR")
                     .height(parseDouble(item.get("resHeight")))
                     .weight(parseDouble(item.get("resWeight")))
+                    .waist(parseDouble(item.get("resWaist")))
+                    .bmi(parseDouble(item.get("resBMI")))
+                    .sight(str(item.get("resSight")))
+                    .hearing(str(item.get("resHearing")))
                     .bloodPressureSystolic(bp.length > 0 ? parseDouble(bp[0]) : null)
                     .bloodPressureDiastolic(bp.length > 1 ? parseDouble(bp[1]) : null)
+                    .urinaryProtein(str(item.get("resUrinaryProtein")))
+                    .hemoglobin(parseDouble(item.get("resHemoglobin")))
                     .glucose(parseDouble(item.get("resFastingBloodSuger")))
                     .totalCholesterol(parseDouble(item.get("resTotalCholesterol")))
                     .hdlCholesterol(parseDouble(item.get("resHDLCholesterol")))
                     .ldlCholesterol(parseDouble(item.get("resLDLCholesterol")))
                     .triglycerides(parseDouble(item.get("resTriglyceride")))
+                    .serumCreatinine(parseDouble(item.get("resSerumCreatinine")))
+                    .gfr(parseDouble(item.get("resGFR")))
+                    .ast(parseDouble(item.get("resAST")))
+                    .alt(parseDouble(item.get("resALT")))
+                    .gammaGtp(parseDouble(item.get("resyGPT")))
+                    .tbChestDisease(str(item.get("resTBChestDisease")))
+                    .osteoporosis(str(item.get("resOsteoporosis")))
+                    .organizationName(str(item.get("resOrganizationName")))
                     .abnormalFindings(str(item.get("resOpinion")))
                     .recommendations(str(item.get("resJudgement")))
                     .build());
@@ -748,46 +771,161 @@ public class CodefSyncService {
     }
 
     /**
-     * 예측 결과 1건 파싱 + 저장
-     * - 뇌졸중/당뇨/심뇌혈관: resRiskGrade, resRatio, resAverageAge, resAverageRatio
-     * - 건강나이(HEALTH_AGE): 응답 구조 다름 → resAge(건강나이), resChronologicalAge(실제나이) 매핑
+     * 예측 결과 1건 파싱 + 저장 (분기)
+     * - HEALTH_AGE → saveHealthAgeResult
+     * - STROKE / DIABETES / CARDIO → saveDiseasePrediction
+     */
+    private void savePredictionResult(Long userId, String predictionType, String rawResult) throws Exception {
+        if (API_HEALTH_AGE.equals(predictionType)) {
+            saveHealthAgeResult(userId, rawResult);
+        } else {
+            saveDiseasePrediction(userId, predictionType, rawResult);
+        }
+    }
+
+    /**
+     * 뇌졸중/당뇨/심뇌혈관: resDetailList(+resProgressList/resAverageList) + resCompareList까지 정규화 저장
      */
     @SuppressWarnings("unchecked")
-    private void savePredictionResult(Long userId, String predictionType, String rawResult) throws Exception {
+    private void saveDiseasePrediction(Long userId, String predictionType, String rawResult) throws Exception {
         Map<String, Object> respMap = objectMapper.readValue(rawResult, Map.class);
         Map<String, Object> data = toMap(respMap.get("data"));
 
         LocalDate checkupDate = parseDate8(str(data.get("resCheckupDate")));
 
-        String riskGrade, riskRatio, averageAge, averageRatio;
-        if (API_HEALTH_AGE.equals(predictionType)) {
-            // 건강나이는 등급/비율 개념 없음 → resAge/resChronologicalAge만 핵심
-            riskGrade    = null;
-            riskRatio    = str(data.get("resAge"));               // 건강나이
-            averageAge   = str(data.get("resChronologicalAge"));  // 실제나이
-            averageRatio = null;
-        } else {
-            riskGrade    = str(data.get("resRiskGrade"));
-            riskRatio    = str(data.get("resRatio"));
-            averageAge   = str(data.get("resAverageAge"));
-            averageRatio = str(data.get("resAverageRatio"));
-        }
+        // 같은 (userId, type) 기존 데이터 삭제 → 최신만 유지 (자식 cascade 정리됨)
+        diseasePredictionRepo.deleteByUserIdAndPredictionType(userId, predictionType);
 
-        // 같은 (userId, type) 기존 데이터 삭제 → 최신만 유지
-        healthPredictionRepo.deleteByUserIdAndPredictionType(userId, predictionType);
-
-        HealthPrediction pred = HealthPrediction.builder()
+        DiseasePrediction pred = DiseasePrediction.builder()
                 .userId(userId)
                 .predictionType(predictionType)
                 .checkupDate(checkupDate)
-                .riskGrade(riskGrade)
-                .riskRatio(riskRatio)
-                .averageAge(averageAge)
-                .averageRatio(averageRatio)
-                .rawJson(rawResult)
+                .riskGrade(str(data.get("resRiskGrade")))
+                .riskRatio(str(data.get("resRatio")))
+                .averageRatio(str(data.get("resAverageRatio")))
+                .averageAgeGroup(str(data.get("resAverageAge")))
                 .build();
-        healthPredictionRepo.save(pred);
-        log.info("[{}] 저장 완료 - userId: {}, date: {}", predictionType, userId, checkupDate);
+
+        // resDetailList → factors + 각 factor의 yearly (resProgressList + resAverageList 같은 year로 머지)
+        List<DiseasePredictionFactor> factors = new ArrayList<>();
+        List<Map<String, Object>> detailList = (List<Map<String, Object>>) data.getOrDefault("resDetailList", List.of());
+        int factorIdx = 0;
+        for (Map<String, Object> d : detailList) {
+            DiseasePredictionFactor factor = DiseasePredictionFactor.builder()
+                    .prediction(pred)
+                    .riskFactor(str(d.get("resRiskFactor")))
+                    .currentState(str(d.get("resState")))
+                    .severityType(str(d.get("resType")))
+                    .averageValue(str(d.get("resAverage")))
+                    .sortOrder(factorIdx++)
+                    .build();
+
+            // resProgressList (본인 연도별) + resAverageList (평균 연도별)을 year 기준으로 머지
+            List<Map<String, Object>> progressList = (List<Map<String, Object>>) d.getOrDefault("resProgressList", List.of());
+            List<Map<String, Object>> averageList  = (List<Map<String, Object>>) d.getOrDefault("resAverageList",  List.of());
+
+            Map<String, String> myByYear = new LinkedHashMap<>();
+            for (Map<String, Object> p : progressList) {
+                String y = str(p.get("resYear"));
+                if (y != null) myByYear.put(y, str(p.get("resAmount")));
+            }
+            Map<String, String> avgByYear = new LinkedHashMap<>();
+            for (Map<String, Object> a : averageList) {
+                String y = str(a.get("resYear"));
+                if (y != null) avgByYear.put(y, str(a.get("resAmount")));
+            }
+
+            // year 합집합 (progress 우선 정렬, 누락된 평균 year도 합치기)
+            Set<String> allYears = new LinkedHashSet<>();
+            allYears.addAll(myByYear.keySet());
+            allYears.addAll(avgByYear.keySet());
+
+            List<DiseasePredictionYearly> yearly = new ArrayList<>();
+            for (String y : allYears) {
+                yearly.add(DiseasePredictionYearly.builder()
+                        .factor(factor)
+                        .year(y)
+                        .myAmount(myByYear.get(y))
+                        .averageAmount(avgByYear.get(y))
+                        .build());
+            }
+            factor.setYearly(yearly);
+            factors.add(factor);
+        }
+        pred.setFactors(factors);
+
+        // resCompareList → compares
+        List<DiseasePredictionCompare> compares = new ArrayList<>();
+        List<Map<String, Object>> compareList = (List<Map<String, Object>>) data.getOrDefault("resCompareList", List.of());
+        for (Map<String, Object> c : compareList) {
+            compares.add(DiseasePredictionCompare.builder()
+                    .prediction(pred)
+                    .year(str(c.get("resCheckupDate")))
+                    .predictedState(str(c.get("resState")))
+                    .build());
+        }
+        pred.setCompares(compares);
+
+        diseasePredictionRepo.save(pred);  // cascade=ALL로 자식 함께 저장
+        log.info("[{}] 저장 완료 - userId: {}, date: {}, factors: {}, compares: {}",
+                predictionType, userId, checkupDate, factors.size(), compares.size());
+    }
+
+    /**
+     * 건강나이: resAge/resChronologicalAge + resDetailList(텍스트형) 정규화 저장
+     */
+    @SuppressWarnings("unchecked")
+    private void saveHealthAgeResult(Long userId, String rawResult) throws Exception {
+        Map<String, Object> respMap = objectMapper.readValue(rawResult, Map.class);
+        Map<String, Object> data = toMap(respMap.get("data"));
+
+        LocalDate checkupDate = parseDate8(str(data.get("resCheckupDate")));
+
+        // userId별 1건만 유지
+        healthAgeResultRepo.deleteByUserId(userId);
+
+        Integer biologicalAge   = parseIntSafe(data.get("resAge"));
+        Integer chronologicalAge = parseIntSafe(data.get("resChronologicalAge"));
+
+        HealthAgeResult result = HealthAgeResult.builder()
+                .userId(userId)
+                .checkupDate(checkupDate)
+                .biologicalAge(biologicalAge)
+                .chronologicalAge(chronologicalAge)
+                .summaryNote(str(data.get("resNote")))
+                .detailMessage(str(data.get("resNote1")))
+                .changeAfterMessage(str(data.get("resChangeAfter")))
+                .gender(str(data.get("resGender")))
+                .height(parseDouble(data.get("resHeight")))
+                .weight(parseDouble(data.get("resWeight")))
+                .build();
+
+        List<HealthAgeFactor> factors = new ArrayList<>();
+        List<Map<String, Object>> detailList = (List<Map<String, Object>>) data.getOrDefault("resDetailList", List.of());
+        int idx = 0;
+        for (Map<String, Object> d : detailList) {
+            factors.add(HealthAgeFactor.builder()
+                    .result(result)
+                    .riskFactor(str(d.get("resRiskFactor")))
+                    .currentState(str(d.get("resState")))
+                    .message(str(d.get("resType")))           // 텍스트 메시지
+                    .recommendValue(str(d.get("resRecommendValue")))
+                    .decreaseValue(str(d.get("resDecreaseValue")))
+                    .sortOrder(idx++)
+                    .build());
+        }
+        result.setFactors(factors);
+
+        healthAgeResultRepo.save(result);  // cascade=ALL로 자식 함께 저장
+        log.info("[HEALTH_AGE] 저장 완료 - userId: {}, date: {}, factors: {}",
+                userId, checkupDate, factors.size());
+    }
+
+    private Integer parseIntSafe(Object o) {
+        if (o == null) return null;
+        String s = o.toString().trim().replaceAll("[^0-9-]", "");
+        if (s.isEmpty()) return null;
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return null; }
     }
 
     // ── 진료정보(HIRA) 단독 ──────────────────────────────────────────────

@@ -37,13 +37,31 @@ public class CheckupResult {
     private Double weight;
 
     @Column
+    private Double waist;                  // resWaist
+
+    @Column
+    private Double bmi;                    // resBMI
+
+    @Column(length = 30)
+    private String sight;                  // resSight (예: "1.2/1.0")
+
+    @Column(length = 30)
+    private String hearing;                // resHearing
+
+    @Column
     private Double bloodPressureSystolic;
 
     @Column
     private Double bloodPressureDiastolic;
 
+    @Column(length = 20)
+    private String urinaryProtein;         // resUrinaryProtein
+
     @Column
-    private Double glucose;
+    private Double hemoglobin;             // resHemoglobin
+
+    @Column
+    private Double glucose;                // resFastingBloodSuger
 
     @Column
     private Double totalCholesterol;
@@ -58,10 +76,34 @@ public class CheckupResult {
     private Double triglycerides;
 
     @Column
-    private String abnormalFindings;
+    private Double serumCreatinine;        // resSerumCreatinine
 
     @Column
-    private String recommendations;
+    private Double gfr;                    // resGFR
+
+    @Column
+    private Double ast;                    // resAST
+
+    @Column
+    private Double alt;                    // resALT
+
+    @Column
+    private Double gammaGtp;               // resyGPT
+
+    @Column(length = 50)
+    private String tbChestDisease;         // resTBChestDisease
+
+    @Column(length = 50)
+    private String osteoporosis;           // resOsteoporosis
+
+    @Column(length = 100)
+    private String organizationName;       // resOrganizationName
+
+    @Column
+    private String abnormalFindings;       // resOpinion
+
+    @Column
+    private String recommendations;        // resJudgement
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
