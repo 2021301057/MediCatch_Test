@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { healthAPI } from '../api/services';
 
@@ -193,13 +193,22 @@ const mergeDiseases = (apiRows) => {
   }
   return ['STROKE', 'DIABETES', 'CARDIO']
     .filter((t) => latest[t])
-    .map((t) => ({
-      predictionType: t,
-      typeLabel: PREDICTION_TYPE_LABEL[t],
-      riskGradeBucket: gradeToBucket(latest[t].riskGrade),
-      riskRatio: parseRatio(latest[t].riskRatio),
-      averageRatio: parseRatio(latest[t].averageRatio),
-    }));
+    .map((t) => {
+      // compares: year ASC로 백엔드가 정렬해 보냄. 최근 3개만 사용.
+      const compares = Array.isArray(latest[t].compares) ? latest[t].compares : [];
+      const recent3 = compares.slice(-3).map((c) => ({
+        year: c.year,
+        predictedState: parseRatio(c.predictedState),
+      }));
+      return {
+        predictionType: t,
+        typeLabel: PREDICTION_TYPE_LABEL[t],
+        riskGradeBucket: gradeToBucket(latest[t].riskGrade),
+        riskRatio: parseRatio(latest[t].riskRatio),
+        averageRatio: parseRatio(latest[t].averageRatio),
+        recentCompares: recent3,
+      };
+    });
 };
 
 const yearOf = (isoDate) => {
@@ -447,6 +456,37 @@ const CheckupRecords = () => {
             {d.averageRatio > 0 && (
               <div className="mc-card-sub" style={{ marginTop: 6 }}>
                 같은 성별·연령대 100명 중 <b>{d.averageRatio}</b>번째
+              </div>
+            )}
+            {d.recentCompares.length >= 2 && (
+              <div style={{ marginTop: 12 }}>
+                <div className="mc-card-sub" style={{ marginBottom: 4 }}>
+                  최근 추이 (3년 내 발병 확률 %)
+                </div>
+                <ResponsiveContainer width="100%" height={90}>
+                  <LineChart
+                    data={d.recentCompares}
+                    margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
+                    <XAxis dataKey="year" tick={{ fill: '#9AA3B2', fontSize: 10 }} axisLine={{ stroke: '#DDE1EA' }}/>
+                    <YAxis tick={{ fill: '#9AA3B2', fontSize: 10 }} axisLine={{ stroke: '#DDE1EA' }}/>
+                    <Tooltip
+                      contentStyle={{
+                        background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
+                        fontSize: 11, color: '#0D1520',
+                      }}
+                      formatter={(v) => [`${v}%`, '발병 확률']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="predictedState"
+                      stroke="#2F6FE8"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: '#2F6FE8' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>
