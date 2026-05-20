@@ -732,7 +732,9 @@ public class CodefSyncService {
         certMap.put("is2Way",    true);
         certMap.put("simpleAuth","1");
         log.info("[{}] 2차 인증 요청", ctx.getName());
-        return createCodef().requestCertification(ctx.getApiUrl(), serviceType(), certMap);
+        String result = createCodef().requestCertification(ctx.getApiUrl(), serviceType(), certMap);
+        log.debug("[{}] 2차 응답: {}", ctx.getName(), result);
+        return result;
     }
 
     private CheckupMultiSession getValidCheckupMultiSession(String sessionKey) {
