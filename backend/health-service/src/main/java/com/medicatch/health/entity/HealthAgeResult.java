@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "health_age_results")
@@ -52,8 +51,9 @@ public class HealthAgeResult {
     @Column
     private Double weight;                // resWeight
 
-    @OneToMany(mappedBy = "result", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<HealthAgeFactor> factors;
+    /** resDetailList 원문 JSON 통째 보관 (위험요인 메시지들) */
+    @Column(columnDefinition = "LONGTEXT")
+    private String factors;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -6,7 +6,6 @@ import com.medicatch.health.entity.DiseasePrediction;
 import com.medicatch.health.entity.DiseasePredictionCompare;
 import com.medicatch.health.entity.DiseasePredictionFactor;
 import com.medicatch.health.entity.DiseasePredictionYearly;
-import com.medicatch.health.entity.HealthAgeFactor;
 import com.medicatch.health.entity.HealthAgeResult;
 import com.medicatch.health.entity.MedicalRecord;
 import com.medicatch.health.entity.MedicationDetail;
@@ -887,6 +886,10 @@ public class CodefSyncService {
         Integer biologicalAge   = parseIntSafe(data.get("resAge"));
         Integer chronologicalAge = parseIntSafe(data.get("resChronologicalAge"));
 
+        // resDetailList 원문 그대로 JSON 직렬화하여 factors 컬럼에 보관
+        Object detailList = data.getOrDefault("resDetailList", List.of());
+        String factorsJson = objectMapper.writeValueAsString(detailList);
+
         HealthAgeResult result = HealthAgeResult.builder()
                 .userId(userId)
                 .checkupDate(checkupDate)
@@ -898,27 +901,13 @@ public class CodefSyncService {
                 .gender(str(data.get("resGender")))
                 .height(parseDouble(data.get("resHeight")))
                 .weight(parseDouble(data.get("resWeight")))
+                .factors(factorsJson)
                 .build();
 
-        List<HealthAgeFactor> factors = new ArrayList<>();
-        List<Map<String, Object>> detailList = (List<Map<String, Object>>) data.getOrDefault("resDetailList", List.of());
-        int idx = 0;
-        for (Map<String, Object> d : detailList) {
-            factors.add(HealthAgeFactor.builder()
-                    .result(result)
-                    .riskFactor(str(d.get("resRiskFactor")))
-                    .currentState(str(d.get("resState")))
-                    .message(str(d.get("resType")))           // 텍스트 메시지
-                    .recommendValue(str(d.get("resRecommendValue")))
-                    .decreaseValue(str(d.get("resDecreaseValue")))
-                    .sortOrder(idx++)
-                    .build());
-        }
-        result.setFactors(factors);
-
-        healthAgeResultRepo.save(result);  // cascade=ALL로 자식 함께 저장
+        healthAgeResultRepo.save(result);
+        int factorCount = (detailList instanceof List) ? ((List<?>) detailList).size() : 0;
         log.info("[HEALTH_AGE] 저장 완료 - userId: {}, date: {}, factors: {}",
-                userId, checkupDate, factors.size());
+                userId, checkupDate, factorCount);
     }
 
     private Integer parseIntSafe(Object o) {

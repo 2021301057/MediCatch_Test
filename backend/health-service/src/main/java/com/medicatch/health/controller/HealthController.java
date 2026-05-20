@@ -6,7 +6,8 @@ import com.medicatch.health.entity.DiseasePrediction;
 import com.medicatch.health.entity.DiseasePredictionCompare;
 import com.medicatch.health.entity.DiseasePredictionFactor;
 import com.medicatch.health.entity.DiseasePredictionYearly;
-import com.medicatch.health.entity.HealthAgeFactor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medicatch.health.entity.HealthAgeResult;
 import com.medicatch.health.entity.MedicationDetail;
 import com.medicatch.health.repository.DiseasePredictionRepository;
@@ -33,15 +34,18 @@ public class HealthController {
     private final CodefSyncService codefSyncService;
     private final DiseasePredictionRepository diseasePredictionRepo;
     private final HealthAgeResultRepository healthAgeResultRepo;
+    private final ObjectMapper objectMapper;
 
     public HealthController(HealthService healthService,
                             CodefSyncService codefSyncService,
                             DiseasePredictionRepository diseasePredictionRepo,
-                            HealthAgeResultRepository healthAgeResultRepo) {
+                            HealthAgeResultRepository healthAgeResultRepo,
+                            ObjectMapper objectMapper) {
         this.healthService = healthService;
         this.codefSyncService = codefSyncService;
         this.diseasePredictionRepo = diseasePredictionRepo;
         this.healthAgeResultRepo = healthAgeResultRepo;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -427,21 +431,19 @@ public class HealthController {
             m.put("height",             r.getHeight());
             m.put("weight",             r.getWeight());
 
-            List<HealthAgeFactor> factors = r.getFactors();
-            if (factors != null) {
-                m.put("factors", factors.stream()
-                        .sorted(Comparator.comparing(
-                                HealthAgeFactor::getSortOrder,
-                                Comparator.nullsLast(Comparator.naturalOrder())))
-                        .map(f -> {
-                            Map<String, Object> fm = new HashMap<>();
-                            fm.put("riskFactor",     f.getRiskFactor());
-                            fm.put("currentState",   f.getCurrentState());
-                            fm.put("message",        f.getMessage());
-                            fm.put("recommendValue", f.getRecommendValue());
-                            fm.put("decreaseValue",  f.getDecreaseValue());
-                            return fm;
-                        }).collect(Collectors.toList()));
+            // factors: 저장된 JSON 문자열을 파싱해서 그대로 노출 (CODEF resDetailList 원본 구조)
+            String factorsJson = r.getFactors();
+            if (factorsJson != null && !factorsJson.isBlank()) {
+                try {
+                    List<Map<String, Object>> factors = objectMapper.readValue(
+                            factorsJson, new TypeReference<List<Map<String, Object>>>() {});
+                    m.put("factors", factors);
+                } catch (Exception ex) {
+                    log.warn("health-age factors JSON 파싱 실패: {}", ex.getMessage());
+                    m.put("factors", List.of());
+                }
+            } else {
+                m.put("factors", List.of());
             }
             return ResponseEntity.ok(m);
         } catch (Exception e) {
