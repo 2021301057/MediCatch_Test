@@ -67,20 +67,20 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     if (!form.codefId || !form.codefPassword) { setError('CODEF 아이디와 비밀번호를 입력해주세요.'); return; }
 
     setLoading(true);
+    // 보험 연동은 백그라운드로 시작 — CODEF 2차 인증 화면 전환을 늦추지 않음
+    const insPromise = insuranceAPI.sync({ codefId: form.codefId, codefPassword: form.codefPassword });
     try {
-      const [insData, data] = await Promise.all([
-        insuranceAPI.sync({ codefId: form.codefId, codefPassword: form.codefPassword }),
-        healthAPI.syncCheckupStep1({
-          userId,
-          userName: form.userName, phoneNo: form.phoneNo, identity13: cleanId,
-          telecom: form.loginTypeLevel === '5' ? form.telecom : '',
-          loginTypeLevel: form.loginTypeLevel,
-        }),
-      ]);
+      const data = await healthAPI.syncCheckupStep1({
+        userId,
+        userName: form.userName, phoneNo: form.phoneNo, identity13: cleanId,
+        telecom: form.loginTypeLevel === '5' ? form.telecom : '',
+        loginTypeLevel: form.loginTypeLevel,
+      });
       localStorage.setItem('codefId', form.codefId);
-      setInsuranceResult(insData);
       setCheckupSessionKey(data.sessionKey);
       setScreen('checkup-auth');
+      // 보험 결과 백그라운드 수집 (실패해도 건강검진 흐름에 영향 없음)
+      insPromise.then(insData => setInsuranceResult(insData)).catch(() => {});
     } catch (err) {
       setError(err.response?.data?.message || '요청 중 오류가 발생했습니다.');
     } finally {
