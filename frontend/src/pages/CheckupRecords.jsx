@@ -82,7 +82,10 @@ const mergeDiseases = (apiRows) => {
     .map((t) => ({
       type: PREDICTION_TYPE_LABEL[t],
       riskGrade: gradeToBucket(latest[t].riskGrade),
-      avgProbability: parseRatio(latest[t].riskRatio),
+      // resRatio: 본인의 3년 내 발병 확률 (%)
+      myRiskRatio: parseRatio(latest[t].riskRatio),
+      // resAverageRatio: 같은 성별/연령대 100명 중 나의 위치 (낮을수록 좋음)
+      rankPer100: parseRatio(latest[t].averageRatio),
       riskFactors: [],
     }));
 };
@@ -281,15 +284,20 @@ const CheckupRecords = () => {
               </span>
             </div>
             <div className="mc-kv" style={{ marginTop: 10 }}>
-              <span className="mc-kv-key">평균 위험률</span>
-              <span className="mc-kv-val" style={{ fontWeight: 700 }}>{d.avgProbability}%</span>
+              <span className="mc-kv-key">3년 내 발병 확률</span>
+              <span className="mc-kv-val" style={{ fontWeight: 700 }}>{d.myRiskRatio}%</span>
             </div>
             <div className="mc-pbar" style={{ marginTop: 8 }}>
               <div
                 className={`mc-pbar-fill ${PBAR_CLASS[d.riskGrade]}`}
-                style={{ width: `${Math.min(d.avgProbability * 2, 100)}%` }}
+                style={{ width: `${Math.min(d.myRiskRatio, 100)}%` }}
               />
             </div>
+            {d.rankPer100 > 0 && (
+              <div className="mc-card-sub" style={{ marginTop: 6 }}>
+                같은 성별·연령대 100명 중 <b>{d.rankPer100}</b>번째
+              </div>
+            )}
             {d.riskFactors?.length > 0 && (
               <div className="mc-card-sub" style={{ marginTop: 10 }}>
                 위험요인: {d.riskFactors.join(', ')}
