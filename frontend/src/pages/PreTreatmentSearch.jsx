@@ -436,7 +436,6 @@ export default function PreTreatmentSearch() {
       setSearchQuery(q);
       runSearch(q);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
   const runSearch = async (query = searchQuery) => {

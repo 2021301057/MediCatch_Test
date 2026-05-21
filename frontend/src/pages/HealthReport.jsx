@@ -9,15 +9,12 @@ const Ic = ({ d, size = 13 }) => (
 );
 
 const P = {
-  hospital: (<><path d="M2 14V6l6-3 6 3v8"/><path d="M6 14V9h4v5"/></>),
   calendar: (<><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v3M11 1v3"/></>),
-  heart:    (<path d="M8 14s-5-3-5-7a3 3 0 0 1 5-2 3 3 0 0 1 5 2c0 4-5 7-5 7z"/>),
   arrow:    (<><path d="M3 8h10M9 4l4 4-4 4"/></>),
   shield:   (<path d="M8 2l5 2v4c0 3-2.5 5-5 6-2.5-1-5-3-5-6V4z"/>),
   search:   (<><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></>),
-  pill:     (<><path d="M5 11l6-6M3.5 9.5A3.5 3.5 0 0 0 9.5 3.5"/><path d="M6.5 12.5A3.5 3.5 0 0 0 12.5 6.5"/></>),
-  chart:    (<><path d="M3 13V7M8 13V3M13 13V9"/></>),
   check:    (<path d="M3 8.5 6.5 12 13 4"/>),
+  chev:     (<path d="M4 6l4 4 4-4"/>),
 };
 
 const RISK_COLOR = { '나쁨': '#9A6060', '보통': '#8A7040', '좋음': '#2F6FE8', '-': 'var(--text-2)' };
@@ -32,9 +29,9 @@ const parseNumber = (value) => {
 const normalizeGrade = (value) => {
   if (!value) return null;
   const text = String(value).trim().toUpperCase();
-  if (['나쁨', '높음', '위험', 'HIGH', 'BAD'].includes(text)) return '나쁨';
-  if (['보통', '중간', 'MEDIUM', 'MID', 'NORMAL'].includes(text)) return '보통';
-  if (['좋음', '낮음', 'LOW', 'GOOD'].includes(text)) return '좋음';
+  if (['나쁨', '높음', '위험', 'HIGH', 'BAD', '5', '4'].includes(text)) return '나쁨';
+  if (['보통', '중간', 'MEDIUM', 'MID', 'NORMAL', '3'].includes(text)) return '보통';
+  if (['좋음', '낮음', 'LOW', 'GOOD', '1', '2'].includes(text)) return '좋음';
   return null;
 };
 
@@ -74,13 +71,71 @@ const fmtYM = (ym) => {
   return `${year}년 ${parseInt(month, 10)}월`;
 };
 
-const formatDate = (value) => {
-  if (!value) return '-';
-  return String(value).replaceAll('-', '.');
-};
-
 const compactList = (items, emptyText = '-') => (
   items.length > 0 ? items.join(' · ') : emptyText
+);
+
+const firstText = (...values) => (
+  values.find((value) => value != null && String(value).trim() !== '') || ''
+);
+
+const factorName = (factor) => firstText(
+  factor.riskFactor,
+  factor.factorName,
+  factor.name,
+  factor.title,
+  factor.itemName,
+  factor.resRiskFactor,
+  factor.resName,
+  factor.resTitle,
+  factor.resItem
+);
+
+const factorCurrent = (factor) => firstText(
+  factor.currentState,
+  factor.currentValue,
+  factor.myAmount,
+  factor.value,
+  factor.resState,
+  factor.resCurrent,
+  factor.resValue,
+  factor.resAmount
+);
+
+const factorAverage = (factor) => firstText(
+  factor.averageValue,
+  factor.averageAmount,
+  factor.avgValue,
+  factor.resAverage,
+  factor.resAvg
+);
+
+const factorSeverity = (factor) => (
+  normalizeGrade(factor.severityType)
+  || normalizeGrade(factor.severity)
+  || normalizeGrade(factor.resType)
+  || '-'
+);
+
+const factorLine = (factor) => {
+  const name = factorName(factor);
+  const current = factorCurrent(factor);
+  const average = factorAverage(factor);
+  if (!name) return '';
+  if (current && average) return `${name} (${current} / 평균 ${average})`;
+  if (current) return `${name} (${current})`;
+  return name;
+};
+
+const healthAgeFactorLine = (factor) => (
+  firstText(
+    factorLine(factor),
+    factor.message,
+    factor.contents,
+    factor.description,
+    factor.resContents,
+    factor.resMessage
+  )
 );
 
 const LinkBtn = ({ onClick, children }) => (
@@ -129,7 +184,7 @@ const HealthReport = () => {
     gaps: 0,
     topDepartment: '-',
     topDiagnosis: '-',
-    lastCheckupDate: null,
+    lastCheckupHeadline: '',
   });
   const [timeline, setTimeline] = useState([]);
   const [deptPattern, setDeptPattern] = useState([]);
@@ -138,6 +193,8 @@ const HealthReport = () => {
   const [healthAge, setHealthAge] = useState(null);
   const [insights, setInsights] = useState([]);
   const [loadWarning, setLoadWarning] = useState('');
+  const [expandedRisk, setExpandedRisk] = useState(null);
+  const [healthAgeOpen, setHealthAgeOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -189,9 +246,13 @@ const HealthReport = () => {
           .slice(0, 5)
           .map(([diagnosis, count]) => ({ diagnosis, count }));
 
-        const lastCheckupDate = [...checkups].sort((a, b) => (
+        const latestCheckup = [...checkups].sort((a, b) => (
           (b.checkupDate || '').localeCompare(a.checkupDate || '')
-        ))[0]?.checkupDate || null;
+        ))[0];
+        const lastCheckupHeadline = firstText(
+          latestCheckup?.abnormalFindings,
+          latestCheckup?.recommendations
+        );
 
         setStats({
           visits: recentRecords.length,
@@ -200,7 +261,7 @@ const HealthReport = () => {
           gaps: gaps.length,
           topDepartment: departments[0]?.dept || '-',
           topDiagnosis: diagnoses[0]?.diagnosis || '-',
-          lastCheckupDate,
+          lastCheckupHeadline,
         });
         setDeptPattern(departments);
         setDiagKeywords(diagnoses);
@@ -227,7 +288,11 @@ const HealthReport = () => {
         setTimeline(
           Object.entries(monthMap)
             .sort(([a], [b]) => b.localeCompare(a))
-            .map(([ym, value]) => ({ ym, ...value }))
+            .map(([ym, value]) => ({
+              ym,
+              ...value,
+              total: value.visits + value.prescriptions + value.checkups,
+            }))
         );
 
         const latestPredictions = {};
@@ -258,7 +323,7 @@ const HealthReport = () => {
             path: '/insurance-plan',
           });
         }
-        if (!lastCheckupDate || (Date.now() - new Date(lastCheckupDate)) / 86400000 > 365) {
+        if (!latestCheckup?.checkupDate || (Date.now() - new Date(latestCheckup.checkupDate)) / 86400000 > 365) {
           next.push({
             icon: P.calendar,
             title: '건강검진 기록 확인',
@@ -297,6 +362,7 @@ const HealthReport = () => {
     const parts = [];
     if (stats.topDepartment !== '-') parts.push(`${stats.topDepartment} 방문이 가장 많았고`);
     if (stats.topDiagnosis !== '-') parts.push(`${stats.topDiagnosis} 기록이 반복해서 보입니다`);
+    if (stats.lastCheckupHeadline) parts.push(`최근 검진 소견은 "${stats.lastCheckupHeadline}"입니다`);
     if (stats.gaps > 0) parts.push(`보험 보장 ${stats.gaps}개는 추가 확인이 필요합니다`);
     return parts.length > 0 ? `${parts.join(', ')}.` : '최근 12개월 건강 활동을 한눈에 정리했습니다.';
   })();
@@ -304,6 +370,9 @@ const HealthReport = () => {
   const healthAgeDiff = healthAge && healthAge.biologicalAge != null && healthAge.chronologicalAge != null
     ? Number(healthAge.biologicalAge) - Number(healthAge.chronologicalAge)
     : null;
+
+  const healthAgeFactors = Array.isArray(healthAge?.factors) ? healthAge.factors : [];
+  const maxMonthTotal = Math.max(1, ...timeline.map((month) => month.total || 0));
 
   return (
     <div className="mc-page fade-in">
@@ -404,9 +473,52 @@ const HealthReport = () => {
                               {healthAge.summaryNote}
                             </div>
                           )}
+                          {(healthAge.detailMessage || healthAge.changeAfterMessage || healthAgeFactors.length > 0) && (
+                            <button
+                              type="button"
+                              onClick={() => setHealthAgeOpen((open) => !open)}
+                              className="mc-sec-link"
+                              style={{ marginTop: 10 }}
+                            >
+                              건강나이 이유 보기
+                              <span style={{ transform: healthAgeOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
+                                <Ic d={P.chev} size={11}/>
+                              </span>
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="mc-card-sub" style={{ marginTop: 12 }}>건강나이 데이터가 없어요.</div>
+                      )}
+
+                      {healthAgeOpen && (
+                        <div className="mc-stack-xs" style={{
+                          marginTop: 12,
+                          paddingTop: 12,
+                          borderTop: '1px solid var(--border-soft)',
+                        }}>
+                          {healthAge.detailMessage && (
+                            <div className="mc-card-sub" style={{ lineHeight: 1.55 }}>{healthAge.detailMessage}</div>
+                          )}
+                          {healthAgeFactors.slice(0, 5).map((factor, index) => {
+                            const line = healthAgeFactorLine(factor);
+                            if (!line) return null;
+                            return (
+                              <div key={`${line}-${index}`} className="mc-kv" style={{ alignItems: 'flex-start' }}>
+                                <span className="mc-kv-key">요인 {index + 1}</span>
+                                <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.45 }}>{line}</span>
+                              </div>
+                            );
+                          })}
+                          {healthAge.changeAfterMessage && (
+                            <div className="mc-alert mc-alert-blue" style={{ marginTop: 4 }}>
+                              <div>
+                                <div className="mc-alert-title">개선 시 변화</div>
+                                <div className="mc-alert-body">{healthAge.changeAfterMessage}</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -418,14 +530,83 @@ const HealthReport = () => {
                         <div className="mc-stack-xs" style={{ marginTop: 10 }}>
                           {predictions.map((prediction) => {
                             const grade = gradeFromPrediction(prediction);
+                            const factors = Array.isArray(prediction.factors) ? prediction.factors : [];
+                            const compares = Array.isArray(prediction.compares) ? prediction.compares : [];
+                            const key = prediction.predictionType;
+                            const preview = factors.map(factorLine).filter(Boolean).slice(0, 2);
+                            const isOpen = expandedRisk === key;
+
                             return (
-                              <div key={prediction.predictionType} className="mc-kv">
-                                <span className="mc-kv-key">
-                                  {DISEASE_KR[prediction.predictionType] || prediction.predictionType}
-                                </span>
-                                <span className="mc-kv-val" style={{ color: RISK_COLOR[grade], fontWeight: 800 }}>
-                                  {grade}
-                                </span>
+                              <div key={key} style={{ borderBottom: '1px solid var(--border-soft)', paddingBottom: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedRisk(isOpen ? null : key)}
+                                  style={{
+                                    width: '100%',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 10,
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <span>
+                                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                                      {DISEASE_KR[key] || key}
+                                    </span>
+                                    {preview.length > 0 && (
+                                      <span className="mc-card-sub" style={{ marginTop: 2, display: 'block' }}>
+                                        {compactList(preview)}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 800, color: RISK_COLOR[grade] }}>{grade}</span>
+                                    <span style={{ color: 'var(--text-3)', transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
+                                      <Ic d={P.chev} size={12}/>
+                                    </span>
+                                  </span>
+                                </button>
+
+                                {isOpen && (
+                                  <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                                    {factors.length > 0 ? (
+                                      factors.slice(0, 5).map((factor, index) => {
+                                        const line = factorLine(factor);
+                                        if (!line) return null;
+                                        const severity = factorSeverity(factor);
+                                        return (
+                                          <div key={`${line}-${index}`} className="mc-kv" style={{ alignItems: 'flex-start' }}>
+                                            <span className="mc-kv-key">
+                                              {severity !== '-' ? severity : `요인 ${index + 1}`}
+                                            </span>
+                                            <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.45 }}>{line}</span>
+                                          </div>
+                                        );
+                                      })
+                                    ) : (
+                                      <div className="mc-card-sub">상세 위험요인 데이터가 없어요.</div>
+                                    )}
+                                    {compares.length > 0 && (
+                                      <div style={{
+                                        marginTop: 6,
+                                        padding: '10px 12px',
+                                        borderRadius: 6,
+                                        background: '#FAFBFD',
+                                        border: '1px solid var(--border-soft)',
+                                      }}>
+                                        <div className="mc-field-label" style={{ marginBottom: 6 }}>향후 예측 참고</div>
+                                        <div className="mc-card-sub" style={{ lineHeight: 1.5 }}>
+                                          {compares.map((item) => `${item.year}년 ${item.predictedState}`).join(' → ')}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -498,17 +679,25 @@ const HealthReport = () => {
                       .sort((a, b) => b[1] - a[1])
                       .slice(0, 2)
                       .map(([department, count]) => `${department} ${count}건`);
+                    const width = `${Math.max(8, Math.round((month.total / maxMonthTotal) * 100))}%`;
                     return (
-                      <div key={month.ym} className="mc-kv" style={{ alignItems: 'flex-start' }}>
-                        <span className="mc-kv-key" style={{ minWidth: 92 }}>{fmtYM(month.ym)}</span>
-                        <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.55 }}>
-                          진료 {month.visits}건
-                          {month.prescriptions > 0 ? ` · 처방 ${month.prescriptions}건` : ''}
-                          {month.checkups > 0 ? ` · 검진 ${month.checkups}건` : ''}
-                          <span className="mc-card-sub" style={{ display: 'block', marginTop: 2 }}>
-                            {compactList(topDepartments)}
-                          </span>
-                        </span>
+                      <div key={month.ym} style={{ display: 'grid', gridTemplateColumns: '92px minmax(0, 1fr)', gap: 14, alignItems: 'center' }}>
+                        <span className="mc-kv-key">{fmtYM(month.ym)}</span>
+                        <div>
+                          <div style={{ height: 7, background: 'var(--border-soft)', borderRadius: 9999, overflow: 'hidden', marginBottom: 5 }}>
+                            <div style={{ width, height: '100%', background: 'var(--blue)', borderRadius: 9999 }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                            <span className="mc-card-sub">
+                              진료 {month.visits}건
+                              {month.prescriptions > 0 ? ` · 처방 ${month.prescriptions}건` : ''}
+                              {month.checkups > 0 ? ` · 검진 ${month.checkups}건` : ''}
+                            </span>
+                            <span className="mc-card-sub" style={{ textAlign: 'right' }}>
+                              {compactList(topDepartments)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
