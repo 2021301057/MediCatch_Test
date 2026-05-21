@@ -102,9 +102,9 @@ export default function Dashboard() {
         // 100명 중 순위 기반 등급 판정
         const gradeFromRank = (rank) => {
           if (rank == null) return { label: '-', cls: 'lo' };
-          if (rank >= 67) return { label: '높음', cls: 'hi' };
+          if (rank >= 67) return { label: '나쁨', cls: 'hi' };
           if (rank >= 34) return { label: '보통', cls: 'mid' };
-          return { label: '낮음', cls: 'lo' };
+          return { label: '좋음', cls: 'lo' };
         };
         const mapped = Object.values(latest).map((r) => {
           const ratio    = parseFloat(r.riskRatio) || 0;
@@ -170,7 +170,7 @@ export default function Dashboard() {
     ? risks.reduce((a, b) => (a.ratio > b.ratio ? a : b))
     : null;
 
-  const RISK_META = { '높음': '위험 구간 · 관리 필요', '보통': '평균 수준', '낮음': '양호한 상태' };
+  const RISK_META = { '나쁨': '위험 구간 · 관리 필요', '보통': '평균 수준', '좋음': '양호한 상태' };
 
   const stats = [
     { lbl: '최근 진료 기록', val: `${totalVisits}건`,            meta: '최근 12개월 기준',           blue: true  },
