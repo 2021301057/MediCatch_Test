@@ -99,27 +99,30 @@ const MedicalRecords = () => {
         <div className="mc-stack-sm">
           {filteredRecords.map((r) => (
             <div key={r.id} className="mc-card mc-card-head" style={{ padding: '14px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              {/* 왼쪽: 아이콘 + 병원명 + 진료과 + 날짜 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '0 0 auto', minWidth: 200 }}>
                 <div style={{
                   width: 36, height: 36, borderRadius: 6,
                   background: 'var(--blue-soft)', color: 'var(--blue)',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
                   <Ic d={P.hosp} size={16}/>
                 </div>
                 <div>
                   <div className="mc-card-title">{r.hospitalName}</div>
-                  {(r.department || r.diagnosis) && (
-                    <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                      {[r.department, r.diagnosis && r.diagnosis !== '해당없음' ? r.diagnosis : null]
-                        .filter(Boolean).join(' · ')}
-                    </div>
+                  {r.department && (
+                    <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{r.department}</div>
                   )}
                   <div className="mc-card-sub">
                     <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
                   </div>
                 </div>
               </div>
+              {/* 가운데: 병명 */}
+              <div style={{ flex: 1, textAlign: 'center', fontSize: 13, color: 'var(--text-1)', padding: '0 16px' }}>
+                {r.diagnosis && r.diagnosis !== '해당없음' ? r.diagnosis : ''}
+              </div>
+              {/* 오른쪽: 구분 태그 */}
               <span className="mc-tag">{r.treatmentType}</span>
             </div>
           ))}
