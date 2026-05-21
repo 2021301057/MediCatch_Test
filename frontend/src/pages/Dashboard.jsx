@@ -68,13 +68,16 @@ export default function Dashboard() {
       .then((rows) => {
         if (!Array.isArray(rows)) return;
         setTotalVisits(rows.length);
-        setVisits(rows.slice(0, 3).map((r) => ({
-          hospital:  r.hospitalName || r.hospital || '-',
-          date:      r.visitDate    || '-',
-          diagnosis: r.diagnosis    || r.treatmentType || '-',
-          dept:      r.department   || '-',
-          type:      r.treatmentType || '-',
-        })));
+        setVisits(rows.slice(0, 3).map((r) => {
+          const isPharmacy = r.diseaseCode === '$' || (r.hospitalName || r.hospital || '').includes('약국');
+          return {
+            hospital:  r.hospitalName || r.hospital || '-',
+            date:      r.visitDate    || '-',
+            diagnosis: isPharmacy ? '약국 조제' : (r.diagnosis && r.diagnosis !== '해당없음' ? r.diagnosis : r.treatmentType || '-'),
+            dept:      isPharmacy ? '약국' : (r.department || '-'),
+            type:      r.treatmentType || '-',
+          };
+        }));
         // 가장 많이 방문한 진료과
         const deptCount = {};
         rows.forEach((r) => { if (r.department) deptCount[r.department] = (deptCount[r.department] || 0) + 1; });
