@@ -147,7 +147,7 @@ export default function Dashboard() {
   const stats = [
     { lbl: '최근 진료 기록', val: `${totalVisits}건`,            meta: '최근 12개월 기준',                               blue: true,  color: null },
     { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-', meta: topRisk ? `${topRisk.name} 주의 구간` : '데이터 없음',
-      color: topRisk ? RISK_COLOR[topRisk.cls] : null },
+      color: null },
     { lbl: '보험 공백',      val: gaps.length > 0 ? `${gaps.length}개 항목` : '확인 필요',
       meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인', color: null },
   ];
