@@ -2,12 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 
-/**
- * MediCatch 대시보드 — 디자인 handoff에 맞춰 재작성.
- * 시각적 출력물을 픽셀 단위로 재현하는 것이 목표.
- */
-
-// ── SVG 아이콘 헬퍼 ──────────────────────────────
 const Icon = ({ children, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
     strokeLinecap="round" strokeLinejoin="round"
@@ -27,12 +21,11 @@ const P = {
   shield: (<path d="M8 1 3 3.5v4C3 10 5.5 12.5 8 14c2.5-1.5 5-4 5-6.5v-4L8 1z" />),
 };
 
-// ── Mock 데이터 ──────────────────────────────────
 const MOCK = {
-  claims: [
-    { hospital: '서울성모병원', detail: '입원진료 실손 · 2024.03.11', amount: '+45,000원',  date: '3일 전',  ok: true },
-    { hospital: '연세세브란스',  detail: '안과 수술 실손 · 2024.03.04', amount: '+120,000원', date: '10일 전', ok: true },
-    { hospital: '강남성심병원', detail: '물리치료 · 2024.02.20',       amount: '+28,000원',  date: '22일 전', ok: false },
+  visits: [
+    { hospital: '서울성모병원', detail: '입원진료 · 2024.03.11', date: '3일 전', type: '입원' },
+    { hospital: '연세세브란스',  detail: '안과 수술 · 2024.03.04', date: '10일 전', type: '수술' },
+    { hospital: '강남성심병원', detail: '물리치료 · 2024.02.20', date: '22일 전', type: '외래' },
   ],
   risks: [
     { name: '비만증',   pct: 72, level: '위험', cls: 'hi' },
@@ -41,7 +34,7 @@ const MOCK = {
   ],
   quickActs: [
     { icon: 'search', title: '진료 전 보장 확인',   sub: '병원 가기 전에',  path: '/pre-treatment' },
-    { icon: 'clip',   title: '최근 진료 기록',      sub: '미처리 4건',     path: '/medical-records' },
+    { icon: 'clip',   title: '최근 진료 기록',      sub: '방문 내역 확인', path: '/medical-records' },
     { icon: 'chart',  title: '12개월 건강 리포트',  sub: '최신 분석',      path: '/health-report' },
     { icon: 'chat',   title: 'AI 건강 상담',        sub: '지금 채팅',      path: '/chat' },
   ],
@@ -58,7 +51,7 @@ export default function Dashboard() {
 
   const stats = [
     { lbl: '월 보험료 합계',   val: '387,000원', meta: '3개 보험사 통합',           blue: false },
-    { lbl: '청구 가능 보험금', val: '2건 발견',  pill: '+165,000원 예상',          blue: true },
+    { lbl: '최근 진료 기록',   val: '4건',       meta: '최근 12개월 기준',          blue: true },
     { lbl: '건강 위험도',      val: '중위험',    meta: '비만 · 당뇨 주의 구간',     blue: false },
     { lbl: '보험 공백',        val: '2개 항목',  meta: '즉시 개선 권장',            blue: false },
   ];
@@ -69,7 +62,7 @@ export default function Dashboard() {
       <div className="mc-page-top">
         <div>
           <div className="mc-greeting-name">안녕하세요, {user?.name || '김사용'} 님</div>
-          <div className="mc-greeting-sub">미처리 보험 청구 2건이 확인됩니다. 지금 청구해보세요.</div>
+          <div className="mc-greeting-sub">오늘도 건강한 하루 되세요. 내 건강 기록과 보험 현황을 한눈에 확인해보세요.</div>
         </div>
         <div className="mc-page-top-right">
           <button className="mc-btn mc-btn-primary" onClick={() => navigate('/insurance')}>
@@ -91,12 +84,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Claims + Risk */}
+      {/* Medical records + Risk */}
       <div className="mc-two-col">
-        {/* 청구 가능한 보험금 */}
+        {/* 최근 진료 기록 */}
         <div>
           <div className="mc-sec-head">
-            <span className="mc-sec-title">청구 가능한 보험금</span>
+            <span className="mc-sec-title">최근 진료 기록</span>
             <button className="mc-sec-link" onClick={() => navigate('/medical-records')}>
               전체 보기 <Icon>{P.arrow}</Icon>
             </button>
@@ -106,39 +99,25 @@ export default function Dashboard() {
               <tr>
                 <th>병원 / 내역</th>
                 <th>날짜</th>
-                <th>예상 금액</th>
-                <th>액션</th>
+                <th>구분</th>
               </tr>
             </thead>
             <tbody>
-              {data.claims.map((c, i) => (
+              {data.visits.map((c, i) => (
                 <tr key={i} onClick={() => navigate('/medical-records')}>
                   <td>
                     <div className="mc-tbl-hospital">{c.hospital}</div>
                     <div className="mc-tbl-detail">{c.detail}</div>
                   </td>
                   <td><span className="mc-tbl-date">{c.date}</span></td>
-                  <td><span className="mc-tbl-amount">{c.amount}</span></td>
-                  <td>
-                    {c.ok
-                      ? (
-                        <button
-                          className="mc-tbl-action"
-                          onClick={(e) => { e.stopPropagation(); navigate('/medical-records'); }}
-                        >
-                          <Icon size={11}>{P.check}</Icon> 청구하기
-                        </button>
-                      )
-                      : <span className="mc-tbl-tag">검토 중</span>
-                    }
-                  </td>
+                  <td><span className="mc-tbl-tag">{c.type}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="mc-tbl-footer">
-            <span className="mc-tbl-footer-label">총 예상 수령액</span>
-            <span className="mc-tbl-footer-value">+193,000원</span>
+            <span className="mc-tbl-footer-label">최근 방문 기록</span>
+            <span className="mc-tbl-footer-value">총 4건</span>
           </div>
         </div>
 
@@ -212,7 +191,7 @@ export default function Dashboard() {
                 style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
                 onClick={() => navigate('/insurance-plan')}
               >
-                <Icon size={12}>{P.plus}</Icon> 보험 추천 받기
+                <Icon size={12}>{P.plus}</Icon> 보험 공백 확인
               </button>
             </div>
           </div>
@@ -235,14 +214,14 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="mc-widget mc-widget-tight">
-            <div className="mc-widget-section-lbl">최근 청구 현황</div>
+            <div className="mc-widget-section-lbl">최근 진료 요약</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
-              <span style={{ color: 'var(--text-2)' }}>이번 달 청구</span>
-              <span style={{ fontWeight: 700, color: 'var(--blue)' }}>2건</span>
+              <span style={{ color: 'var(--text-2)' }}>최근 방문</span>
+              <span style={{ fontWeight: 700, color: 'var(--blue)' }}>4건</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-              <span style={{ color: 'var(--text-2)' }}>누적 수령액</span>
-              <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>385,000원</span>
+              <span style={{ color: 'var(--text-2)' }}>주요 진료과</span>
+              <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>내과</span>
             </div>
           </div>
         </div>
