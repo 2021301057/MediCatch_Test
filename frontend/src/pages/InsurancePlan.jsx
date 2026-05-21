@@ -258,7 +258,7 @@ const InsurancePlan = () => {
                       color: item.diff >= 0 ? '#2E7D32' : '#8A7040',
                       whiteSpace: 'nowrap',
                     }}>
-                      {item.diff >= 0 ? '+' : '-'}{formatWon(Math.abs(item.diff))}
+                      평균의 {Math.round((item.current / item.average) * 100)}%
                     </div>
                   )}
                 </div>
