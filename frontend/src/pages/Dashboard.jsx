@@ -28,15 +28,6 @@ const QUICK_ACTS = [
   { icon: 'chat',   title: 'AI 건강 상담',       sub: '지금 채팅',      path: '/chat' },
 ];
 
-// riskGrade: CODEF resRiskGrade "1"~"5"
-const RISK_GRADE = {
-  '1': { label: '낮음',    cls: 'lo' },
-  '2': { label: '보통',    cls: 'lo' },
-  '3': { label: '주의',    cls: 'mid' },
-  '4': { label: '위험',    cls: 'hi' },
-  '5': { label: '매우위험', cls: 'hi' },
-};
-
 const DISEASE_NAME = {
   'STROKE':        '뇌졸중',
   '뇌졸중':        '뇌졸중',
@@ -198,12 +189,7 @@ export default function Dashboard() {
         {stats.map((s, i) => (
           <div className="mc-stat-cell" key={i}>
             <div className="mc-stat-lbl">{s.lbl}</div>
-            <div
-              className={`mc-stat-val${s.blue ? ' blue' : ''}`}
-              style={s.color ? { color: s.color } : undefined}
-            >
-              {s.val}
-            </div>
+            <div className={`mc-stat-val${s.blue ? ' blue' : ''}`}>{s.val}</div>
             <div className="mc-stat-meta">{s.meta}</div>
           </div>
         ))}
