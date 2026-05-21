@@ -92,18 +92,22 @@ export default function Dashboard() {
         const mapped = Object.values(latest).map((r) => {
           const ratio = parseFloat(r.riskRatio) || 0;  // 3년 내 발병 확률 %
           const grade = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
+          // 바 너비: grade 기반 고정 스케일 (레이블과 시각 일치)
+          const GRADE_PCT = { '1': 20, '2': 40, '3': 60, '4': 80, '5': 100 };
           return {
             name:  DISEASE_NAME[r.predictionType] || r.predictionType,
             ratio,
             level: grade.label,
             cls:   grade.cls,
+            pct:   GRADE_PCT[r.riskGrade] ?? 20,
           };
         });
-        // 바 너비: 집합 내 최댓값 기준 정규화 (최소 5% 보장)
-        const maxRatio = Math.max(...mapped.map((r) => r.ratio), 1);
+        // 색상: 발병률 높은 순서대로 hi → mid → lo 배분 (시각적 구분)
+        const sortedByRatio = [...mapped].sort((a, b) => b.ratio - a.ratio);
+        const RANK_CLS = ['hi', 'mid', 'lo'];
         setRisks(mapped.map((r) => ({
           ...r,
-          pct: Math.max(Math.round((r.ratio / maxRatio) * 100), 5),
+          cls: RANK_CLS[Math.min(sortedByRatio.findIndex((s) => s.name === r.name), 2)],
         })));
       })
       .catch(() => {});
