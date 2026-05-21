@@ -125,10 +125,7 @@ export const analysisAPI = {
   searchTreatment:     (keyword) => api.post('/analysis/pre-treatment-search', { query: keyword }),
   getTreatmentCoverage:(id) => api.get(`/analysis/pre-treatment-search/${id}/coverage`),
   getCoverageGap:      () => api.get('/analysis/coverage-gap'),
-  getClaimOpportunities: () => api.get('/analysis/claim-opportunities')
-    .then((rows) => Array.isArray(rows) ? rows.map(normalizeMedicalRecord) : rows),
-  completeClaim:       (claimId) => api.post(`/analysis/claim-opportunities/${claimId}/complete`),
-  getHealthReport:     (months = 12) => api.get('/analysis/health-report', { params: { period: `${months}months` } }),
+getHealthReport:     (months = 12) => api.get('/analysis/health-report', { params: { period: `${months}months` } }),
   getMedicalPatterns:  () => api.get('/analysis/health-report/medical-patterns'),
   getInsuranceUsage:   () => api.get('/analysis/health-report/insurance-usage'),
 };

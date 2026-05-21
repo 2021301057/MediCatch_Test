@@ -8,8 +8,8 @@ const NAV_ITEMS = [
   { path: '/pre-treatment',    label: '진료 전 검색',   badge: 'dot' },
   { path: '/checkup',          label: '건강 검진 기록' },
   { path: '/insurance',        label: '내 보험 조회' },
-  { path: '/medical-records',  label: '진료 기록 & 청구', count: 2 },
-  { path: '/insurance-plan',   label: '보험 추천 & 공백' },
+  { path: '/medical-records',  label: '진료 기록' },
+  { path: '/insurance-plan',   label: '보험 공백' },
   { path: '/health-report',    label: '건강 통합 리포트' },
 ];
 

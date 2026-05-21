@@ -275,7 +275,7 @@ export default function LoginPage() {
           <p style={s.subcopy}>
             건강보험공단·보험사 데이터를 한 곳에서 안전하게 연동하고,
             <br />
-            내 상태에 맞는 보장과 청구 기회를 자동으로 찾아드립니다.
+            내 상태에 맞는 보장을 자동으로 찾아드립니다.
           </p>
           <div style={s.featureList}>
             <FeatureCard icon="🛡" iconBg="#dbeafe" iconColor="#1d4ed8" title="개인정보는 암호화 우선" desc="건강·보험 데이터는 256-bit AES 암호화로 안전하게 보관됩니다." />
