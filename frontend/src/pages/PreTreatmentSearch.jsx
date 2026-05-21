@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { analysisAPI } from '../api/services';
 
 const Ic = ({ d, size = 13 }) => (
@@ -416,6 +416,7 @@ function ActualLossSection({ actualLoss }) {
 
 export default function PreTreatmentSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -426,6 +427,17 @@ export default function PreTreatmentSearch() {
     if (!result.matched) return '확인 필요';
     return `${result.query} 보장 확인`;
   }, [result]);
+
+  // URL ?q= 파라미터 있으면 자동 검색
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('q');
+    if (q && q.trim()) {
+      setSearchQuery(q);
+      runSearch(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   const runSearch = async (query = searchQuery) => {
     const trimmed = query.trim();
