@@ -133,9 +133,6 @@ export const analysisAPI = {
   searchTreatment:     (keyword) => api.post('/analysis/pre-treatment-search', { query: keyword }),
   getTreatmentCoverage:(id) => api.get(`/analysis/pre-treatment-search/${id}/coverage`),
   getCoverageGap:      () => api.get('/analysis/coverage-gaps'),
-getHealthReport:     (months = 12) => api.get('/analysis/health-report', { params: { period: `${months}months` } }),
-  getMedicalPatterns:  () => api.get('/analysis/health-report/medical-patterns'),
-  getInsuranceUsage:   () => api.get('/analysis/health-report/insurance-usage'),
 };
 
 // ── Recommend ─────────────────────────────────────
