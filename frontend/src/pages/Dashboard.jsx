@@ -89,20 +89,27 @@ export default function Dashboard() {
         // 질환별 최신 1건
         const latest = {};
         rows.forEach((r) => { if (!latest[r.predictionType]) latest[r.predictionType] = r; });
+        // averageRatio: "69" 또는 "69/100" 형식 모두 처리
+        const parseAvgRatio = (val) => {
+          if (!val) return null;
+          const s = String(val);
+          return parseFloat(s.includes('/') ? s.split('/')[0] : s) || null;
+        };
         const mapped = Object.values(latest).map((r) => {
-          const ratio = parseFloat(r.riskRatio) || 0;  // 3년 내 발병 확률 %
-          const grade = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
-          // 바 너비: grade 기반 고정 스케일 (레이블과 시각 일치)
-          const GRADE_PCT = { '1': 20, '2': 40, '3': 60, '4': 80, '5': 100 };
+          const ratio    = parseFloat(r.riskRatio) || 0;
+          const avgRatio = parseAvgRatio(r.averageRatio);
+          const grade    = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
           return {
-            name:  DISEASE_NAME[r.predictionType] || r.predictionType,
+            name:     DISEASE_NAME[r.predictionType] || r.predictionType,
             ratio,
-            level: grade.label,
-            cls:   grade.cls,
-            pct:   GRADE_PCT[r.riskGrade] ?? 20,
+            avgRatio,
+            level:    grade.label,
+            cls:      grade.cls,
+            // 바 너비: 100명 중 내 순위 그대로 사용, 없으면 grade 기반 fallback
+            pct:      avgRatio ?? { '1': 20, '2': 40, '3': 60, '4': 80, '5': 100 }[r.riskGrade] ?? 20,
           };
         });
-        // 색상: 발병률 높은 순서대로 hi → mid → lo 배분 (시각적 구분)
+        // 색상: 발병률 높은 순 상대 순위로 hi → mid → lo 배분
         const sortedByRatio = [...mapped].sort((a, b) => b.ratio - a.ratio);
         const RANK_CLS = ['hi', 'mid', 'lo'];
         setRisks(mapped.map((r) => ({
@@ -238,9 +245,9 @@ export default function Dashboard() {
                   <span className="mc-risk-name">{r.name}</span>
                   <span className={`mc-risk-lvl ${r.cls}`}>
                     {r.level}
-                    {r.ratio > 0 && (
+                    {r.avgRatio != null && (
                       <span style={{ fontWeight: 400, marginLeft: 6, fontSize: 11, opacity: 0.8 }}>
-                        {r.ratio}%
+                        100명 중 {r.avgRatio}번째
                       </span>
                     )}
                   </span>
