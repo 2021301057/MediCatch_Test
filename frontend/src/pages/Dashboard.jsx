@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [gaps, setGaps]               = useState([]);
   const [totalVisits, setTotalVisits] = useState(0);
   const [topDept, setTopDept]         = useState('-');
+  const [nextCheckup, setNextCheckup] = useState(null);
 
   useEffect(() => {
     healthAPI.getMedicalRecords()
@@ -122,6 +123,23 @@ export default function Dashboard() {
       })
       .catch(() => {});
 
+    healthAPI.getCheckupResults()
+      .then((rows) => {
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        const latest = rows.reduce((a, b) => (a.checkupDate > b.checkupDate ? a : b));
+        const lastDate = new Date(latest.checkupDate);
+        const nextDate = new Date(lastDate);
+        nextDate.setFullYear(nextDate.getFullYear() + 1);
+        const now = new Date();
+        const diffDays = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
+        setNextCheckup({
+          lastDate: latest.checkupDate,
+          nextDate: nextDate.toISOString().slice(0, 10),
+          dday: diffDays,
+        });
+      })
+      .catch(() => {});
+
     insuranceAPI.getCoverageComparison()
       .then((rows) => {
         if (!Array.isArray(rows)) return;
@@ -152,14 +170,13 @@ export default function Dashboard() {
     ? risks.reduce((a, b) => (a.ratio > b.ratio ? a : b))
     : null;
 
-  const RISK_COLOR = { hi: '#9A6060', mid: '#8A7040', lo: '#3A7A62' };
+  const RISK_META = { '높음': '위험 구간 · 관리 필요', '보통': '평균 수준', '낮음': '양호한 상태' };
 
   const stats = [
-    { lbl: '최근 진료 기록', val: `${totalVisits}건`,            meta: '최근 12개월 기준',                               blue: true,  color: null },
-    { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-', meta: topRisk ? `${topRisk.name} 주의 구간` : '데이터 없음',
-      color: null },
+    { lbl: '최근 진료 기록', val: `${totalVisits}건`,            meta: '최근 12개월 기준',           blue: true  },
+    { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-', meta: topRisk ? `${topRisk.name} · ${RISK_META[topRisk.level] || ''}` : '데이터 없음' },
     { lbl: '보험 공백',      val: gaps.length > 0 ? `${gaps.length}개 항목` : '확인 필요',
-      meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인', color: null },
+      meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인' },
   ];
 
   return (
@@ -331,13 +348,24 @@ export default function Dashboard() {
           </div>
           <div className="mc-widget">
             <div className="mc-widget-title">국가건강검진</div>
-            <div className="mc-widget-sub">2024년 대상자 · 예약 필요</div>
+            {nextCheckup ? (
+              <>
+                <div className="mc-widget-sub">
+                  최근 검진 {nextCheckup.lastDate} · 다음 예정 {nextCheckup.nextDate}
+                </div>
+                <div style={{ fontSize: 12, color: nextCheckup.dday <= 30 ? '#9A6060' : 'var(--text-2)', marginBottom: 8 }}>
+                  {nextCheckup.dday > 0 ? `D-${nextCheckup.dday}` : nextCheckup.dday === 0 ? 'D-day' : `D+${Math.abs(nextCheckup.dday)} 초과`}
+                </div>
+              </>
+            ) : (
+              <div className="mc-widget-sub">검진 기록이 없어요</div>
+            )}
             <button
               className="mc-btn"
               style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
               onClick={() => navigate('/checkup')}
             >
-              예약하기
+              검진 기록 보기
             </button>
           </div>
           <div className="mc-widget mc-widget-tight">
