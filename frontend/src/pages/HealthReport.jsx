@@ -31,6 +31,12 @@ const FACTOR_STATUS_LABEL = {
   '좋음': '양호',
   '-': '요인',
 };
+const FACTOR_STATUS_COLOR = {
+  '관리 필요': '#9A6060',
+  '주의': '#8A7040',
+  '양호': '#2F6FE8',
+  '요인': 'var(--text-2)',
+};
 
 const parseNumber = (value) => {
   if (value == null || value === '') return null;
@@ -130,6 +136,41 @@ const factorSeverity = (factor) => (
 );
 
 const factorStatusLabel = (factor) => FACTOR_STATUS_LABEL[factorSeverity(factor)] || '요인';
+
+const RiskBadge = ({ grade }) => {
+  const label = OVERALL_RISK_LABEL[grade] || OVERALL_RISK_LABEL['-'];
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      whiteSpace: 'nowrap',
+      borderRadius: 9999,
+      padding: '4px 9px',
+      background: grade === '나쁨' ? '#F2ECEC' : grade === '보통' ? '#F4EFDE' : 'var(--blue-soft)',
+      color: RISK_COLOR[grade] || 'var(--text-2)',
+      fontSize: 11.5,
+      fontWeight: 800,
+      lineHeight: 1,
+    }}>
+      {label}
+    </span>
+  );
+};
+
+const FactorStatus = ({ status }) => (
+  <span style={{
+    display: 'inline-flex',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    color: FACTOR_STATUS_COLOR[status] || 'var(--text-2)',
+    fontSize: 12,
+    fontWeight: 700,
+  }}>
+    {status}
+  </span>
+);
 
 const factorLine = (factor) => {
   const name = factorName(factor);
@@ -549,7 +590,6 @@ const HealthReport = () => {
                             const key = prediction.predictionType;
                             const preview = factors.map(factorLine).filter(Boolean).slice(0, 2);
                             const isOpen = expandedRisk === key;
-                            const overallLabel = OVERALL_RISK_LABEL[grade] || OVERALL_RISK_LABEL['-'];
                             const needsCareCount = factors.filter((factor) => factorSeverity(factor) === '나쁨').length;
 
                             return (
@@ -570,7 +610,7 @@ const HealthReport = () => {
                                     textAlign: 'left',
                                   }}
                                 >
-                                  <span>
+                                  <span style={{ minWidth: 0 }}>
                                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
                                       {DISEASE_KR[key] || key}
                                     </span>
@@ -580,10 +620,8 @@ const HealthReport = () => {
                                       </span>
                                     )}
                                   </span>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 800, color: RISK_COLOR[grade] }}>
-                                      {overallLabel}
-                                    </span>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                                    <RiskBadge grade={grade} />
                                     <span style={{ color: 'var(--text-3)', transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
                                       <Ic d={P.chev} size={12}/>
                                     </span>
@@ -602,11 +640,26 @@ const HealthReport = () => {
                                         if (!line) return null;
                                         const status = factorStatusLabel(factor);
                                         return (
-                                          <div key={`${line}-${index}`} className="mc-kv" style={{ alignItems: 'flex-start' }}>
-                                            <span className="mc-kv-key">
-                                              {status !== '요인' ? status : `요인 ${index + 1}`}
+                                          <div
+                                            key={`${line}-${index}`}
+                                            style={{
+                                              display: 'grid',
+                                              gridTemplateColumns: '74px minmax(0, 1fr)',
+                                              gap: 12,
+                                              alignItems: 'start',
+                                            }}
+                                          >
+                                            <FactorStatus status={status !== '요인' ? status : `요인 ${index + 1}`} />
+                                            <span style={{
+                                              minWidth: 0,
+                                              fontSize: 13,
+                                              fontWeight: 700,
+                                              color: 'var(--text-1)',
+                                              lineHeight: 1.45,
+                                              wordBreak: 'keep-all',
+                                            }}>
+                                              {line}
                                             </span>
-                                            <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.45 }}>{line}</span>
                                           </div>
                                         );
                                       })
