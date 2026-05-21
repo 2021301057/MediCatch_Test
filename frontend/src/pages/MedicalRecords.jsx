@@ -109,6 +109,12 @@ const MedicalRecords = () => {
                 </div>
                 <div>
                   <div className="mc-card-title">{r.hospitalName}</div>
+                  {(r.department || r.diagnosis) && (
+                    <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
+                      {[r.department, r.diagnosis && r.diagnosis !== '해당없음' ? r.diagnosis : null]
+                        .filter(Boolean).join(' · ')}
+                    </div>
+                  )}
                   <div className="mc-card-sub">
                     <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
                   </div>

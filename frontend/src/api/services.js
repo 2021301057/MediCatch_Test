@@ -10,16 +10,24 @@ const withAliases = (row, aliases) => {
   return next;
 };
 
-const normalizeMedicalRecord = (row) => withAliases(row, {
-  visit_date: 'visitDate',
-  hospital: 'hospitalName',
-  treatment_details: 'treatmentType',
-  out_of_pocket: 'patientPayment',
-  insurance_coverage: 'insurancePayment',
-  medical_cost: 'totalCost',
-  non_covered_amount: 'nonCoveredAmount',
-  claim_status: 'claimStatus',
-});
+const normalizeMedicalRecord = (row) => {
+  const r = withAliases(row, {
+    visit_date: 'visitDate',
+    hospital: 'hospitalName',
+    treatment_details: 'treatmentType',
+    out_of_pocket: 'patientPayment',
+    insurance_coverage: 'insurancePayment',
+    medical_cost: 'totalCost',
+    non_covered_amount: 'nonCoveredAmount',
+    claim_status: 'claimStatus',
+    disease_code: 'diseaseCode',
+  });
+  // 약국: diseaseCode '$' 또는 병원명에 '약국' 포함
+  if (r.diseaseCode === '$' || (r.hospitalName || '').includes('약국')) {
+    r.treatmentType = '약국';
+  }
+  return r;
+};
 
 const normalizeCheckupResult = (row) => withAliases(row, {
   checkup_date: 'checkupDate',
