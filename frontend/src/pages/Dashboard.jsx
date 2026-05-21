@@ -90,20 +90,25 @@ export default function Dashboard() {
         const latest = {};
         rows.forEach((r) => { if (!latest[r.predictionType]) latest[r.predictionType] = r; });
         const mapped = Object.values(latest).map((r) => {
-          const ratio = parseFloat(r.riskRatio) || 0;   // 이미 % 값
-          const grade = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
+          const ratio   = parseFloat(r.riskRatio)   || 0;
+          const average = parseFloat(r.averageRatio) || 0;
+          const grade   = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
+          // 바 너비: 평균 발병률 대비 비율 (average가 없으면 집합 내 비율로 fallback)
+          const pctOfAvg = average > 0 ? Math.min(Math.round((ratio / average) * 100), 100) : null;
           return {
-            name:  DISEASE_NAME[r.predictionType] || r.predictionType,
+            name:    DISEASE_NAME[r.predictionType] || r.predictionType,
             ratio,
-            level: grade.label,
-            cls:   grade.cls,
+            average,
+            pctOfAvg,
+            level:   grade.label,
+            cls:     grade.cls,
           };
         });
-        // 바 너비: 집합 내 최댓값 기준 정규화 (최소 5% 보장)
+        // pctOfAvg가 없는 경우 집합 내 최댓값 기준 fallback
         const maxRatio = Math.max(...mapped.map((r) => r.ratio), 1);
         setRisks(mapped.map((r) => ({
           ...r,
-          pct: Math.max(Math.round((r.ratio / maxRatio) * 100), 5),
+          pct: Math.max(r.pctOfAvg ?? Math.round((r.ratio / maxRatio) * 100), 5),
         })));
       })
       .catch(() => {});
@@ -232,7 +237,14 @@ export default function Dashboard() {
               <div className="mc-risk-row" key={i}>
                 <div className="mc-risk-meta">
                   <span className="mc-risk-name">{r.name}</span>
-                  <span className={`mc-risk-lvl ${r.cls}`}>{r.level}</span>
+                  <span className={`mc-risk-lvl ${r.cls}`}>
+                    {r.level}
+                    {r.ratio > 0 && (
+                      <span style={{ fontWeight: 400, marginLeft: 6, fontSize: 11, opacity: 0.8 }}>
+                        {r.ratio}%
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <div className="mc-risk-bar">
                   <div className={`mc-risk-fill ${r.cls}`} style={{ width: `${r.pct}%` }} />
