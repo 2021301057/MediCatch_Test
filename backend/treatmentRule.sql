@@ -141,13 +141,13 @@ SET actual_loss_category = 'GENERAL_OUTPATIENT',
 WHERE keyword = 'CT'
   AND actual_loss_category = 'NON_COVERED_THREE';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
-SELECT '치아파절', '치아 파절,치아깨짐,이빨 깨짐,치아 골절', 'INJURY', 'OUTPATIENT', 'MIXED', 'DENTAL', 'DENTAL_INJURY', 'TOOTH_FRACTURE_DIAGNOSIS', TRUE, '치아파절은 상해 치과 치료와 치아파절 특약 또는 치아파절 포함 골절 담보 여부를 확인해야 합니다.', 111
+SELECT '치아파절', '치아 파절,치아깨짐,이빨 깨짐,치아 골절,치아파손,치아 파손,치아손상,치아 손상,이빨파손,이빨 파손', 'INJURY', 'OUTPATIENT', 'MIXED', 'DENTAL', 'DENTAL_INJURY', 'TOOTH_FRACTURE_DIAGNOSIS', TRUE, '치아파절은 상해 치과 치료와 치아파절 특약 또는 치아파절 포함 골절 담보 여부를 확인해야 합니다.', 111
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '치아파절');
 UPDATE treatment_rules
 SET fixed_benefit_category = 'TOOTH_FRACTURE_DIAGNOSIS',
+    synonyms = '치아 파절,치아깨짐,이빨 깨짐,치아 골절,치아파손,치아 파손,치아손상,치아 손상,이빨파손,이빨 파손',
     caution_message = '치아파절은 상해 치과 치료와 치아파절 특약 또는 치아파절 포함 골절 담보 여부를 확인해야 합니다.'
-WHERE keyword = '치아파절'
-  AND fixed_benefit_category = 'FRACTURE_DIAGNOSIS';
+WHERE keyword = '치아파절';
 INSERT INTO treatment_rules (keyword, synonyms, injury_disease_type, care_type, benefit_type, treatment_category, actual_loss_category, fixed_benefit_category, needs_user_confirmation, caution_message, priority)
 SELECT '스케일링', '치석제거,치주치료,잇몸치료', 'DISEASE', 'OUTPATIENT', 'COVERED', 'DENTAL', 'DENTAL_DISEASE', NULL, TRUE, '치과 질병 치료는 세대별로 급여 보장 여부가 달라질 수 있습니다.', 112
 WHERE NOT EXISTS (SELECT 1 FROM treatment_rules WHERE keyword = '스케일링');

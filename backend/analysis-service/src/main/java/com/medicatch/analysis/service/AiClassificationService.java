@@ -177,8 +177,9 @@ public class AiClassificationService {
         boolean isTest      = containsAny(n, "mri", "ct", "초음파", "내시경", "엑스레이", "xray", "혈액검사", "조직검사");
         boolean isRehab     = containsAny(n, "도수치료", "도수", "체외충격파", "충격파", "재활치료");
         boolean isInjection = containsAny(n, "주사치료", "프롤로", "인대주사", "신경주사");
-        boolean isDental    = containsAny(n, "치아", "치과", "치수", "잇몸", "치주", "신경치료", "임플란트", "치아파절", "치아균열");
-        boolean isToothFracture = containsAny(n, "치아파절", "치아골절", "치아깨짐", "이빨깨짐");
+        boolean isDental    = containsAny(n, "치아", "치과", "치수", "잇몸", "치주", "신경치료", "임플란트", "치아파절", "치아균열", "치아파손", "치아손상");
+        boolean isToothFracture = containsAny(n, "치아파절", "치아골절", "치아깨짐", "이빨깨짐",
+                "치아파손", "치아손상", "이빨파손", "이빨손상", "치아부러", "이빨부러");
         boolean isKorean    = containsAny(n, "한방", "한의원", "침치료", "뜸", "추나", "첩약");
         boolean isHerbal    = containsAny(n, "한약", "탕약", "첩약");
         boolean isCancer    = containsAny(n, "암", "악성종양", "암수술", "항암", "방사선치료");
@@ -190,7 +191,8 @@ public class AiClassificationService {
 
         // 상해/질병 구분
         boolean isInjury   = containsAny(n, "골절", "파열", "인대파열", "근육파열", "타박", "삐끗", "염좌",
-                "찢", "상처", "찰과상", "화상", "탈구", "탈골", "외상", "사고", "충돌", "넘어");
+                "찢", "상처", "찰과상", "화상", "탈구", "탈골", "외상", "사고", "충돌", "넘어",
+                "파손", "치아파손", "치아손상");
         boolean isDisease  = containsAny(n, "위염", "당뇨", "고혈압", "갑상선", "비염", "축농증", "역류",
                 "피부염", "두드러기", "요로결석", "편두통", "빈혈", "천식", "폐렴", "간염", "신장",
                 "자궁", "난소", "전립선", "통풍", "류마티스");
