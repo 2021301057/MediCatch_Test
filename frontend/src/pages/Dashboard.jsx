@@ -101,13 +101,9 @@ export default function Dashboard() {
         });
         // 바 너비: 집합 내 최댓값 기준 정규화 (최소 5% 보장)
         const maxRatio = Math.max(...mapped.map((r) => r.ratio), 1);
-        // 색상: 집합 내 상대 순위로 배분 (실제 grade 무관하게 항상 hi/mid/lo 색 차이 표시)
-        const sorted = [...mapped].sort((a, b) => b.ratio - a.ratio);
-        const RANK_CLS = ['hi', 'mid', 'lo'];
         setRisks(mapped.map((r) => ({
           ...r,
           pct: Math.max(Math.round((r.ratio / maxRatio) * 100), 5),
-          cls: RANK_CLS[Math.min(sorted.findIndex((s) => s.name === r.name), 2)],
         })));
       })
       .catch(() => {});
