@@ -26,13 +26,6 @@ const PERIOD_FILTERS = [
 ];
 const DEFAULT_PERIOD = '1y';
 
-const CLAIM_STATUS_LABEL = {
-  UNCLAIMED: '미청구',
-  CLAIMED:   '청구 완료',
-  PENDING:   '청구 진행 중',
-  DENIED:    '청구 거절',
-};
-
 const fmtYM = (ym) => {
   const [y, m] = ym.split('-');
   return `${y}년 ${parseInt(m, 10)}월`;
@@ -63,6 +56,25 @@ const MedicalRecords = () => {
     fetchRecords();
   }, []);
 
+  // ── 유형별 카운트 (전체 데이터 기준) ──────────────────────────────────
+  const typeCounts = useMemo(() => {
+    const counts = { '전체': records.length };
+    ['외래', '입원', '약국'].forEach((t) => {
+      counts[t] = records.filter((r) => r.treatmentType === t).length;
+    });
+    return counts;
+  }, [records]);
+
+  // ── 가장 많은 유형 (통계 카드) ────────────────────────────────────────
+  const topType = useMemo(() => {
+    const counts = {};
+    records.forEach((r) => {
+      if (r.treatmentType) counts[r.treatmentType] = (counts[r.treatmentType] || 0) + 1;
+    });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return sorted[0] || ['-', 0];
+  }, [records]);
+
   // ── 필터링 ────────────────────────────────────────────────────────────
   const filteredRecords = useMemo(() => {
     let list = records;
@@ -83,7 +95,8 @@ const MedicalRecords = () => {
       list = list.filter((r) =>
         (r.hospitalName || '').toLowerCase().includes(q) ||
         (r.diagnosis    || '').toLowerCase().includes(q) ||
-        (r.department   || '').toLowerCase().includes(q)
+        (r.department   || '').toLowerCase().includes(q) ||
+        (r.diseaseCode  || '').toLowerCase().includes(q)
       );
     }
 
@@ -106,9 +119,8 @@ const MedicalRecords = () => {
       .map(([ym, items]) => ({ ym, items }));
   }, [filteredRecords]);
 
-  // ── 통계 (전체 기준) ───────────────────────────────────────────────────
-  const outpatientCount = records.filter((r) => r.treatmentType === '외래').length;
-  const hospitalCount   = new Set(records.map((r) => r.hospitalName).filter(Boolean)).size;
+  // ── 통계 ────────────────────────────────────────────────────────────
+  const hospitalCount = new Set(records.map((r) => r.hospitalName).filter(Boolean)).size;
 
   const isFiltered =
     searchQuery.trim() !== '' ||
@@ -134,7 +146,7 @@ const MedicalRecords = () => {
         </div>
       </div>
 
-      {/* 통계: 전체 데이터 기준 (필터 영향 X) */}
+      {/* 통계: 전체 데이터 기준 */}
       <div className="mc-stats-strip">
         <div className="mc-stat">
           <div className="mc-stat-label">전체 진료</div>
@@ -147,9 +159,9 @@ const MedicalRecords = () => {
           <div className="mc-stat-sub">중복 제외</div>
         </div>
         <div className="mc-stat">
-          <div className="mc-stat-label">외래 진료</div>
-          <div className="mc-stat-value">{outpatientCount}건</div>
-          <div className="mc-stat-sub">가장 잦은 유형</div>
+          <div className="mc-stat-label">{topType[0]} 진료</div>
+          <div className="mc-stat-value">{topType[1]}건</div>
+          <div className="mc-stat-sub">가장 많은 유형</div>
         </div>
       </div>
 
@@ -159,7 +171,7 @@ const MedicalRecords = () => {
           <span className="mc-input-icon"><Ic d={P.search} size={14}/></span>
           <input
             className="mc-input"
-            placeholder="병원, 병명, 진료과 검색"
+            placeholder="병원, 병명, 진료과, 질병 코드 검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -173,7 +185,9 @@ const MedicalRecords = () => {
           {TYPE_FILTERS.map((t) => (
             <button key={t}
               className={`mc-chip ${typeFilter === t ? 'active' : ''}`}
-              onClick={() => setTypeFilter(t)}>{t}</button>
+              onClick={() => setTypeFilter(t)}>
+              {t} {typeCounts[t] ?? 0}
+            </button>
           ))}
         </div>
       </div>
@@ -232,68 +246,71 @@ const MedicalRecords = () => {
                   const isExpanded   = expandedId === r.id;
                   const hasDiagnosis = r.diagnosis && r.diagnosis !== '해당없음';
                   const showCode     = r.diseaseCode && r.diseaseCode !== '$';
-                  const claimLabel   = CLAIM_STATUS_LABEL[r.claimStatus] || r.claimStatus;
 
                   return (
                     <div key={r.id} className="mc-card"
                       style={{ overflow: 'hidden', cursor: 'pointer' }}
                       onClick={() => setExpandedId(isExpanded ? null : r.id)}>
 
-                      <div className="mc-card-head" style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '0 0 auto', minWidth: 200 }}>
-                          <div style={{
-                            width: 36, height: 36, borderRadius: 6,
-                            background: 'var(--blue-soft)', color: 'var(--blue)',
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                          }}>
-                            <Ic d={P.hosp} size={16}/>
-                          </div>
-                          <div>
-                            <div className="mc-card-title">{r.hospitalName}</div>
-                            {r.department && (
-                              <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{r.department}</div>
-                            )}
-                            <div className="mc-card-sub">
-                              <Ic d={P.cal} size={10}/> {r.visitDate} · {r.treatmentType}
+                      {/* 카드 본체 - 세로형 레이아웃 */}
+                      <div style={{ display: 'flex', gap: 12, padding: '14px 16px' }}>
+                        {/* 아이콘 */}
+                        <div style={{
+                          width: 36, height: 36, borderRadius: 6,
+                          background: 'var(--blue-soft)', color: 'var(--blue)',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          <Ic d={P.hosp} size={16}/>
+                        </div>
+
+                        {/* 본문 */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* 상단: 병원명 + 우측 태그/chevron */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div className="mc-card-title" style={{ marginBottom: 2 }}>
+                                {r.hospitalName}
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                {r.department && <>{r.department}<span style={{ color: 'var(--text-3)' }}>·</span></>}
+                                <Ic d={P.cal} size={10}/> {r.visitDate}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                              <span className="mc-tag">{r.treatmentType}</span>
+                              <div style={{
+                                color: 'var(--text-3)',
+                                transform: isExpanded ? 'rotate(180deg)' : 'none',
+                                transition: 'transform 0.15s',
+                                display: 'inline-flex',
+                              }}>
+                                <Ic d={P.chev} size={14}/>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div style={{ flex: 1, textAlign: 'center', fontSize: 13, color: 'var(--text-1)', padding: '0 16px' }}>
-                          {hasDiagnosis ? r.diagnosis : ''}
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span className="mc-tag">{r.treatmentType}</span>
-                          <div style={{
-                            color: 'var(--text-3)',
-                            transform: isExpanded ? 'rotate(180deg)' : 'none',
-                            transition: 'transform 0.15s',
-                            display: 'inline-flex',
-                          }}>
-                            <Ic d={P.chev} size={14}/>
-                          </div>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div style={{ padding: '14px 16px', background: '#FAFBFD' }}>
-                          {(showCode || claimLabel) && (
-                            <div className="mc-stack-sm" style={{ marginBottom: 12 }}>
-                              {showCode && (
-                                <div className="mc-kv">
-                                  <span className="mc-kv-key">질병 코드</span>
-                                  <span className="mc-kv-val">{r.diseaseCode}</span>
+                          {/* 하단: 진단명 + 질병 코드 */}
+                          {(hasDiagnosis || showCode) && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border-soft)' }}>
+                              {hasDiagnosis && (
+                                <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 500 }}>
+                                  {r.diagnosis}
                                 </div>
                               )}
-                              {claimLabel && (
-                                <div className="mc-kv">
-                                  <span className="mc-kv-key">청구 상태</span>
-                                  <span className="mc-kv-val">{claimLabel}</span>
+                              {showCode && (
+                                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 3 }}>
+                                  질병 코드 {r.diseaseCode}
                                 </div>
                               )}
                             </div>
                           )}
+                        </div>
+                      </div>
+
+                      {/* 펼침 영역: 액션 버튼 */}
+                      {isExpanded && (
+                        <div style={{ padding: '12px 16px', background: '#FAFBFD', borderTop: '1px solid var(--border-soft)' }}>
                           {hasDiagnosis ? (
                             <button
                               className="mc-btn mc-btn-primary"
