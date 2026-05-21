@@ -545,16 +545,29 @@ public class CodefSyncService {
             String[] predictionTypes = { API_HEALTH_AGE, API_STROKE, API_DIABETES, API_CARDIO };
             String[] predictionUrls  = { HEALTH_AGE_URL, STROKE_URL, DIABETES_URL, CARDIO_URL };
 
-            // SSO 그룹핑: 5개 API는 단일 EasyCodef 인스턴스 + 800ms 간격 순차 발사로 묶어야
-            // CODEF 서버가 같은 SSO id로 그룹핑 (인증 push 1회만 발생).
-            // 병렬 발사하거나 인스턴스를 분리하면 각각 별도 세션이 생성되어 push가 5회 옴.
+            // SSO 그룹핑: sharedId 공유 + sharedCodef 단일 인스턴스로 CODEF 서버가 1회 push로 묶음.
+            // CHECKUP을 단독으로 먼저 완료(CF-03002 수신)한 뒤 예측 4개를 발사해야
+            // CHECKUP의 requestProduct가 예측 요청과 경쟁하며 블로킹되는 현상을 방지함.
             final EasyCodef sharedCodef = createCodef();
 
-            // 건강검진 future (필수, 가장 먼저 발사)
-            CompletableFuture<CheckupApiContext> checkupFuture = CompletableFuture.supplyAsync(() ->
-                    fireFirstRequest(sharedCodef, API_CHECKUP, NHIS_URL, checkupParams, svcType));
+            // 1) 건강검진 1차 요청 — 단독 동기 실행 (SSO 세션 선점)
+            CheckupApiContext checkupCtx = fireFirstRequest(sharedCodef, API_CHECKUP, NHIS_URL, checkupParams, svcType);
 
-            // 예측 4개 future (각각 800ms 지연 후 발사)
+            // 건강검진 응답코드 검증
+            if (checkupCtx == null
+                || (!"CF-00000".equals(checkupCtx.getFirstResponseCode())
+                 && !"CF-03002".equals(checkupCtx.getFirstResponseCode()))) {
+                String code = checkupCtx != null ? checkupCtx.getFirstResponseCode() : "UNKNOWN";
+                String userMsg;
+                if ("CF-12001".equals(code)) {
+                    userMsg = "이전 인증이 완료되지 않았습니다. 잠시 후 다시 시도해주세요.";
+                } else {
+                    userMsg = "건강검진 정보를 불러올 수 없습니다.";
+                }
+                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: " + userMsg);
+            }
+
+            // 2) 예측 4개 — CHECKUP 완료 후 800ms 간격으로 순차 발사 (병렬 CompletableFuture)
             List<CompletableFuture<CheckupApiContext>> predictionFutures = new ArrayList<>();
             for (int i = 0; i < predictionTypes.length; i++) {
                 final String pType = predictionTypes[i];
@@ -577,31 +590,7 @@ public class CodefSyncService {
                 }));
             }
 
-            // 1) 건강검진 응답 우선 대기 (최대 90초) — 필수이므로 충분히 기다림
-            CheckupApiContext checkupCtx;
-            try {
-                checkupCtx = checkupFuture.get(90, TimeUnit.SECONDS);
-            } catch (TimeoutException te) {
-                throw new RuntimeException("건강검진(NHIS) 오류 [TIMEOUT]: 응답이 너무 늦어 다시 시도해주세요.");
-            } catch (Exception e) {
-                throw new RuntimeException("건강검진(NHIS) 오류 [EXCEPTION]: " + e.getMessage(), e);
-            }
-
-            // 건강검진 응답코드 검증 (옵션 B)
-            if (checkupCtx == null
-                || (!"CF-00000".equals(checkupCtx.getFirstResponseCode())
-                 && !"CF-03002".equals(checkupCtx.getFirstResponseCode()))) {
-                String code = checkupCtx != null ? checkupCtx.getFirstResponseCode() : "UNKNOWN";
-                String userMsg;
-                if ("CF-12001".equals(code)) {
-                    userMsg = "이전 인증이 완료되지 않았습니다. 잠시 후 다시 시도해주세요.";
-                } else {
-                    userMsg = "건강검진 정보를 불러올 수 없습니다.";
-                }
-                throw new RuntimeException("건강검진(NHIS) 오류 [" + code + "]: " + userMsg);
-            }
-
-            // 2) 예측 4개 결과 수집 — 건강검진 완료 후 추가로 최대 30초 더 대기
+            // 예측 4개 결과 수집 — 최대 30초 대기
             try {
                 CompletableFuture.allOf(predictionFutures.toArray(new CompletableFuture[0]))
                         .get(30, TimeUnit.SECONDS);
