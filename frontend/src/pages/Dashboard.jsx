@@ -101,9 +101,13 @@ export default function Dashboard() {
         });
         // 바 너비: 집합 내 최댓값 기준 정규화 (최소 5% 보장)
         const maxRatio = Math.max(...mapped.map((r) => r.ratio), 1);
+        // 색상: 집합 내 상대 순위로 배분 (실제 grade 무관하게 항상 hi/mid/lo 색 차이 표시)
+        const sorted = [...mapped].sort((a, b) => b.ratio - a.ratio);
+        const RANK_CLS = ['hi', 'mid', 'lo'];
         setRisks(mapped.map((r) => ({
           ...r,
           pct: Math.max(Math.round((r.ratio / maxRatio) * 100), 5),
+          cls: RANK_CLS[Math.min(sorted.findIndex((s) => s.name === r.name), 2)],
         })));
       })
       .catch(() => {});
@@ -138,11 +142,14 @@ export default function Dashboard() {
     ? risks.reduce((a, b) => (a.ratio > b.ratio ? a : b))
     : null;
 
+  const RISK_COLOR = { hi: '#9A6060', mid: '#8A7040', lo: '#3A7A62' };
+
   const stats = [
-    { lbl: '최근 진료 기록', val: `${totalVisits}건`,                 meta: '최근 12개월 기준',                       blue: true  },
-    { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-',      meta: topRisk ? `${topRisk.name} 주의 구간` : '데이터 없음', blue: false },
+    { lbl: '최근 진료 기록', val: `${totalVisits}건`,            meta: '최근 12개월 기준',                               blue: true,  color: null },
+    { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-', meta: topRisk ? `${topRisk.name} 주의 구간` : '데이터 없음',
+      color: topRisk ? RISK_COLOR[topRisk.cls] : null },
     { lbl: '보험 공백',      val: gaps.length > 0 ? `${gaps.length}개 항목` : '확인 필요',
-                             meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인', blue: false },
+      meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인', color: null },
   ];
 
   return (
@@ -164,7 +171,12 @@ export default function Dashboard() {
         {stats.map((s, i) => (
           <div className="mc-stat-cell" key={i}>
             <div className="mc-stat-lbl">{s.lbl}</div>
-            <div className={`mc-stat-val${s.blue ? ' blue' : ''}`}>{s.val}</div>
+            <div
+              className={`mc-stat-val${s.blue ? ' blue' : ''}`}
+              style={s.color ? { color: s.color } : undefined}
+            >
+              {s.val}
+            </div>
             <div className="mc-stat-meta">{s.meta}</div>
           </div>
         ))}
