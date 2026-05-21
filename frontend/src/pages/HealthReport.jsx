@@ -17,51 +17,138 @@ const P = {
   search:   (<><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></>),
   pill:     (<><path d="M5 11l6-6M3.5 9.5A3.5 3.5 0 0 0 9.5 3.5"/><path d="M6.5 12.5A3.5 3.5 0 0 0 12.5 6.5"/></>),
   chart:    (<><path d="M3 13V7M8 13V3M13 13V9"/></>),
+  check:    (<path d="M3 8.5 6.5 12 13 4"/>),
 };
 
-const RISK_COLOR  = { '나쁨': '#9A6060', '보통': '#8A7040', '좋음': '#2F6FE8', '-': 'var(--text-2)' };
-const DISEASE_KR  = { STROKE: '뇌졸중', DIABETES: '당뇨', CARDIO: '심뇌혈관' };
+const RISK_COLOR = { '나쁨': '#9A6060', '보통': '#8A7040', '좋음': '#2F6FE8', '-': 'var(--text-2)' };
+const DISEASE_KR = { STROKE: '뇌졸중', DIABETES: '당뇨', CARDIO: '심뇌혈관' };
 
-const gradeFromRank = (rank) => {
-  if (rank == null || rank === '') return '-';
-  const n = parseFloat(rank);
-  if (isNaN(n)) return '-';
+const parseNumber = (value) => {
+  if (value == null || value === '') return null;
+  const match = String(value).match(/-?\d+(\.\d+)?/);
+  return match ? Number(match[0]) : null;
+};
+
+const normalizeGrade = (value) => {
+  if (!value) return null;
+  const text = String(value).trim().toUpperCase();
+  if (['나쁨', '높음', '위험', 'HIGH', 'BAD'].includes(text)) return '나쁨';
+  if (['보통', '중간', 'MEDIUM', 'MID', 'NORMAL'].includes(text)) return '보통';
+  if (['좋음', '낮음', 'LOW', 'GOOD'].includes(text)) return '좋음';
+  return null;
+};
+
+const gradeFromValue = (value) => {
+  const n = parseNumber(value);
+  if (n == null || Number.isNaN(n)) return '-';
   if (n >= 67) return '나쁨';
   if (n >= 34) return '보통';
   return '좋음';
 };
 
-const fmtYM = (ym) => {
-  const [y, m] = ym.split('-');
-  return `${y}년 ${parseInt(m)}월`;
+const gradeFromPrediction = (prediction) => (
+  normalizeGrade(prediction?.riskGrade)
+  || normalizeGrade(prediction?.grade)
+  || gradeFromValue(prediction?.riskRatio ?? prediction?.averageRatio)
+);
+
+const isPharmacyRecord = (record) => {
+  const hospital = record.hospitalName || record.hospital || '';
+  const department = record.department || '';
+  return record.treatmentType === '약국'
+    || record.diseaseCode === '$'
+    || hospital.includes('약국')
+    || department.includes('약국');
 };
+
+const isCoverageGap = (row) => {
+  const self = Number(row.selfCoverageAmount || 0);
+  const avg = Number(row.avgGroupCoverageAmount || 0);
+  if (avg <= 0) return false;
+  if (self <= 0) return true;
+  return self < avg * 0.8;
+};
+
+const fmtYM = (ym) => {
+  const [year, month] = ym.split('-');
+  return `${year}년 ${parseInt(month, 10)}월`;
+};
+
+const formatDate = (value) => {
+  if (!value) return '-';
+  return String(value).replaceAll('-', '.');
+};
+
+const compactList = (items, emptyText = '-') => (
+  items.length > 0 ? items.join(' · ') : emptyText
+);
 
 const LinkBtn = ({ onClick, children }) => (
   <button onClick={onClick} style={{
-    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-    fontSize: 12, color: 'var(--blue)', fontWeight: 600,
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    fontSize: 12,
+    color: 'var(--blue)',
+    fontWeight: 600,
   }}>
     {children}
   </button>
 );
 
+const Metric = ({ label, value, sub, tone }) => (
+  <div style={{
+    minWidth: 0,
+    padding: '12px 14px',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    background: '#FAFBFD',
+  }}>
+    <div className="mc-field-label">{label}</div>
+    <div style={{
+      marginTop: 5,
+      fontSize: 20,
+      fontWeight: 800,
+      color: tone || 'var(--text-1)',
+      letterSpacing: '-0.3px',
+    }}>
+      {value}
+    </div>
+    {sub && <div className="mc-card-sub" style={{ marginTop: 2 }}>{sub}</div>}
+  </div>
+);
+
 const HealthReport = () => {
   const navigate = useNavigate();
-  const [loading, setLoading]         = useState(true);
-  const [stats, setStats]             = useState({ visits: 0, checkups: 0, prescriptions: 0, gaps: 0 });
-  const [timeline, setTimeline]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    visits: 0,
+    checkups: 0,
+    prescriptions: 0,
+    gaps: 0,
+    topDepartment: '-',
+    topDiagnosis: '-',
+    lastCheckupDate: null,
+  });
+  const [timeline, setTimeline] = useState([]);
   const [deptPattern, setDeptPattern] = useState([]);
   const [diagKeywords, setDiagKeywords] = useState([]);
   const [predictions, setPredictions] = useState([]);
-  const [healthAge, setHealthAge]     = useState(null);
-  const [insights, setInsights]       = useState([]);
+  const [healthAge, setHealthAge] = useState(null);
+  const [insights, setInsights] = useState([]);
+  const [loadWarning, setLoadWarning] = useState('');
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+      setLoadWarning('');
       try {
-        const [records, checkups, preds, hAge, gaps] = await Promise.all([
-          healthAPI.getMedicalRecords().catch(() => []),
+        const [records, checkups, preds, hAge, comparisons] = await Promise.all([
+          healthAPI.getMedicalRecords().catch(() => {
+            setLoadWarning('일부 건강 데이터를 불러오지 못했습니다.');
+            return [];
+          }),
           healthAPI.getCheckupResults().catch(() => []),
           healthAPI.getDiseasePredictions().catch(() => []),
           healthAPI.getHealthAge().catch(() => null),
@@ -70,95 +157,127 @@ const HealthReport = () => {
 
         const cutoff = new Date();
         cutoff.setFullYear(cutoff.getFullYear() - 1);
-        const recent = records.filter((r) => r.visitDate && new Date(r.visitDate) >= cutoff);
-        const recentCk = checkups.filter((c) => c.checkupDate && new Date(c.checkupDate) >= cutoff);
+        const recentRecords = records.filter((record) => (
+          record.visitDate && new Date(record.visitDate) >= cutoff
+        ));
+        const recentCheckups = checkups.filter((checkup) => (
+          checkup.checkupDate && new Date(checkup.checkupDate) >= cutoff
+        ));
 
-        // ── 요약 통계 ──────────────────────────────────────────────────────
-        const prescriptions = recent.filter((r) => r.treatmentType === '약국').length;
-        const gapCount = Array.isArray(gaps)
-          ? gaps.filter((g) => (g.selfCoverageAmount || 0) < (g.avgGroupCoverageAmount || 0)).length
-          : 0;
-        setStats({ visits: recent.length, checkups: recentCk.length, prescriptions, gaps: gapCount });
+        const prescriptions = recentRecords.filter(isPharmacyRecord).length;
+        const gaps = Array.isArray(comparisons) ? comparisons.filter(isCoverageGap) : [];
 
-        // ── 월별 타임라인 ──────────────────────────────────────────────────
-        const monthMap = {};
-        recent.forEach((r) => {
-          const ym = r.visitDate.substring(0, 7);
-          if (!monthMap[ym]) monthMap[ym] = { visits: [], checkups: 0 };
-          monthMap[ym].visits.push(r);
+        const deptCount = {};
+        recentRecords.forEach((record) => {
+          if (isPharmacyRecord(record)) return;
+          const department = record.department || '기타';
+          deptCount[department] = (deptCount[department] || 0) + 1;
         });
-        recentCk.forEach((c) => {
-          const ym = c.checkupDate.substring(0, 7);
-          if (!monthMap[ym]) monthMap[ym] = { visits: [], checkups: 0 };
+        const departments = Object.entries(deptCount)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([dept, count]) => ({ dept, count }));
+
+        const diagnosisCount = {};
+        recentRecords.forEach((record) => {
+          if (isPharmacyRecord(record)) return;
+          if (!record.diagnosis || record.diagnosis === '해당없음') return;
+          diagnosisCount[record.diagnosis] = (diagnosisCount[record.diagnosis] || 0) + 1;
+        });
+        const diagnoses = Object.entries(diagnosisCount)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([diagnosis, count]) => ({ diagnosis, count }));
+
+        const lastCheckupDate = [...checkups].sort((a, b) => (
+          (b.checkupDate || '').localeCompare(a.checkupDate || '')
+        ))[0]?.checkupDate || null;
+
+        setStats({
+          visits: recentRecords.length,
+          checkups: recentCheckups.length,
+          prescriptions,
+          gaps: gaps.length,
+          topDepartment: departments[0]?.dept || '-',
+          topDiagnosis: diagnoses[0]?.diagnosis || '-',
+          lastCheckupDate,
+        });
+        setDeptPattern(departments);
+        setDiagKeywords(diagnoses);
+
+        const monthMap = {};
+        recentRecords.forEach((record) => {
+          const ym = record.visitDate?.substring(0, 7);
+          if (!ym) return;
+          if (!monthMap[ym]) monthMap[ym] = { visits: 0, prescriptions: 0, checkups: 0, departments: {} };
+          if (isPharmacyRecord(record)) {
+            monthMap[ym].prescriptions += 1;
+          } else {
+            monthMap[ym].visits += 1;
+            const department = record.department || '기타';
+            monthMap[ym].departments[department] = (monthMap[ym].departments[department] || 0) + 1;
+          }
+        });
+        recentCheckups.forEach((checkup) => {
+          const ym = checkup.checkupDate?.substring(0, 7);
+          if (!ym) return;
+          if (!monthMap[ym]) monthMap[ym] = { visits: 0, prescriptions: 0, checkups: 0, departments: {} };
           monthMap[ym].checkups += 1;
         });
-        const tl = Object.entries(monthMap)
-          .sort(([a], [b]) => b.localeCompare(a))
-          .map(([ym, data]) => {
-            const depts = {};
-            data.visits.forEach((r) => {
-              const key = r.treatmentType === '약국' ? '약국 처방' : (r.department || '기타');
-              depts[key] = (depts[key] || 0) + 1;
-            });
-            return { ym, depts, checkupCount: data.checkups };
-          });
-        setTimeline(tl);
-
-        // ── 진료과 패턴 ────────────────────────────────────────────────────
-        const deptCount = {};
-        recent.forEach((r) => {
-          if (r.treatmentType === '약국') return;
-          const d = r.department || '기타';
-          deptCount[d] = (deptCount[d] || 0) + 1;
-        });
-        setDeptPattern(
-          Object.entries(deptCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
-            .map(([dept, cnt]) => ({ dept, cnt }))
+        setTimeline(
+          Object.entries(monthMap)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([ym, value]) => ({ ym, ...value }))
         );
 
-        // ── 반복 진단 키워드 ───────────────────────────────────────────────
-        const diagCount = {};
-        recent.forEach((r) => {
-          if (!r.diagnosis || r.diagnosis === '해당없음' || r.treatmentType === '약국') return;
-          diagCount[r.diagnosis] = (diagCount[r.diagnosis] || 0) + 1;
-        });
-        setDiagKeywords(
-          Object.entries(diagCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
-            .map(([diag, cnt]) => ({ diag, cnt }))
-        );
-
-        // ── 질병 예측 (최신 1건/질환) ──────────────────────────────────────
-        const predMap = {};
-        preds.forEach((p) => {
-          if (!predMap[p.predictionType] || p.checkupDate > predMap[p.predictionType].checkupDate) {
-            predMap[p.predictionType] = p;
+        const latestPredictions = {};
+        preds.forEach((prediction) => {
+          const key = prediction.predictionType;
+          if (!key) return;
+          if (!latestPredictions[key] || prediction.checkupDate > latestPredictions[key].checkupDate) {
+            latestPredictions[key] = prediction;
           }
         });
-        setPredictions(Object.values(predMap));
-
-        // ── 건강나이 ───────────────────────────────────────────────────────
+        setPredictions(Object.values(latestPredictions));
         setHealthAge(hAge);
 
-        // ── 인사이트 ───────────────────────────────────────────────────────
-        const ins = [];
-        const deptNames = Object.keys(deptCount);
-        if (deptNames.includes('정형외과')) {
-          ins.push({ icon: P.search, text: '최근 정형외과 진료가 있어요. 도수치료·MRI 보장 여부를 진료 전 검색에서 확인해보세요.', path: '/pre-treatment' });
+        const next = [];
+        if (departments.some((item) => item.dept === '정형외과')) {
+          next.push({
+            icon: P.search,
+            title: '정형외과 치료 전 보장 확인',
+            text: '도수치료, MRI, 주사치료처럼 실손 조건이 달라지는 항목을 먼저 확인해보세요.',
+            path: '/pre-treatment',
+          });
         }
-        if (gapCount > 0) {
-          ins.push({ icon: P.shield, text: `보험 공백 ${gapCount}개 항목이 평균보다 낮아요. 보장 공백 점검을 확인해보세요.`, path: '/insurance-plan' });
+        if (gaps.length > 0) {
+          next.push({
+            icon: P.shield,
+            title: '보험 공백 확인',
+            text: `평균 대비 부족하거나 미가입으로 보이는 보장 ${gaps.length}개를 확인해보세요.`,
+            path: '/insurance-plan',
+          });
         }
-        const lastCkDate = [...checkups].sort((a, b) =>
-          (b.checkupDate || '').localeCompare(a.checkupDate || ''))[0]?.checkupDate;
-        if (lastCkDate) {
-          const daysSince = (Date.now() - new Date(lastCkDate)) / 86400000;
-          if (daysSince > 365) {
-            ins.push({ icon: P.calendar, text: '마지막 건강검진이 1년 이상 지났어요. 건강검진 기록에서 확인해보세요.', path: '/checkup' });
-          }
+        if (!lastCheckupDate || (Date.now() - new Date(lastCheckupDate)) / 86400000 > 365) {
+          next.push({
+            icon: P.calendar,
+            title: '건강검진 기록 확인',
+            text: '최근 검진 데이터가 부족하거나 1년 이상 지난 상태일 수 있습니다.',
+            path: '/checkup',
+          });
         }
-        setInsights(ins);
-      } catch (e) {
-        console.error('HealthReport error:', e);
+        if (next.length === 0) {
+          next.push({
+            icon: P.check,
+            title: '현재는 큰 확인 항목이 없어요',
+            text: '진료나 검진 데이터가 새로 동기화되면 리포트가 자동으로 더 풍부해집니다.',
+            path: '/checkup',
+          });
+        }
+        setInsights(next);
+      } catch (error) {
+        console.error('HealthReport error:', error);
+        setLoadWarning('건강 리포트를 불러오는 중 문제가 발생했습니다.');
       } finally {
         setLoading(false);
       }
@@ -166,12 +285,32 @@ const HealthReport = () => {
     load();
   }, []);
 
+  const hasAnyData = stats.visits > 0
+    || stats.checkups > 0
+    || stats.prescriptions > 0
+    || predictions.length > 0
+    || healthAge
+    || stats.gaps > 0;
+
+  const summaryText = (() => {
+    if (!hasAnyData) return '아직 최근 12개월 건강 데이터가 충분하지 않습니다.';
+    const parts = [];
+    if (stats.topDepartment !== '-') parts.push(`${stats.topDepartment} 방문이 가장 많았고`);
+    if (stats.topDiagnosis !== '-') parts.push(`${stats.topDiagnosis} 기록이 반복해서 보입니다`);
+    if (stats.gaps > 0) parts.push(`보험 보장 ${stats.gaps}개는 추가 확인이 필요합니다`);
+    return parts.length > 0 ? `${parts.join(', ')}.` : '최근 12개월 건강 활동을 한눈에 정리했습니다.';
+  })();
+
+  const healthAgeDiff = healthAge && healthAge.biologicalAge != null && healthAge.chronologicalAge != null
+    ? Number(healthAge.biologicalAge) - Number(healthAge.chronologicalAge)
+    : null;
+
   return (
     <div className="mc-page fade-in">
       <div className="mc-page-top">
         <div>
           <div className="mc-page-title">12개월 건강 리포트</div>
-          <div className="mc-page-subtitle">최근 1년간의 건강 활동 패턴을 요약한 화면이에요.</div>
+          <div className="mc-page-subtitle">최근 1년간의 진료, 검진, 보험 점검 흐름을 한 곳에서 확인하세요.</div>
         </div>
       </div>
 
@@ -179,211 +318,242 @@ const HealthReport = () => {
         <div className="mc-alert mc-alert-blue" style={{ marginTop: 8 }}>
           <div>
             <div className="mc-alert-title">데이터 불러오는 중...</div>
-            <div className="mc-alert-body">잠시만 기다려주세요.</div>
+            <div className="mc-alert-body">최근 건강 활동을 정리하고 있습니다.</div>
           </div>
         </div>
       ) : (
-        <>
-          {/* ① 요약 카드 */}
-          <div className="mc-stats-strip">
-            <div className="mc-stat">
-              <div className="mc-stat-label">진료 방문</div>
-              <div className="mc-stat-value">{stats.visits}회</div>
-              <div className="mc-stat-sub">최근 12개월</div>
-            </div>
-            <div className="mc-stat">
-              <div className="mc-stat-label">건강검진</div>
-              <div className="mc-stat-value">{stats.checkups}건</div>
-              <div className="mc-stat-sub">최근 12개월</div>
-            </div>
-            <div className="mc-stat">
-              <div className="mc-stat-label">약국 처방</div>
-              <div className="mc-stat-value">{stats.prescriptions}건</div>
-              <div className="mc-stat-sub">최근 12개월</div>
-            </div>
-            <div className="mc-stat">
-              <div className="mc-stat-label">보험 공백</div>
-              <div className="mc-stat-value" style={{ color: stats.gaps > 0 ? '#9A6060' : 'inherit' }}>
-                {stats.gaps}건
+        <div className="mc-stack-md">
+          {loadWarning && (
+            <div className="mc-alert mc-alert-warning">
+              <div>
+                <div className="mc-alert-title">일부 데이터 확인 필요</div>
+                <div className="mc-alert-body">{loadWarning}</div>
               </div>
-              <div className="mc-stat-sub">확인 필요</div>
             </div>
-          </div>
+          )}
 
-          <div className="mc-two-col" style={{ marginTop: 18 }}>
-            {/* ② 월별 건강 활동 타임라인 */}
-            <div>
-              <div className="mc-sec-head">
-                <span className="mc-sec-title">월별 건강 활동</span>
+          {!hasAnyData && (
+            <div className="mc-alert mc-alert-blue">
+              <div>
+                <div className="mc-alert-title">최근 건강 데이터가 아직 없어요</div>
+                <div className="mc-alert-body">
+                  내 건강 불러오기를 실행하거나 건강검진/진료 기록을 동기화하면 이 화면이 채워집니다.
+                </div>
               </div>
-              <div className="mc-card mc-card-body">
-                {timeline.length === 0 ? (
-                  <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '32px 0', fontSize: 13 }}>
-                    최근 12개월 활동 내역이 없어요.
-                  </div>
-                ) : (
-                  <div className="mc-stack-sm">
-                    {timeline.map(({ ym, depts, checkupCount }) => (
-                      <div key={ym} style={{ display: 'flex', gap: 12, paddingBottom: 10, borderBottom: '1px solid var(--border-soft)' }}>
-                        <div style={{ minWidth: 68, fontSize: 12, fontWeight: 600, color: 'var(--text-2)', paddingTop: 2 }}>
-                          {fmtYM(ym)}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          {checkupCount > 0 && (
-                            <div style={{ fontSize: 12, color: '#2F6FE8', marginBottom: 3 }}>
-                              · 건강검진 {checkupCount}건
+            </div>
+          )}
+
+          <section>
+            <div className="mc-sec-head">
+              <span className="mc-sec-title">최근 12개월 요약</span>
+            </div>
+            <div className="mc-card mc-card-body-lg">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                <Metric label="진료" value={`${stats.visits}회`} sub="병원 방문" />
+                <Metric label="검진" value={`${stats.checkups}건`} sub="건강검진" />
+                <Metric label="처방" value={`${stats.prescriptions}건`} sub="약국 기록" />
+                <Metric
+                  label="보험 공백"
+                  value={`${stats.gaps}건`}
+                  sub="평균 대비 부족"
+                  tone={stats.gaps > 0 ? '#9A6060' : '#2F6FE8'}
+                />
+              </div>
+              <div style={{
+                marginTop: 16,
+                paddingTop: 16,
+                borderTop: '1px solid var(--border-soft)',
+                fontSize: 14,
+                lineHeight: 1.65,
+                color: 'var(--text-1)',
+              }}>
+                {summaryText}
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <div className="mc-two-col" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <div>
+                <div className="mc-sec-head">
+                  <span className="mc-sec-title">검진 기반 건강 지표</span>
+                  <LinkBtn onClick={() => navigate('/checkup')}>검진 기록 보기 →</LinkBtn>
+                </div>
+                <div className="mc-card mc-card-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.1fr)', gap: 18 }}>
+                    <div>
+                      <div className="mc-field-label">건강나이</div>
+                      {healthAge && healthAge.biologicalAge != null ? (
+                        <>
+                          <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-1)' }}>
+                              {healthAge.biologicalAge}세
+                            </span>
+                            {healthAgeDiff != null && (
+                              <span style={{
+                                fontSize: 13,
+                                fontWeight: 700,
+                                color: healthAgeDiff > 0 ? '#9A6060' : '#2F6FE8',
+                              }}>
+                                {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '실제 나이와 동일'}
+                              </span>
+                            )}
+                          </div>
+                          {healthAge.summaryNote && (
+                            <div className="mc-card-sub" style={{ marginTop: 8, lineHeight: 1.5 }}>
+                              {healthAge.summaryNote}
                             </div>
                           )}
-                          {Object.entries(depts).map(([dept, cnt]) => (
-                            <div key={dept} style={{ fontSize: 12, color: 'var(--text-1)', marginBottom: 3 }}>
-                              · {dept} {cnt}건
+                        </>
+                      ) : (
+                        <div className="mc-card-sub" style={{ marginTop: 12 }}>건강나이 데이터가 없어요.</div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="mc-field-label">질병 위험도</div>
+                      {predictions.length === 0 ? (
+                        <div className="mc-card-sub" style={{ marginTop: 12 }}>질병 예측 데이터가 없어요.</div>
+                      ) : (
+                        <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                          {predictions.map((prediction) => {
+                            const grade = gradeFromPrediction(prediction);
+                            return (
+                              <div key={prediction.predictionType} className="mc-kv">
+                                <span className="mc-kv-key">
+                                  {DISEASE_KR[prediction.predictionType] || prediction.predictionType}
+                                </span>
+                                <span className="mc-kv-val" style={{ color: RISK_COLOR[grade], fontWeight: 800 }}>
+                                  {grade}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="mc-sec-head">
+                  <span className="mc-sec-title">건강 활동 패턴</span>
+                  <LinkBtn onClick={() => navigate('/medical-records')}>진료 기록 보기 →</LinkBtn>
+                </div>
+                <div className="mc-card mc-card-body">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+                    <div>
+                      <div className="mc-field-label">자주 방문한 진료과</div>
+                      {deptPattern.length === 0 ? (
+                        <div className="mc-card-sub" style={{ marginTop: 10 }}>진료과 패턴이 없어요.</div>
+                      ) : (
+                        <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                          {deptPattern.slice(0, 4).map(({ dept, count }) => (
+                            <div key={dept} className="mc-kv">
+                              <span className="mc-kv-key">{dept}</span>
+                              <span className="mc-tag">{count}회</span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    ))}
+                      )}
+                    </div>
+                    <div>
+                      <div className="mc-field-label">반복된 진단</div>
+                      {diagKeywords.length === 0 ? (
+                        <div className="mc-card-sub" style={{ marginTop: 10 }}>반복 진단이 없어요.</div>
+                      ) : (
+                        <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                          {diagKeywords.slice(0, 4).map(({ diagnosis, count }) => (
+                            <div key={diagnosis} className="mc-kv">
+                              <span className="mc-kv-key" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {diagnosis}
+                              </span>
+                              <span className="mc-tag">{count}회</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
+          </section>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* ③ 위험도 요약 */}
-              <div>
-                <div className="mc-sec-head">
-                  <span className="mc-sec-title">질병 위험도 요약</span>
-                  <LinkBtn onClick={() => navigate('/checkup')}>상세 보기 →</LinkBtn>
+          <section>
+            <div className="mc-sec-head">
+              <span className="mc-sec-title">월별 활동 흐름</span>
+              <span className="mc-card-sub">활동이 있는 달만 표시합니다.</span>
+            </div>
+            <div className="mc-card mc-card-body">
+              {timeline.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '28px 0', fontSize: 13 }}>
+                  최근 12개월 활동 내역이 없어요.
                 </div>
-                <div className="mc-card mc-card-body">
-                  {predictions.length === 0 ? (
-                    <div style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center', padding: '16px 0' }}>
-                      질병 예측 데이터가 없어요.
-                    </div>
-                  ) : (
-                    <div className="mc-stack-sm">
-                      {predictions.map((p) => {
-                        const grade = gradeFromRank(p.averageRatio);
-                        return (
-                          <div key={p.predictionType} className="mc-kv">
-                            <span style={{ fontSize: 13, color: 'var(--text-1)' }}>
-                              {DISEASE_KR[p.predictionType] || p.predictionType}
-                            </span>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: RISK_COLOR[grade] }}>
-                              {grade}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ④ 건강나이 요약 */}
-              {healthAge && healthAge.biologicalAge && (
-                <div>
-                  <div className="mc-sec-head">
-                    <span className="mc-sec-title">건강나이</span>
-                    <LinkBtn onClick={() => navigate('/checkup')}>상세 보기 →</LinkBtn>
-                  </div>
-                  <div className="mc-card mc-card-body">
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-1)' }}>
-                        {healthAge.biologicalAge}세
-                      </span>
-                      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                        실제 나이 {healthAge.chronologicalAge}세 대비&nbsp;
-                        <span style={{
-                          fontWeight: 700,
-                          color: healthAge.biologicalAge > healthAge.chronologicalAge ? '#9A6060' : '#2F6FE8',
-                        }}>
-                          {healthAge.biologicalAge > healthAge.chronologicalAge
-                            ? `+${healthAge.biologicalAge - healthAge.chronologicalAge}세`
-                            : healthAge.biologicalAge < healthAge.chronologicalAge
-                              ? `-${healthAge.chronologicalAge - healthAge.biologicalAge}세`
-                              : '동일'}
+              ) : (
+                <div className="mc-stack-xs">
+                  {timeline.map((month) => {
+                    const topDepartments = Object.entries(month.departments)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 2)
+                      .map(([department, count]) => `${department} ${count}건`);
+                    return (
+                      <div key={month.ym} className="mc-kv" style={{ alignItems: 'flex-start' }}>
+                        <span className="mc-kv-key" style={{ minWidth: 92 }}>{fmtYM(month.ym)}</span>
+                        <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.55 }}>
+                          진료 {month.visits}건
+                          {month.prescriptions > 0 ? ` · 처방 ${month.prescriptions}건` : ''}
+                          {month.checkups > 0 ? ` · 검진 ${month.checkups}건` : ''}
+                          <span className="mc-card-sub" style={{ display: 'block', marginTop: 2 }}>
+                            {compactList(topDepartments)}
+                          </span>
                         </span>
-                      </span>
-                    </div>
-                    {healthAge.summaryNote && (
-                      <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 8 }}>
-                        {healthAge.summaryNote}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* ⑤ 진료 패턴 */}
-          {(deptPattern.length > 0 || diagKeywords.length > 0) && (
-            <div className="mc-two-col" style={{ marginTop: 16 }}>
-              {deptPattern.length > 0 && (
-                <div>
-                  <div className="mc-sec-head">
-                    <span className="mc-sec-title">자주 방문한 진료과</span>
-                  </div>
-                  <div className="mc-card mc-card-body">
-                    <div className="mc-stack-sm">
-                      {deptPattern.map(({ dept, cnt }) => (
-                        <div key={dept} className="mc-kv">
-                          <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{dept}</span>
-                          <span className="mc-tag">{cnt}회</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {diagKeywords.length > 0 && (
-                <div>
-                  <div className="mc-sec-head">
-                    <span className="mc-sec-title">반복되는 진단</span>
-                  </div>
-                  <div className="mc-card mc-card-body">
-                    <div className="mc-stack-sm">
-                      {diagKeywords.map(({ diag, cnt }) => (
-                        <div key={diag} className="mc-kv">
-                          <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{diag}</span>
-                          <span className="mc-tag">{cnt}회</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+          <section>
+            <div className="mc-sec-head">
+              <span className="mc-sec-title">다음 확인할 것</span>
             </div>
-          )}
-
-          {/* ⑥ 다음 확인할 것 */}
-          {insights.length > 0 && (
-            <>
-              <div className="mc-sec-head" style={{ marginTop: 16 }}>
-                <span className="mc-sec-title">다음 확인할 것</span>
-              </div>
-              <div className="mc-stack-sm">
-                {insights.map((ins, i) => (
-                  <div key={i} className="mc-card mc-card-head"
-                    style={{ padding: '14px 16px', cursor: 'pointer' }}
-                    onClick={() => navigate(ins.path)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 6,
-                        background: 'var(--blue-soft)', color: 'var(--blue)',
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      }}>
-                        <Ic d={ins.icon} size={14}/>
-                      </div>
-                      <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{ins.text}</span>
+            <div className="mc-grid-auto-md">
+              {insights.map((item, index) => (
+                <button
+                  key={`${item.title}-${index}`}
+                  className="mc-card mc-card-head"
+                  style={{ padding: '16px', cursor: 'pointer', textAlign: 'left', alignItems: 'flex-start' }}
+                  onClick={() => navigate(item.path)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+                    <div style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 6,
+                      background: 'var(--blue-soft)',
+                      color: 'var(--blue)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <Ic d={item.icon} size={14}/>
                     </div>
-                    <Ic d={P.arrow} size={14}/>
+                    <div>
+                      <div className="mc-card-title" style={{ fontSize: 13.5 }}>{item.title}</div>
+                      <div className="mc-card-sub" style={{ marginTop: 4, lineHeight: 1.5 }}>{item.text}</div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </>
+                  <Ic d={P.arrow} size={13}/>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
