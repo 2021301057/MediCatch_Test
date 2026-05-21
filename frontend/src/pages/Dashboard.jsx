@@ -95,27 +95,27 @@ export default function Dashboard() {
           const s = String(val);
           return parseFloat(s.includes('/') ? s.split('/')[0] : s) || null;
         };
+        // 100명 중 순위 기반 등급 판정
+        const gradeFromRank = (rank) => {
+          if (rank == null) return { label: '-', cls: 'lo' };
+          if (rank >= 67) return { label: '높음', cls: 'hi' };
+          if (rank >= 34) return { label: '보통', cls: 'mid' };
+          return { label: '낮음', cls: 'lo' };
+        };
         const mapped = Object.values(latest).map((r) => {
           const ratio    = parseFloat(r.riskRatio) || 0;
           const avgRatio = parseAvgRatio(r.averageRatio);
-          const grade    = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
+          const grade    = gradeFromRank(avgRatio);
           return {
             name:     DISEASE_NAME[r.predictionType] || r.predictionType,
             ratio,
             avgRatio,
             level:    grade.label,
             cls:      grade.cls,
-            // 바 너비: 100명 중 내 순위 그대로 사용, 없으면 grade 기반 fallback
-            pct:      avgRatio ?? { '1': 20, '2': 40, '3': 60, '4': 80, '5': 100 }[r.riskGrade] ?? 20,
+            pct:      avgRatio ?? 20,
           };
         });
-        // 색상: 발병률 높은 순 상대 순위로 hi → mid → lo 배분
-        const sortedByRatio = [...mapped].sort((a, b) => b.ratio - a.ratio);
-        const RANK_CLS = ['hi', 'mid', 'lo'];
-        setRisks(mapped.map((r) => ({
-          ...r,
-          cls: RANK_CLS[Math.min(sortedByRatio.findIndex((s) => s.name === r.name), 2)],
-        })));
+        setRisks(mapped);
       })
       .catch(() => {});
 
