@@ -19,6 +19,18 @@ const P = {
 
 const RISK_COLOR = { '나쁨': '#9A6060', '보통': '#8A7040', '좋음': '#2F6FE8', '-': 'var(--text-2)' };
 const DISEASE_KR = { STROKE: '뇌졸중', DIABETES: '당뇨', CARDIO: '심뇌혈관' };
+const OVERALL_RISK_LABEL = {
+  '나쁨': '전체 위험도 높음',
+  '보통': '전체 위험도 보통',
+  '좋음': '전체 위험도 낮음',
+  '-': '전체 위험도 확인 필요',
+};
+const FACTOR_STATUS_LABEL = {
+  '나쁨': '관리 필요',
+  '보통': '주의',
+  '좋음': '양호',
+  '-': '요인',
+};
 
 const parseNumber = (value) => {
   if (value == null || value === '') return null;
@@ -116,6 +128,8 @@ const factorSeverity = (factor) => (
   || normalizeGrade(factor.resType)
   || '-'
 );
+
+const factorStatusLabel = (factor) => FACTOR_STATUS_LABEL[factorSeverity(factor)] || '요인';
 
 const factorLine = (factor) => {
   const name = factorName(factor);
@@ -535,6 +549,8 @@ const HealthReport = () => {
                             const key = prediction.predictionType;
                             const preview = factors.map(factorLine).filter(Boolean).slice(0, 2);
                             const isOpen = expandedRisk === key;
+                            const overallLabel = OVERALL_RISK_LABEL[grade] || OVERALL_RISK_LABEL['-'];
+                            const needsCareCount = factors.filter((factor) => factorSeverity(factor) === '나쁨').length;
 
                             return (
                               <div key={key} style={{ borderBottom: '1px solid var(--border-soft)', paddingBottom: 8 }}>
@@ -560,12 +576,14 @@ const HealthReport = () => {
                                     </span>
                                     {preview.length > 0 && (
                                       <span className="mc-card-sub" style={{ marginTop: 2, display: 'block' }}>
-                                        {compactList(preview)}
+                                        관리 요인: {compactList(preview)}
                                       </span>
                                     )}
                                   </span>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 800, color: RISK_COLOR[grade] }}>{grade}</span>
+                                    <span style={{ fontSize: 13, fontWeight: 800, color: RISK_COLOR[grade] }}>
+                                      {overallLabel}
+                                    </span>
                                     <span style={{ color: 'var(--text-3)', transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
                                       <Ic d={P.chev} size={12}/>
                                     </span>
@@ -574,15 +592,19 @@ const HealthReport = () => {
 
                                 {isOpen && (
                                   <div className="mc-stack-xs" style={{ marginTop: 10 }}>
+                                    <div className="mc-card-sub" style={{ lineHeight: 1.5 }}>
+                                      전체 예측 위험도는 현재 수치 기준으로 판단하고, 아래 항목은 위험도에 영향을 주는 개별 관리 요인입니다.
+                                      {needsCareCount > 0 ? ` 관리 필요 요인 ${needsCareCount}개가 확인됐습니다.` : ''}
+                                    </div>
                                     {factors.length > 0 ? (
                                       factors.slice(0, 5).map((factor, index) => {
                                         const line = factorLine(factor);
                                         if (!line) return null;
-                                        const severity = factorSeverity(factor);
+                                        const status = factorStatusLabel(factor);
                                         return (
                                           <div key={`${line}-${index}`} className="mc-kv" style={{ alignItems: 'flex-start' }}>
                                             <span className="mc-kv-key">
-                                              {severity !== '-' ? severity : `요인 ${index + 1}`}
+                                              {status !== '요인' ? status : `요인 ${index + 1}`}
                                             </span>
                                             <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.45 }}>{line}</span>
                                           </div>
@@ -602,6 +624,9 @@ const HealthReport = () => {
                                         <div className="mc-field-label" style={{ marginBottom: 6 }}>향후 예측 참고</div>
                                         <div className="mc-card-sub" style={{ lineHeight: 1.5 }}>
                                           {compares.map((item) => `${item.year}년 ${item.predictedState}`).join(' → ')}
+                                        </div>
+                                        <div className="mc-card-sub" style={{ lineHeight: 1.5, marginTop: 4 }}>
+                                          현재 검진 데이터를 바탕으로 한 참고용 변화입니다.
                                         </div>
                                       </div>
                                     )}
