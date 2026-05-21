@@ -90,25 +90,20 @@ export default function Dashboard() {
         const latest = {};
         rows.forEach((r) => { if (!latest[r.predictionType]) latest[r.predictionType] = r; });
         const mapped = Object.values(latest).map((r) => {
-          const ratio   = parseFloat(r.riskRatio)   || 0;
-          const average = parseFloat(r.averageRatio) || 0;
-          const grade   = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
-          // 바 너비: 평균 발병률 대비 비율 (average가 없으면 집합 내 비율로 fallback)
-          const pctOfAvg = average > 0 ? Math.min(Math.round((ratio / average) * 100), 100) : null;
+          const ratio = parseFloat(r.riskRatio) || 0;  // 3년 내 발병 확률 %
+          const grade = RISK_GRADE[r.riskGrade] || { label: r.riskGrade || '-', cls: 'lo' };
           return {
-            name:    DISEASE_NAME[r.predictionType] || r.predictionType,
+            name:  DISEASE_NAME[r.predictionType] || r.predictionType,
             ratio,
-            average,
-            pctOfAvg,
-            level:   grade.label,
-            cls:     grade.cls,
+            level: grade.label,
+            cls:   grade.cls,
           };
         });
-        // pctOfAvg가 없는 경우 집합 내 최댓값 기준 fallback
+        // 바 너비: 집합 내 최댓값 기준 정규화 (최소 5% 보장)
         const maxRatio = Math.max(...mapped.map((r) => r.ratio), 1);
         setRisks(mapped.map((r) => ({
           ...r,
-          pct: Math.max(r.pctOfAvg ?? Math.round((r.ratio / maxRatio) * 100), 5),
+          pct: Math.max(Math.round((r.ratio / maxRatio) * 100), 5),
         })));
       })
       .catch(() => {});
