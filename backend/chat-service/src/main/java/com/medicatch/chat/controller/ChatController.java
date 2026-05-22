@@ -23,14 +23,35 @@ public class ChatController {
         this.chatService = chatService;
     }
 
+    private Long resolveUserId(String userIdHeader, String userIdParam) {
+        String raw = userIdHeader != null ? userIdHeader : userIdParam;
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     /**
      * Send chat message and get AI response
      */
     @PostMapping("/message")
-    public ResponseEntity<ChatResponse> sendMessage(@Valid @RequestBody ChatRequest request) {
-        log.info("POST /api/chat/message - userId: {}", request.getUserId());
+    public ResponseEntity<ChatResponse> sendMessage(
+            @Valid @RequestBody ChatRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam) {
+        Long userId = resolveUserId(userIdHeader, userIdParam);
+        log.info("POST /api/chat/message - userId: {}", userId);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ChatResponse.builder()
+                            .message("로그인이 필요합니다.")
+                            .intentType("UNAUTHORIZED")
+                            .build());
+        }
         try {
-            ChatResponse response = chatService.sendMessage(request.getUserId(), request.getMessage());
+            ChatResponse response = chatService.sendMessage(userId, request.getMessage());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error sending chat message: {}", e.getMessage(), e);
@@ -47,9 +68,15 @@ public class ChatController {
      */
     @GetMapping("/history")
     public ResponseEntity<Map<String, Object>> getChatHistory(
-            @RequestParam Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam,
             @RequestParam(defaultValue = "50") int limit) {
+        Long userId = resolveUserId(userIdHeader, userIdParam);
         log.info("GET /api/chat/history - userId: {}, limit: {}", userId, limit);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized"));
+        }
         try {
             List<Map<String, Object>> history = chatService.getChatHistory(userId, limit);
             return ResponseEntity.ok(Map.of(
@@ -68,8 +95,15 @@ public class ChatController {
      * Delete chat history
      */
     @DeleteMapping("/history")
-    public ResponseEntity<Map<String, String>> deleteChatHistory(@RequestParam Long userId) {
+    public ResponseEntity<Map<String, String>> deleteChatHistory(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam) {
+        Long userId = resolveUserId(userIdHeader, userIdParam);
         log.info("DELETE /api/chat/history - userId: {}", userId);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized"));
+        }
         try {
             chatService.deleteChatHistory(userId);
             return ResponseEntity.ok(Map.of(
