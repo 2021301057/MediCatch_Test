@@ -48,7 +48,7 @@ public class ChatService {
         String intentType = detectIntent(userMessage);
         log.info("Detected intent: {}", intentType);
 
-        IntentContext intentContext = buildIntentContext(intentType, userMessage);
+        IntentContext intentContext = buildIntentContext(intentType, userMessage, userId);
         log.debug("Built context for intent {}: dataKeys={}", intentType, intentContext.data.keySet());
 
         List<ChatHistory> history = loadChatHistory(userId, 10);
@@ -154,7 +154,7 @@ public class ChatService {
     }
 
     // ── 의도별 컨텍스트 빌드 (DB/API가 먼저 "판정") ────────────────
-    private IntentContext buildIntentContext(String intentType, String userMessage) {
+    private IntentContext buildIntentContext(String intentType, String userMessage, Long userId) {
         IntentContext ctx = new IntentContext();
         try {
             switch (intentType) {
@@ -171,20 +171,20 @@ public class ChatService {
                 }
                 case "HEALTH_RISK" -> {
                     safeCall(() -> ctx.data.put("diseasePredictions",
-                            summarizePredictions(healthServiceClient.getDiseasePredictions())));
+                            summarizePredictions(healthServiceClient.getDiseasePredictions(userId))));
                     safeCall(() -> ctx.data.put("healthAge",
-                            summarizeHealthAge(healthServiceClient.getHealthAge())));
+                            summarizeHealthAge(healthServiceClient.getHealthAge(userId))));
                     ctx.sources.add("질병 위험 예측");
                     ctx.sources.add("건강나이 데이터");
                 }
                 case "CHECKUP" -> {
                     safeCall(() -> ctx.data.put("checkupResults",
-                            summarizeCheckups(healthServiceClient.getCheckupResults())));
+                            summarizeCheckups(healthServiceClient.getCheckupResults(userId))));
                     ctx.sources.add("건강검진 데이터");
                 }
                 case "MEDICAL_RECORD" -> {
                     safeCall(() -> ctx.data.put("medicalRecords",
-                            summarizeRecords(healthServiceClient.getMedicalRecords())));
+                            summarizeRecords(healthServiceClient.getMedicalRecords(userId))));
                     ctx.sources.add("진료 기록");
                 }
                 default -> {
