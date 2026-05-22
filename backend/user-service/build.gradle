@@ -28,6 +28,9 @@ dependencies {
 
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 
+    // .env 파일 자동 로드
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
     // JWT
     implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'

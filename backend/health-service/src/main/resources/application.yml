@@ -19,7 +19,7 @@ spring:
         format_sql: true
 
 server:
-  port: 8003
+  port: 8002
   servlet:
     context-path: /
 

@@ -25,6 +25,9 @@ dependencies {
 
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 
+    // .env 파일 자동 로드
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
     runtimeOnly 'com.mysql:mysql-connector-j'
 
     // EasyCodef SDK

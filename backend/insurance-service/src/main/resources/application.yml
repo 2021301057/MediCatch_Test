@@ -27,7 +27,7 @@ codef:
   use-demo: ${CODEF_USE_DEMO:true}
 
 server:
-  port: 8004
+  port: 8003
   servlet:
     context-path: /
 
