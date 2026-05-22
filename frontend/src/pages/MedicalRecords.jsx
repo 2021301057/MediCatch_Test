@@ -56,15 +56,6 @@ const MedicalRecords = () => {
     fetchRecords();
   }, []);
 
-  // ── 유형별 카운트 (전체 데이터 기준) ──────────────────────────────────
-  const typeCounts = useMemo(() => {
-    const counts = { '전체': records.length };
-    ['외래', '입원', '약국'].forEach((t) => {
-      counts[t] = records.filter((r) => r.treatmentType === t).length;
-    });
-    return counts;
-  }, [records]);
-
   // ── 가장 많은 유형 (통계 카드) ────────────────────────────────────────
   const topType = useMemo(() => {
     const counts = {};
@@ -186,7 +177,7 @@ const MedicalRecords = () => {
             <button key={t}
               className={`mc-chip ${typeFilter === t ? 'active' : ''}`}
               onClick={() => setTypeFilter(t)}>
-              {t} {typeCounts[t] ?? 0}
+              {t}
             </button>
           ))}
         </div>
