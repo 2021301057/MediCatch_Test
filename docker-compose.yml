@@ -174,12 +174,13 @@ services:
 
   # ── 프론트엔드 ────────────────────────────────────
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL:-http://localhost:8000/api}
     container_name: medicatch-frontend
     ports:
       - "3000:3000"
-    environment:
-      REACT_APP_API_BASE_URL: http://localhost:8000/api
     depends_on:
       - gateway-service
 
