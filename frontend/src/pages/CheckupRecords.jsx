@@ -390,7 +390,11 @@ const CheckupRecords = () => {
       ) : (
       <div className="mc-grid-auto-sm">
         {diseases.map((d) => (
-          <div key={d.predictionType} className="mc-card mc-card-body">
+          <div
+            key={d.predictionType}
+            className="mc-card mc-card-body"
+            style={{ minHeight: 378, display: 'flex', flexDirection: 'column' }}
+          >
             <div className="mc-card-head" style={{ padding: 0, border: 'none' }}>
               <div className="mc-card-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <Ic d={P.heart} size={14}/> {d.typeLabel}
@@ -432,7 +436,7 @@ const CheckupRecords = () => {
               </div>
             )}
             {d.recentCompares.length >= 2 && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 'auto', paddingTop: 12 }}>
                 <div className="mc-card-sub" style={{ marginBottom: 4 }}>
                   최근 추이 (3년 내 발병 확률 %)
                 </div>
