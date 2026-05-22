@@ -53,7 +53,7 @@ services:
     environment:
       SERVER_PORT: 8000
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:-medicatch-jwt-secret-key-2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (min 64 chars for HS512)}
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -71,7 +71,7 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:-medicatch-jwt-secret-key-2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (min 64 chars for HS512)}
       CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID}
       CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET}
       CODEF_DEMO_CLIENT_ID: ${CODEF_DEMO_CLIENT_ID}
