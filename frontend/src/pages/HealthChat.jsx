@@ -48,7 +48,9 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
         const history = Array.isArray(r?.messages) ? r.messages : [];
         if (history.length > 0) {
           setMessages(history.map((h) => ({
-            role: h.role.toLowerCase(), content: h.message,
+            role: h.role.toLowerCase(),
+            content: h.message,
+            sources: Array.isArray(h.sources) ? h.sources : [],
           })));
         }
       })
@@ -68,7 +70,8 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
     try {
       const res = await chatAPI.sendMessage(msg);
       const responseText = res?.message || res?.content || '';
-      setMessages((prev) => [...prev, { role: 'assistant', content: responseText }]);
+      const sources = Array.isArray(res?.sources) ? res.sources : [];
+      setMessages((prev) => [...prev, { role: 'assistant', content: responseText, sources }]);
     } catch {
       setMessages((prev) => [...prev, {
         role: 'assistant',
@@ -140,6 +143,13 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
                 {msg.role === 'assistant'
                   ? <ReactMarkdown>{msg.content}</ReactMarkdown>
                   : msg.content}
+                {msg.role === 'assistant' && Array.isArray(msg.sources) && msg.sources.length > 0 && (
+                  <div className="mc-chat-sources">
+                    {msg.sources.map((s) => (
+                      <span key={s} className="mc-chat-source-chip">{s}</span>
+                    ))}
+                  </div>
+                )}
               </div>
               {msg.role === 'user' && (
                 <div className="mc-chat-avatar user">나</div>
