@@ -427,7 +427,6 @@ const HealthReport = () => {
     : null;
 
   const healthAgeFactors = Array.isArray(healthAge?.factors) ? healthAge.factors : [];
-  const maxMonthTotal = Math.max(1, ...timeline.map((month) => month.total || 0));
 
   return (
     <div className="mc-page fade-in">
@@ -756,25 +755,44 @@ const HealthReport = () => {
                     const topDepartments = Object.entries(month.departments)
                       .sort((a, b) => b[1] - a[1])
                       .slice(0, 2)
-                      .map(([department, count]) => `${department} ${count}건`);
-                    const width = `${Math.max(8, Math.round((month.total / maxMonthTotal) * 100))}%`;
+                      .map(([department, count]) => `${department} ${count}`);
                     return (
-                      <div key={month.ym} style={{ display: 'grid', gridTemplateColumns: '92px minmax(0, 1fr)', gap: 14, alignItems: 'center' }}>
-                        <span className="mc-kv-key">{fmtYM(month.ym)}</span>
-                        <div>
-                          <div style={{ height: 7, background: 'var(--border-soft)', borderRadius: 9999, overflow: 'hidden', marginBottom: 5 }}>
-                            <div style={{ width, height: '100%', background: 'var(--blue)', borderRadius: 9999 }} />
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
-                            <span className="mc-card-sub">
-                              진료 {month.visits}건
-                              {month.prescriptions > 0 ? ` · 처방 ${month.prescriptions}건` : ''}
-                              {month.checkups > 0 ? ` · 검진 ${month.checkups}건` : ''}
-                            </span>
-                            <span className="mc-card-sub" style={{ textAlign: 'right' }}>
-                              {compactList(topDepartments)}
-                            </span>
-                          </div>
+                      <div
+                        key={month.ym}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '100px minmax(0, 1fr) minmax(160px, auto)',
+                          gap: 12,
+                          alignItems: 'center',
+                          padding: '8px 0',
+                          borderBottom: '1px solid var(--border-soft)',
+                        }}
+                      >
+                        <span className="mc-kv-key" style={{ whiteSpace: 'nowrap' }}>{fmtYM(month.ym)}</span>
+                        <div className="mc-row-wrap" style={{ gap: 6 }}>
+                          {month.visits > 0 && (
+                            <span className="mc-tag mc-tag-blue">진료 {month.visits}</span>
+                          )}
+                          {month.prescriptions > 0 && (
+                            <span className="mc-tag mc-tag-success">처방 {month.prescriptions}</span>
+                          )}
+                          {month.checkups > 0 && (
+                            <span className="mc-tag mc-tag-warning">검진 {month.checkups}</span>
+                          )}
+                          {month.total === 0 && (
+                            <span className="mc-card-sub">활동 없음</span>
+                          )}
+                        </div>
+                        <div
+                          className="mc-card-sub"
+                          style={{
+                            textAlign: 'right',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {compactList(topDepartments)}
                         </div>
                       </div>
                     );
