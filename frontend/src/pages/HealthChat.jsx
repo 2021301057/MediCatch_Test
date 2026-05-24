@@ -43,8 +43,10 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
   }, [initialQuery, searchParams]);
 
   useEffect(() => {
+    let cancelled = false;
     chatAPI.getHistory()
       .then((r) => {
+        if (cancelled) return;
         const history = Array.isArray(r?.messages) ? r.messages : [];
         if (history.length > 0) {
           setMessages(history.map((h) => ({
@@ -55,6 +57,7 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
         }
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);

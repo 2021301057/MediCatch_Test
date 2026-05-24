@@ -96,6 +96,12 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     parseSignedClaims(token)
                     .getPayload();
 
+            String tokenType = claims.get("tokenType", String.class);
+            if (!"access".equals(tokenType)) {
+                log.warn("Non-access token rejected at gateway: type={}", tokenType);
+                return null;
+            }
+
             return Long.parseLong(claims.getSubject());
         } catch (Exception e) {
             log.debug("JWT validation failed: {}", e.getMessage());

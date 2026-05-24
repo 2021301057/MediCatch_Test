@@ -2,6 +2,7 @@ package com.medicatch.chat.client;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 import java.util.Map;
@@ -10,8 +11,8 @@ import java.util.Map;
 public interface InsuranceServiceClient {
 
     @GetMapping("/policies")
-    List<Map<String, Object>> getActivePolicies();
+    List<Map<String, Object>> getActivePolicies(@RequestParam("userId") Long userId);
 
     @GetMapping("/coverage-comparison")
-    List<Map<String, Object>> getCoverageComparison();
+    List<Map<String, Object>> getCoverageComparison(@RequestParam("userId") Long userId);
 }

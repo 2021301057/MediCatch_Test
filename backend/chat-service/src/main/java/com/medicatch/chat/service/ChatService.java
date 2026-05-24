@@ -57,10 +57,12 @@ public class ChatService {
         List<OpenAiClient.Message> messages = buildMessageList(systemPrompt, history, userMessage);
 
         String aiResponse;
+        boolean aiSuccess = true;
         try {
             aiResponse = openAiClient.chat(messages);
         } catch (Exception e) {
-            log.error("AI call failed: {}", e.getMessage());
+            log.error("AI call failed: {}", e.getMessage(), e);
+            aiSuccess = false;
             aiResponse = "죄송해요. 지금은 AI 응답을 받지 못했어요. 잠시 후 다시 시도해주세요.";
         }
 
@@ -79,7 +81,7 @@ public class ChatService {
                 .intentType(intentType)
                 .contextJson(safeToJson(intentContext.data))
                 .build();
-        ChatHistory saved = chatHistoryRepository.save(assistantChatHistory);
+        ChatHistory saved = aiSuccess ? chatHistoryRepository.save(assistantChatHistory) : assistantChatHistory;
 
         return ChatResponse.builder()
                 .chatId(saved.getId())
@@ -156,6 +158,7 @@ public class ChatService {
     // ── 의도별 컨텍스트 빌드 (DB/API가 먼저 "판정") ────────────────
     private IntentContext buildIntentContext(String intentType, String userMessage, Long userId) {
         IntentContext ctx = new IntentContext();
+        ctx.userId = userId;
         try {
             switch (intentType) {
                 case "PRE_TREATMENT" -> {
@@ -199,7 +202,7 @@ public class ChatService {
 
     private void addPoliciesContext(IntentContext ctx) {
         safeCall(() -> {
-            List<Map<String, Object>> policies = insuranceServiceClient.getActivePolicies();
+            List<Map<String, Object>> policies = insuranceServiceClient.getActivePolicies(ctx.userId);
             ctx.data.put("policies", summarizePolicies(policies));
             ctx.sources.add("내 보험 데이터");
         });
@@ -207,7 +210,7 @@ public class ChatService {
 
     private void addCoverageGapsContext(IntentContext ctx) {
         safeCall(() -> {
-            List<Map<String, Object>> comparison = insuranceServiceClient.getCoverageComparison();
+            List<Map<String, Object>> comparison = insuranceServiceClient.getCoverageComparison(ctx.userId);
             List<Map<String, Object>> gaps = comparison.stream()
                     .filter(this::isGap)
                     .limit(10)
@@ -350,6 +353,7 @@ public class ChatService {
 
     // ── 내부 컨텍스트 객체 ────────────────────────────────────────
     private static class IntentContext {
+        Long userId;
         final Map<String, Object> data = new LinkedHashMap<>();
         final List<String> sources = new ArrayList<>();
     }

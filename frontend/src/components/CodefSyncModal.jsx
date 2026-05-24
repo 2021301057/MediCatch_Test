@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { healthAPI, insuranceAPI } from '../api/services';
 
 const TELECOM_OPTIONS = [
@@ -46,6 +46,9 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
   const [insuranceResult,    setInsuranceResult]    = useState(null);
   const [medicalResult,      setMedicalResult]      = useState(null);
 
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const handle = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
   const auth   = AUTH_LEVEL_OPTIONS.find(o => o.value === form.loginTypeLevel);
   const cleanId = form.identity13.replace(/-/g, '');
@@ -71,7 +74,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
       setCheckupSessionKey(data.sessionKey);
       setScreen('checkup-auth');
       // 보험 결과 백그라운드 수집 (실패해도 건강검진 흐름에 영향 없음)
-      insPromise.then(insData => setInsuranceResult(insData)).catch(() => {});
+      insPromise.then(insData => { if (mountedRef.current) setInsuranceResult(insData); }).catch(() => {});
     } catch (err) {
       setError(err.response?.data?.message || '요청 중 오류가 발생했습니다.');
     } finally {
