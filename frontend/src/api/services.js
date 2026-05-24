@@ -102,7 +102,6 @@ export const healthAPI = {
     .then((rows) => Array.isArray(rows) ? rows.map(normalizeCheckupResult) : rows),
   getDiseasePredictions: () => api.get('/health/disease-predictions'),
   getHealthAge: () => api.get('/health/health-age'),
-  getCheckupTargets: () => api.get('/health/checkup-targets'),
   syncCheckupStep1: (data) => api.post('/health/sync/checkup/step1', withSyncRequestAliases(data), { timeout: 120000 }),
   syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
   syncMedicalStep1: (data) => api.post('/health/sync/medical/step1', withSyncRequestAliases(data), { timeout: 120000 }),
@@ -129,14 +128,7 @@ export const insuranceAPI = {
 export const analysisAPI = {
   searchPreTreatment:  (data) => api.post('/analysis/pre-treatment-search', data),
   searchTreatment:     (keyword) => api.post('/analysis/pre-treatment-search', { query: keyword }),
-  getTreatmentCoverage:(id) => api.get(`/analysis/pre-treatment-search/${id}/coverage`),
   getCoverageGap:      () => api.get('/analysis/coverage-gaps'),
-};
-
-// ── Recommend ─────────────────────────────────────
-export const recommendAPI = {
-  getProducts:    () => api.get('/recommend/insurance-products'),
-  getOptimization:() => api.get('/recommend/premium-optimization'),
 };
 
 // ── Chat ──────────────────────────────────────────

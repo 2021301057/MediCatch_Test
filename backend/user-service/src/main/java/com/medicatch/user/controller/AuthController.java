@@ -115,7 +115,7 @@ public class AuthController {
 
         User user = authService.getUserById(userId);
         UserProfileResponse response = UserProfileResponse.builder()
-                .id(user.getId())
+                .userId(user.getId())
                 .email(user.getEmail())
                 .name(user.getName())
                 .birthDate(user.getBirthDate())

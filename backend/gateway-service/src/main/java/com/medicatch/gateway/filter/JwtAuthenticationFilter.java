@@ -57,11 +57,13 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 }
 
                 // Add userId to request headers for downstream services
-                exchange.getRequest().mutate()
-                        .header("X-User-Id", userId.toString())
+                ServerWebExchange mutatedExchange = exchange.mutate()
+                        .request(exchange.getRequest().mutate()
+                                .header("X-User-Id", userId.toString())
+                                .build())
                         .build();
 
-                return chain.filter(exchange);
+                return chain.filter(mutatedExchange);
 
             } catch (Exception e) {
                 log.error("JWT authentication filter error: {}", e.getMessage(), e);
