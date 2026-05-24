@@ -274,7 +274,7 @@ const InsurancePlan = () => {
             보장 비교 통계가 없습니다.
           </div>
           <div className="mc-card-sub" style={{ marginTop: 8 }}>
-            보험을 다시 동기화하면 CODEF 평균그룹 통계를 불러와 비교할 수 있습니다.
+            보험을 다시 동기화하면 평균그룹 통계를 불러와 비교할 수 있습니다.
           </div>
         </div>
       )}
@@ -361,7 +361,7 @@ const InsurancePlan = () => {
           <div>
             <div className="mc-alert-title">분석 기준</div>
             <div className="mc-alert-body">
-              이 결과는 현재 조회된 보험 데이터와 CODEF 평균그룹 보장금액을 비교한 참고용 점검입니다. 평균 데이터가 없는 항목은 별도로 표시하며, 실제 가입 권유나 상품 추천은 포함하지 않습니다.
+              이 결과는 현재 조회된 보험 데이터와 평균그룹 보장금액을 비교한 참고용 점검입니다. 평균 데이터가 없는 항목은 별도로 표시하며, 실제 가입 권유나 상품 추천은 포함하지 않습니다.
             </div>
           </div>
         </div>

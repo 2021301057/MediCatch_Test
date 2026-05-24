@@ -55,7 +55,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     e.preventDefault();
     setError('');
     if (cleanId.length !== 13) { setError('주민등록번호 13자리를 입력해주세요.'); return; }
-    if (!form.codefId || !form.codefPassword) { setError('CODEF 아이디와 비밀번호를 입력해주세요.'); return; }
+    if (!form.codefId || !form.codefPassword) { setError('아이디와 비밀번호를 입력해주세요.'); return; }
 
     setLoading(true);
     // 보험 연동은 백그라운드로 시작 — CODEF 2차 인증 화면 전환을 늦추지 않음
@@ -171,15 +171,15 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         {screen === 'form' && (
           <form onSubmit={handleStartCheckup} style={s.body}>
             <div style={s.section}>
-              <div style={s.sectionTitle}>📋 보험 정보 (내보험다보여)</div>
+              <div style={s.sectionTitle}>📋 보험 정보</div>
               <div style={s.row2}>
-                <Field label="CODEF 아이디">
+                <Field label="아이디">
                   <input name="codefId" value={form.codefId} onChange={handle}
-                    placeholder="내보험다보여 아이디" style={s.input} required />
+                    placeholder="보험 조회 아이디" style={s.input} required />
                 </Field>
-                <Field label="CODEF 비밀번호">
+                <Field label="비밀번호">
                   <input name="codefPassword" type="password" value={form.codefPassword} onChange={handle}
-                    placeholder="내보험다보여 비밀번호" style={s.input} required />
+                    placeholder="보험 조회 비밀번호" style={s.input} required />
                 </Field>
               </div>
             </div>
@@ -232,7 +232,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
           <div style={s.body}>
             <AuthNotice auth={auth} />
             <InfoBox>
-              건강검진 결과(NHIS)와 보험 계약정보(내보험다보여) 연동을 진행 중입니다.<br />
+              건강검진 결과와 보험 계약정보 연동을 진행 중입니다.<br />
               {auth?.label} 앱에서 인증 요청을 승인한 후 아래 버튼을 눌러주세요.
             </InfoBox>
             <button onClick={handleConfirmCheckup} disabled={loading} style={s.primaryBtn}>

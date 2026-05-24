@@ -285,7 +285,7 @@ const CheckupRecords = () => {
       </div>
       {checkups.length === 0 ? (
         <div className="mc-card mc-card-body" style={{ textAlign: 'center', color: '#9AA3B2', padding: '24px 0' }}>
-          검진 기록이 없습니다. CODEF 연동 후 데이터가 표시됩니다.
+          검진 기록이 없습니다. 데이터 연동 후 표시됩니다.
         </div>
       ) : (
         <div className="mc-row-wrap">

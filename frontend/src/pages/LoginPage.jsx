@@ -279,7 +279,7 @@ export default function LoginPage() {
           </p>
           <div style={s.featureList}>
             <FeatureCard icon="🛡" iconBg="#dbeafe" iconColor="#1d4ed8" title="개인정보는 암호화 우선" desc="건강·보험 데이터는 256-bit AES 암호화로 안전하게 보관됩니다." />
-            <FeatureCard icon="⚡" iconBg="#d1fae5" iconColor="#059669" title="원클릭 데이터 연동" desc="CODEF 기반 본인인증 한 번으로 내 보험·진료 내역을 한 번에 불러옵니다." />
+            <FeatureCard icon="⚡" iconBg="#d1fae5" iconColor="#059669" title="원클릭 데이터 연동" desc="본인인증 한 번으로 내 보험·진료 내역을 한 번에 불러옵니다." />
           </div>
         </section>
 
@@ -295,7 +295,7 @@ export default function LoginPage() {
               </h2>
               <p style={s.formSub}>
                 {isLogin
-                  ? '내보험다보여 아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
+                  ? '아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
                   : signupStep === 1
                   ? '몇 가지 정보만 입력하면 시작할 수 있어요.'
                   : signupStep === 2
@@ -331,7 +331,7 @@ export default function LoginPage() {
             {isLogin && (
               <form onSubmit={handleLogin} style={s.form}>
                 <Field label="로그인 아이디" icon="🪪">
-                  <input name="id" type="text" value={form.id} onChange={handle} placeholder="내보험다보여 아이디" style={s.input} required autoComplete="username" />
+                  <input name="id" type="text" value={form.id} onChange={handle} placeholder="아이디" style={s.input} required autoComplete="username" />
                 </Field>
                 <Field label="비밀번호" icon="🔒">
                   <input name="password" type="password" value={form.password} onChange={handle} placeholder="비밀번호" style={s.input} required autoComplete="current-password" />
@@ -371,11 +371,11 @@ export default function LoginPage() {
                   </Field>
                 </div>
 
-                {/* CODEF 구분선 */}
-                <div style={s.divider}><span style={s.dividerText}>내보험다보여 가입 정보</span></div>
+                {/* 계정 정보 구분선 */}
+                <div style={s.divider}><span style={s.dividerText}>계정 정보</span></div>
 
                 <Field label="로그인 아이디" icon="🪪" error={fieldErrors.id}>
-                  <input name="id" value={form.id} onChange={handle} placeholder="내보험다보여에서 사용할 아이디" style={{ ...s.input, ...(fieldErrors.id ? s.inputError : {}) }} required />
+                  <input name="id" value={form.id} onChange={handle} placeholder="사용할 아이디" style={{ ...s.input, ...(fieldErrors.id ? s.inputError : {}) }} required />
                 </Field>
 
                 <Field label="주민등록번호 (13자리)" icon="🔢" error={fieldErrors.identity}>
@@ -502,7 +502,7 @@ export default function LoginPage() {
 
           <div style={s.securityBadge}>
             <span>🛡</span>
-            <span>CODEF API · 256-bit AES 암호화 전송</span>
+            <span>256-bit AES 암호화 전송</span>
           </div>
         </section>
       </div>
