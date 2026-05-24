@@ -351,7 +351,8 @@ USE medicatch_health;
 
 SET @test_user_id = 2;
 -- 기존 건강검진/예측 테스트 데이터 초기화
-DELETE FROM health_predictions WHERE user_id = @test_user_id;
+DELETE FROM disease_predictions WHERE user_id = @test_user_id;
+DELETE FROM health_age_results WHERE user_id = @test_user_id;
 DELETE FROM checkup_results WHERE user_id = @test_user_id;
 
 -- 건강검진 결과: init.sql의 checkup_results 컬럼 기준
@@ -388,80 +389,89 @@ INSERT INTO checkup_results (
     NOW(), NOW()
 );
 
--- 건강나이/질병예측: init.sql의 health_predictions 테이블 기준
-INSERT INTO health_predictions (
-    user_id, prediction_type, checkup_date,
-    risk_grade, risk_ratio, average_age, average_ratio, raw_json,
+-- 건강나이: health_age_results 테이블
+INSERT INTO health_age_results (
+    user_id, checkup_date,
+    biological_age, chronological_age,
+    summary_note, detail_message, change_after_message,
+    gender, height, weight,
     created_at, updated_at
-) VALUES
-(
-    @test_user_id, 'HEALTH_AGE', '2026-03-18',
-    NULL, NULL, '37', NULL,
-    JSON_OBJECT(
-        'biologicalAge', 41,
-        'chronologicalAge', 37,
-        'summaryNote', '건강나이는 실제 나이보다 4세 높게 평가되었습니다.',
-        'detailMessage', '혈압과 지질 지표 관리가 필요합니다.',
-        'changeAfterMessage', '수축기혈압과 LDL을 개선하면 건강나이가 약 2세 낮아질 수 있습니다.',
-        'gender', 'M',
-        'height', 171.4,
-        'weight', 76.2
-    ),
-    NOW(), NOW()
-),
-(
-    @test_user_id, 'STROKE', '2026-03-18',
-    '2', '11', '30', '69',
-    JSON_OBJECT(
-        'factors', JSON_ARRAY(
-            JSON_OBJECT('riskFactor', '수축기혈압', 'currentState', '134.0', 'severityType', '4', 'averageValue', '121.5'),
-            JSON_OBJECT('riskFactor', 'LDL', 'currentState', '151.0', 'severityType', '4', 'averageValue', '124.8')
-        ),
-        'compares', JSON_ARRAY(
-            JSON_OBJECT('year', '2024', 'predictedState', '6'),
-            JSON_OBJECT('year', '2025', 'predictedState', '8'),
-            JSON_OBJECT('year', '2026', 'predictedState', '11')
-        )
-    ),
-    NOW(), NOW()
-),
-(
-    @test_user_id, 'DIABETES', '2026-03-18',
-    '1', '4', '30', '52',
-    JSON_OBJECT(
-        'factors', JSON_ARRAY(
-            JSON_OBJECT('riskFactor', '공복혈당', 'currentState', '103.0', 'severityType', '3', 'averageValue', '99.4'),
-            JSON_OBJECT('riskFactor', '허리둘레', 'currentState', '86.4', 'severityType', '2', 'averageValue', '83.1')
-        ),
-        'compares', JSON_ARRAY(
-            JSON_OBJECT('year', '2024', 'predictedState', '2'),
-            JSON_OBJECT('year', '2025', 'predictedState', '3'),
-            JSON_OBJECT('year', '2026', 'predictedState', '4')
-        )
-    ),
-    NOW(), NOW()
-),
-(
-    @test_user_id, 'CARDIO', '2026-03-18',
-    '2', '18', '30', '71',
-    JSON_OBJECT(
-        'factors', JSON_ARRAY(
-            JSON_OBJECT('riskFactor', '중성지방', 'currentState', '174.0', 'severityType', '4', 'averageValue', '116.9'),
-            JSON_OBJECT('riskFactor', '수축기혈압', 'currentState', '134.0', 'severityType', '4', 'averageValue', '121.5')
-        ),
-        'compares', JSON_ARRAY(
-            JSON_OBJECT('year', '2024', 'predictedState', '13'),
-            JSON_OBJECT('year', '2025', 'predictedState', '15'),
-            JSON_OBJECT('year', '2026', 'predictedState', '18')
-        )
-    ),
+) VALUES (
+    @test_user_id, '2026-03-18',
+    41, 37,
+    '건강나이는 실제 나이보다 4세 높게 평가되었습니다.',
+    '혈압과 지질 지표 관리가 필요합니다.',
+    '수축기혈압과 LDL을 개선하면 건강나이가 약 2세 낮아질 수 있습니다.',
+    'M', 171.4, 76.2,
     NOW(), NOW()
 );
+
+-- 질병예측: disease_predictions + disease_prediction_factors + disease_prediction_compares
+
+-- STROKE
+INSERT INTO disease_predictions (
+    user_id, prediction_type, checkup_date,
+    risk_grade, risk_ratio, average_ratio, average_age_group,
+    created_at, updated_at
+) VALUES (
+    @test_user_id, 'STROKE', '2026-03-18',
+    '2', '11', '69', '30',
+    NOW(), NOW()
+);
+SET @stroke_id = LAST_INSERT_ID();
+INSERT INTO disease_prediction_factors (prediction_id, risk_factor, current_state, severity_type, average_value, sort_order) VALUES
+    (@stroke_id, '수축기혈압', '134.0', '4', '121.5', 1),
+    (@stroke_id, 'LDL',       '151.0', '4', '124.8', 2);
+INSERT INTO disease_prediction_compares (prediction_id, year, predicted_state) VALUES
+    (@stroke_id, '2024', '6'),
+    (@stroke_id, '2025', '8'),
+    (@stroke_id, '2026', '11');
+
+-- DIABETES
+INSERT INTO disease_predictions (
+    user_id, prediction_type, checkup_date,
+    risk_grade, risk_ratio, average_ratio, average_age_group,
+    created_at, updated_at
+) VALUES (
+    @test_user_id, 'DIABETES', '2026-03-18',
+    '1', '4', '52', '30',
+    NOW(), NOW()
+);
+SET @diabetes_id = LAST_INSERT_ID();
+INSERT INTO disease_prediction_factors (prediction_id, risk_factor, current_state, severity_type, average_value, sort_order) VALUES
+    (@diabetes_id, '공복혈당',  '103.0', '3', '99.4', 1),
+    (@diabetes_id, '허리둘레', '86.4',  '2', '83.1', 2);
+INSERT INTO disease_prediction_compares (prediction_id, year, predicted_state) VALUES
+    (@diabetes_id, '2024', '2'),
+    (@diabetes_id, '2025', '3'),
+    (@diabetes_id, '2026', '4');
+
+-- CARDIO
+INSERT INTO disease_predictions (
+    user_id, prediction_type, checkup_date,
+    risk_grade, risk_ratio, average_ratio, average_age_group,
+    created_at, updated_at
+) VALUES (
+    @test_user_id, 'CARDIO', '2026-03-18',
+    '2', '18', '71', '30',
+    NOW(), NOW()
+);
+SET @cardio_id = LAST_INSERT_ID();
+INSERT INTO disease_prediction_factors (prediction_id, risk_factor, current_state, severity_type, average_value, sort_order) VALUES
+    (@cardio_id, '중성지방',   '174.0', '4', '116.9', 1),
+    (@cardio_id, '수축기혈압', '134.0', '4', '121.5', 2);
+INSERT INTO disease_prediction_compares (prediction_id, year, predicted_state) VALUES
+    (@cardio_id, '2024', '13'),
+    (@cardio_id, '2025', '15'),
+    (@cardio_id, '2026', '18');
 
 -- 확인용 조회
 SELECT id, user_id, checkup_date, height, weight, blood_pressure_systolic, blood_pressure_diastolic, glucose, total_cholesterol, recommendations
 FROM checkup_results WHERE user_id = @test_user_id ORDER BY checkup_date DESC;
 
-SELECT id, user_id, prediction_type, checkup_date, risk_grade, risk_ratio, average_age, average_ratio
-FROM health_predictions WHERE user_id = @test_user_id ORDER BY prediction_type;
+SELECT id, user_id, checkup_date, biological_age, chronological_age, summary_note
+FROM health_age_results WHERE user_id = @test_user_id;
+
+SELECT id, user_id, prediction_type, checkup_date, risk_grade, risk_ratio, average_ratio, average_age_group
+FROM disease_predictions WHERE user_id = @test_user_id ORDER BY prediction_type;
 COMMIT;
