@@ -358,7 +358,7 @@ DELETE FROM checkup_results WHERE user_id = @test_user_id;
 -- 건강검진 결과: init.sql의 checkup_results 컬럼 기준
 INSERT INTO checkup_results (
     user_id, checkup_date, checkup_type,
-    height, weight,
+    height, weight, bmi,
     blood_pressure_systolic, blood_pressure_diastolic,
     glucose, total_cholesterol, hdl_cholesterol, ldl_cholesterol, triglycerides,
     abnormal_findings, recommendations,
@@ -366,7 +366,7 @@ INSERT INTO checkup_results (
 ) VALUES
 (
     @test_user_id, '2026-03-18', 'REGULAR',
-    171.4, 76.2,
+    171.4, 76.2, 26.0,
     134, 88,
     103, 232, 49, 151, 174,
     '혈압, LDL, 중성지방 추적 관찰 권고', '주의',
@@ -374,7 +374,7 @@ INSERT INTO checkup_results (
 ),
 (
     @test_user_id, '2025-04-12', 'REGULAR',
-    171.2, 75.1,
+    171.2, 75.1, 25.6,
     127, 82,
     97, 216, 53, 139, 152,
     '', '주의',
@@ -382,7 +382,7 @@ INSERT INTO checkup_results (
 ),
 (
     @test_user_id, '2024-05-09', 'REGULAR',
-    171.0, 73.8,
+    171.0, 73.8, 25.2,
     121, 78,
     92, 204, 56, 128, 133,
     '', '정상',
