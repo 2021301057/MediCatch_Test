@@ -350,7 +350,9 @@ COMMIT;
 USE medicatch_health;
 
 SET @test_user_id = 2;
--- 기존 건강검진/예측 테스트 데이터 초기화
+-- 기존 건강검진/예측 테스트 데이터 초기화 (FK 순서: 자식→부모)
+DELETE FROM disease_prediction_compares WHERE prediction_id IN (SELECT id FROM disease_predictions WHERE user_id = @test_user_id);
+DELETE FROM disease_prediction_factors  WHERE prediction_id IN (SELECT id FROM disease_predictions WHERE user_id = @test_user_id);
 DELETE FROM disease_predictions WHERE user_id = @test_user_id;
 DELETE FROM health_age_results WHERE user_id = @test_user_id;
 DELETE FROM checkup_results WHERE user_id = @test_user_id;
