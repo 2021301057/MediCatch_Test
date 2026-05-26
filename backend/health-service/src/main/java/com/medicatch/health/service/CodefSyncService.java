@@ -29,6 +29,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -73,6 +75,13 @@ public class CodefSyncService {
     private final ConcurrentHashMap<String, SyncSession>                              sessions         = new ConcurrentHashMap<>();
     /** 건강검진 + 예측 4개 멀티 세션 (sessionKey → 5개 API 컨텍스트) */
     private final ConcurrentHashMap<String, CheckupMultiSession>                      checkupMultiSessions = new ConcurrentHashMap<>();
+
+    // 예측 4개 병렬용 전용 스레드풀 — ForkJoinPool.commonPool() 블로킹 I/O 기아 방지
+    private final ExecutorService predictionExecutor = Executors.newFixedThreadPool(4, r -> {
+        Thread t = new Thread(r, "codef-prediction");
+        t.setDaemon(true);
+        return t;
+    });
 
     public CodefSyncService(ObjectMapper objectMapper,
                             MedicalRecordRepository medicalRecordRepo,
@@ -237,14 +246,20 @@ public class CodefSyncService {
 
         List<CheckupResult> toSave = new ArrayList<>();
         for (Map<String, Object> item : previewList) {
+            String yearStr = str(item.get("resCheckupYear"));
             String dateStr = str(item.get("resCheckupDate"));
             if (dateStr == null || dateStr.isBlank()) continue;
+
+            // CODEF resPreviewList: resCheckupDate는 MMDD(4자리), resCheckupYear가 별도 필드.
+            String fullDate = (dateStr.length() == 4 && yearStr != null && yearStr.length() == 4)
+                    ? yearStr + dateStr
+                    : dateStr;
 
             String[] bp = str(item.getOrDefault("resBloodPressure", "")).split("/");
 
             toSave.add(CheckupResult.builder()
                     .userId(userId)
-                    .checkupDate(parseDate8(dateStr))
+                    .checkupDate(parseDate8(fullDate))
                     .checkupType("REGULAR")
                     .height(parseDouble(item.get("resHeight")))
                     .weight(parseDouble(item.get("resWeight")))
@@ -499,7 +514,7 @@ public class CodefSyncService {
                 predictionFutures.add(CompletableFuture.supplyAsync(() -> {
                     try { Thread.sleep(delay); } catch (InterruptedException ignored) {}
                     return fireFirstRequest(sharedCodef, pType, pUrl, predParams, svcType);
-                }));
+                }, predictionExecutor));
             }
 
             // 세션에 CHECKUP + 백그라운드 futures 저장 후 즉시 반환
@@ -554,7 +569,8 @@ public class CodefSyncService {
         List<CompletableFuture<CheckupApiContext>> pending = session.getPendingPredictionFutures();
         if (pending != null && !pending.isEmpty()) {
             try {
-                CompletableFuture.allOf(pending.toArray(new CompletableFuture[0])).get(5, TimeUnit.SECONDS);
+                // CODEF demo가 호출당 ~27초 소요 → 사용자 인증 시간과 겹쳐도 여유 있게 30초 대기
+                CompletableFuture.allOf(pending.toArray(new CompletableFuture[0])).get(30, TimeUnit.SECONDS);
             } catch (TimeoutException te) {
                 log.warn("예측 백그라운드 future 일부 미완료 - 완료된 것만 수집");
             } catch (Exception ignored) {}
