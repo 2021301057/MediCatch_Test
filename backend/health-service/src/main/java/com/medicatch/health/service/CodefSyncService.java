@@ -565,7 +565,7 @@ public class CodefSyncService {
     public CheckupStep2Result syncCheckupStep2(String sessionKey) {
         CheckupMultiSession session = getValidCheckupMultiSession(sessionKey);
 
-        // 백그라운드 예측 futures 수집 (최대 5초 대기 — 사용자 인증 시간 동안 이미 응답했을 가능성 높음)
+        // 백그라운드 예측 futures 수집 (최대 30초 대기 — CODEF demo가 호출당 ~27초 소요)
         List<CompletableFuture<CheckupApiContext>> pending = session.getPendingPredictionFutures();
         if (pending != null && !pending.isEmpty()) {
             try {
