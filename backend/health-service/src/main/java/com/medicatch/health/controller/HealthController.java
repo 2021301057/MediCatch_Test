@@ -52,7 +52,7 @@ public class HealthController {
      * Get health summary for user
      */
     @GetMapping("/summary")
-    public ResponseEntity<Map<String, Object>> getHealthSummary(@RequestParam Long userId) {
+    public ResponseEntity<Map<String, Object>> getHealthSummary(@RequestHeader("X-User-Id") Long userId) {
         log.info("GET /api/health/summary - userId: {}", userId);
         try {
             Map<String, Object> summary = healthService.getUserHealthSummary(userId);
@@ -68,7 +68,7 @@ public class HealthController {
      */
     @GetMapping("/medical-records")
     public ResponseEntity<List<MedicalRecordDto>> getMedicalRecords(
-            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long userId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/medical-records - userId: {}", userId);
@@ -90,7 +90,7 @@ public class HealthController {
      */
     @GetMapping("/checkup-results")
     public ResponseEntity<List<CheckupResultDto>> getCheckupResults(
-            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long userId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/checkup-results - userId: {}", userId);
@@ -111,7 +111,7 @@ public class HealthController {
      * Get current medications
      */
     @GetMapping("/medications")
-    public ResponseEntity<List<MedicationDetail>> getCurrentMedications(@RequestParam Long userId) {
+    public ResponseEntity<List<MedicationDetail>> getCurrentMedications(@RequestHeader("X-User-Id") Long userId) {
         log.info("GET /api/health/medications - userId: {}", userId);
         try {
             List<MedicationDetail> medications = healthService.getCurrentMedications(userId);
@@ -126,7 +126,7 @@ public class HealthController {
      * Get health risk level
      */
     @GetMapping("/risk-level")
-    public ResponseEntity<Map<String, String>> getHealthRiskLevel(@RequestParam Long userId) {
+    public ResponseEntity<Map<String, String>> getHealthRiskLevel(@RequestHeader("X-User-Id") Long userId) {
         log.info("GET /api/health/risk-level - userId: {}", userId);
         try {
             String riskLevel = healthService.calculateHealthRiskLevel(userId);
@@ -144,10 +144,9 @@ public class HealthController {
      * CODEF 건강 데이터 동기화 1단계: 건강검진(NHIS) + 진료정보(HIRA) 1차 요청
      */
     @PostMapping("/sync/step1")
-    public ResponseEntity<Map<String, Object>> syncStep1(@RequestBody Map<String, Object> body) {
-        Object userIdObj = body.get("userId");
-        if (userIdObj == null) return ResponseEntity.badRequest().body(Map.of("message", "userId가 필요합니다."));
-        Long userId = Long.parseLong(userIdObj.toString());
+    public ResponseEntity<Map<String, Object>> syncStep1(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestBody Map<String, Object> body) {
         log.info("POST /api/health/sync/step1 - userId: {}", userId);
         try {
             CodefSyncService.SyncStep1Response resp = codefSyncService.syncStep1(
@@ -197,14 +196,9 @@ public class HealthController {
     // ── 건강검진(NHIS) 단독 ──────────────────────────────────────────────
 
     @PostMapping("/sync/checkup/step1")
-    public ResponseEntity<Map<String, Object>> syncCheckupStep1(@RequestBody Map<String, Object> body) {
-        Object userIdObj = body.get("userId");
-        if (userIdObj == null) {
-            HashMap<String, Object> err = new HashMap<>();
-            err.put("message", "userId가 필요합니다.");
-            return ResponseEntity.badRequest().body(err);
-        }
-        Long userId = Long.parseLong(userIdObj.toString());
+    public ResponseEntity<Map<String, Object>> syncCheckupStep1(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestBody Map<String, Object> body) {
         log.info("POST /api/health/sync/checkup/step1 - userId: {}", userId);
         try {
             String sessionKey = codefSyncService.syncCheckupStep1(
@@ -246,14 +240,9 @@ public class HealthController {
     // ── 진료정보(HIRA) 단독 ──────────────────────────────────────────────
 
     @PostMapping("/sync/medical/step1")
-    public ResponseEntity<Map<String, Object>> syncMedicalStep1(@RequestBody Map<String, Object> body) {
-        Object userIdObj = body.get("userId");
-        if (userIdObj == null) {
-            HashMap<String, Object> err = new HashMap<>();
-            err.put("message", "userId가 필요합니다.");
-            return ResponseEntity.badRequest().body(err);
-        }
-        Long userId = Long.parseLong(userIdObj.toString());
+    public ResponseEntity<Map<String, Object>> syncMedicalStep1(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestBody Map<String, Object> body) {
         log.info("POST /api/health/sync/medical/step1 - userId: {}", userId);
         try {
             String sessionKey = codefSyncService.syncMedicalStep1(
@@ -297,7 +286,7 @@ public class HealthController {
      * - factors (위험요인 + 연도별 추이) 와 compares (연도별 예측값) 포함
      */
     @GetMapping("/disease-predictions")
-    public ResponseEntity<List<Map<String, Object>>> getDiseasePredictions(@RequestParam Long userId) {
+    public ResponseEntity<List<Map<String, Object>>> getDiseasePredictions(@RequestHeader("X-User-Id") Long userId) {
         log.info("GET /api/health/disease-predictions - userId: {}", userId);
         try {
             List<DiseasePrediction> rows = diseasePredictionRepo.findByUserIdOrderByCheckupDateDesc(userId);
@@ -367,7 +356,7 @@ public class HealthController {
      * - 최신 1건 반환. factors 포함. 데이터 없으면 204 No Content
      */
     @GetMapping("/health-age")
-    public ResponseEntity<Map<String, Object>> getHealthAge(@RequestParam Long userId) {
+    public ResponseEntity<Map<String, Object>> getHealthAge(@RequestHeader("X-User-Id") Long userId) {
         log.info("GET /api/health/health-age - userId: {}", userId);
         try {
             List<HealthAgeResult> rows = healthAgeResultRepo.findByUserIdOrderByCheckupDateDesc(userId);

@@ -1,19 +1,18 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+const BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 
 const api = axios.create({ baseURL: BASE_URL, timeout: 60000 });
 
-// 요청마다 JWT + userId 자동 첨부
+// 요청마다 JWT 자동 첨부 (userId는 게이트웨이가 JWT에서 추출해 X-User-Id 헤더로 전달)
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
-  // GET 요청에 userId, codefId 자동 포함
+  // codefId는 보험 데이터 식별용으로 백엔드에서 사용 (userId는 자동 첨부하지 않음 — 변조 방지)
   if (config.method === 'get') {
-    const userId = localStorage.getItem('userId');
     const codefId = localStorage.getItem('codefId');
-    config.params = { ...(userId ? { userId } : {}), ...(codefId ? { codefId } : {}), ...config.params };
+    config.params = { ...(codefId ? { codefId } : {}), ...config.params };
   }
   return config;
 });

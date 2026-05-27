@@ -105,5 +105,5 @@ management:
 logging:
   level:
     root: INFO
-    com.medicatch: DEBUG
-    org.springframework.cloud.gateway: DEBUG
+    com.medicatch: INFO
+    org.springframework.cloud.gateway: INFO

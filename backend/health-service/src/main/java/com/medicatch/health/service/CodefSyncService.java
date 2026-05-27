@@ -148,8 +148,7 @@ public class CodefSyncService {
 
             String nhisResult = nhisFuture.get(90, TimeUnit.SECONDS);
             String hiraResult = hiraFuture.get(90, TimeUnit.SECONDS);
-            log.info("NHIS 1차 응답: {}", nhisResult);
-            log.info("HIRA 1차 응답: {}", hiraResult);
+            // 민감 정보(주민번호/진단명/처방내역) 평문 출력 금지 — 응답 길이만 로깅
 
             Map<String, Object> nhisMap     = objectMapper.readValue(nhisResult, Map.class);
             Map<String, Object> nhisResult2 = toMap(nhisMap.get("result"));
@@ -202,7 +201,6 @@ public class CodefSyncService {
 
             log.info("NHIS 2차 요청 - sessionKey: {}", sessionKey);
             String nhisResult = nhisCodef.requestCertification(NHIS_URL, serviceType(), nhisCertMap);
-            log.debug("NHIS 2차 응답: {}", nhisResult);
             checkupCount = saveCheckupResults(session.getUserId(), nhisResult);
 
             Thread.sleep(500);
@@ -217,7 +215,6 @@ public class CodefSyncService {
 
             log.info("HIRA 2차 요청 - sessionKey: {}", sessionKey);
             String hiraResult = hiraCodef.requestCertification(HIRA_URL, serviceType(), hiraCertMap);
-            log.debug("HIRA 2차 응답: {}", hiraResult);
             int[] hiraCounts = saveMedicalData(session.getUserId(), hiraResult);
             medicalCount    = hiraCounts[0];
             medicationCount = hiraCounts[1];
@@ -541,11 +538,11 @@ public class CodefSyncService {
         try {
             log.info("[{}] 1차 요청", name);
             String raw = codef.requestProduct(apiUrl, svcType, params);
-            log.debug("[{}] 1차 응답: {}", name, raw);
 
             Map<String, Object> respMap = objectMapper.readValue(raw, Map.class);
             Map<String, Object> resultField = toMap(respMap.get("result"));
             String code = (String) resultField.get("code");
+            log.info("[{}] 1차 응답 - code: {}", name, code);
 
             if ("CF-03002".equals(code)) {
                 return new CheckupApiContext(name, apiUrl, params, code, toMap(respMap.get("data")), null);
@@ -668,7 +665,6 @@ public class CodefSyncService {
         certMap.put("simpleAuth","1");
         log.info("[{}] 2차 인증 요청", ctx.getName());
         String result = createCodef().requestCertification(ctx.getApiUrl(), serviceType(), certMap);
-        log.debug("[{}] 2차 응답: {}", ctx.getName(), result);
         return result;
     }
 
@@ -851,11 +847,11 @@ public class CodefSyncService {
 
             log.info("HIRA 진료정보 1차 요청 - userId: {}", userId);
             String result = createCodef().requestProduct(HIRA_URL, serviceType(), params);
-            log.info("HIRA 진료정보 1차 응답: {}", result);
 
             Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
             Map<String, Object> resultField = toMap(respMap.get("result"));
             String code = (String) resultField.get("code");
+            log.info("HIRA 진료정보 1차 응답 - code: {}", code);
             if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
                 String msg = (String) resultField.getOrDefault("message", "진료정보 조회 실패");
                 throw new RuntimeException("진료정보(HIRA) 오류 [" + code + "]: " + msg);
@@ -884,11 +880,11 @@ public class CodefSyncService {
 
             log.info("HIRA 진료정보 2차 요청 - sessionKey: {}", sessionKey);
             String result = createCodef().requestCertification(HIRA_URL, serviceType(), certMap);
-            log.info("HIRA 진료정보 2차 응답: {}", result);
 
             Map<String, Object> respMap     = objectMapper.readValue(result, Map.class);
             Map<String, Object> resultField = toMap(respMap.get("result"));
             String code = (String) resultField.get("code");
+            log.info("HIRA 진료정보 2차 응답 - code: {}", code);
             if (!"CF-00000".equals(code)) {
                 String msg = (String) resultField.getOrDefault("message", "진료정보 인증 실패");
                 throw new RuntimeException("진료정보(HIRA) 인증 오류 [" + code + "]: " + msg);

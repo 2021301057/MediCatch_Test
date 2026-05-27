@@ -1,13 +1,24 @@
+# 공통 운영 설정: restart 정책 + 로그 rotation (10MB × 3개 = 컨테이너당 최대 30MB)
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   # ── 인프라 ──────────────────────────────────────
   mysql:
+    <<: *common
     image: mysql:8.0
     container_name: medicatch-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
       MYSQL_DATABASE: medicatch
+    # 호스트의 mysql 클라이언트 디버깅용으로만 127.0.0.1에 바인딩 (외부 노출 차단)
     ports:
-      - "3307:3306"
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -20,12 +31,13 @@ services:
 
   # ── MSA 서비스 ───────────────────────────────────
   eureka-server:
+    <<: *common
     build:
       context: ./backend
       dockerfile: eureka-server/Dockerfile
     container_name: medicatch-eureka
-    ports:
-      - "8761:8761"
+    expose:
+      - "8761"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8761/actuator/health"]
       interval: 15s
@@ -34,12 +46,13 @@ services:
       start_period: 30s
 
   gateway-service:
+    <<: *common
     build:
       context: ./backend
       dockerfile: gateway-service/Dockerfile
     container_name: medicatch-gateway
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       SERVER_PORT: 8000
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
@@ -49,12 +62,13 @@ services:
         condition: service_healthy
 
   user-service:
+    <<: *common
     build:
       context: ./backend
       dockerfile: user-service/Dockerfile
     container_name: medicatch-user
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     environment:
       SERVER_PORT: 8001
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_user
@@ -73,12 +87,13 @@ services:
         condition: service_healthy
 
   health-service:
+    <<: *common
     build:
       context: ./backend
       dockerfile: health-service/Dockerfile
     container_name: medicatch-health
-    ports:
-      - "8002:8002"
+    expose:
+      - "8002"
     environment:
       SERVER_PORT: 8002
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_health
@@ -97,12 +112,13 @@ services:
         condition: service_healthy
 
   insurance-service:
+    <<: *common
     build:
       context: ./backend
       dockerfile: insurance-service/Dockerfile
     container_name: medicatch-insurance
-    ports:
-      - "8003:8003"
+    expose:
+      - "8003"
     environment:
       SERVER_PORT: 8003
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_insurance
@@ -120,12 +136,13 @@ services:
         condition: service_healthy
 
   analysis-service:
+    <<: *common
     build:
       context: ./backend
       dockerfile: analysis-service/Dockerfile
     container_name: medicatch-analysis
-    ports:
-      - "8004:8004"
+    expose:
+      - "8004"
     environment:
       SERVER_PORT: 8004
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_analysis
@@ -140,12 +157,13 @@ services:
         condition: service_healthy
 
   chat-service:
+    <<: *common
     build:
       context: ./backend
       dockerfile: chat-service/Dockerfile
     container_name: medicatch-chat
-    ports:
-      - "8007:8007"
+    expose:
+      - "8007"
     environment:
       SERVER_PORT: 8007
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_chat
@@ -160,14 +178,14 @@ services:
         condition: service_healthy
 
   # ── 프론트엔드 ────────────────────────────────────
+  # 외부에 노출되는 유일한 포트. nginx가 / → 정적 파일, /api/ → gateway-service:8000 프록시
   frontend:
+    <<: *common
     build:
       context: ./frontend
-      args:
-        REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL:-http://localhost:8000/api}
     container_name: medicatch-frontend
     ports:
-      - "3000:3000"
+      - "80:3000"
     depends_on:
       - gateway-service
 

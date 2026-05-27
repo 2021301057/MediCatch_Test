@@ -35,11 +35,12 @@ public class AnalysisController {
      */
     @PostMapping("/pre-treatment-search")
     public ResponseEntity<PreTreatmentSearchResponse> searchPreTreatment(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader("X-User-Id") Long userId,
             @RequestBody(required = false) Map<String, Object> body) {
         log.info("POST /api/analysis/pre-treatment-search - query: {}", body != null ? body.get("query") : null);
         try {
-            PreTreatmentSearchRequest normalizedRequest = toPreTreatmentRequest(body, userIdHeader);
+            // userId는 게이트웨이가 JWT에서 추출한 X-User-Id만 신뢰. body의 userId는 무시.
+            PreTreatmentSearchRequest normalizedRequest = toPreTreatmentRequest(body, userId);
             return ResponseEntity.ok(preTreatmentSearchService.searchPreTreatment(normalizedRequest));
         } catch (Exception e) {
             log.error("Error searching pre-treatment rules: {}", e.getMessage(), e);
@@ -47,12 +48,8 @@ public class AnalysisController {
         }
     }
 
-    private PreTreatmentSearchRequest toPreTreatmentRequest(Map<String, Object> body, String userIdHeader) {
+    private PreTreatmentSearchRequest toPreTreatmentRequest(Map<String, Object> body, Long userId) {
         Map<String, Object> safeBody = body != null ? body : Map.of();
-        Long userId = parseLong(safeBody.get("userId"));
-        if (userId == null) {
-            userId = parseLong(userIdHeader);
-        }
         return PreTreatmentSearchRequest.builder()
                 .userId(userId)
                 .query(asString(safeBody.get("query")))
@@ -161,7 +158,7 @@ public class AnalysisController {
      */
     @GetMapping("/coverage-gaps")
     public ResponseEntity<Map<String, Object>> analyzeCoverageGaps(
-            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long userId,
             @RequestBody(required = false) List<Map<String, Object>> policies) {
         log.info("GET /api/analysis/coverage-gaps - userId: {}", userId);
         try {
@@ -178,13 +175,7 @@ public class AnalysisController {
      */
     @GetMapping("/claim-opportunities")
     public ResponseEntity<List<ClaimOpportunityDto>> findClaimOpportunities(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestParam(value = "userId", required = false) String userIdParam) {
-        String raw = userIdHeader != null ? userIdHeader : userIdParam;
-        if (raw == null || raw.isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
-        Long userId = Long.parseLong(raw);
+            @RequestHeader("X-User-Id") Long userId) {
         log.info("GET /api/analysis/claim-opportunities - userId: {}", userId);
         try {
             List<ClaimOpportunityDto> opportunities = claimMatchingService.matchClaimOpportunities(userId);
@@ -200,7 +191,7 @@ public class AnalysisController {
      */
     @GetMapping("/savings-analysis")
     public ResponseEntity<Map<String, Object>> calculateSavings(
-            @RequestParam Long userId,
+            @RequestHeader("X-User-Id") Long userId,
             @RequestBody(required = false) List<Map<String, Object>> medicalHistory) {
         log.info("GET /api/analysis/savings-analysis - userId: {}", userId);
         try {
