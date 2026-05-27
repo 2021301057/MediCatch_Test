@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import CodefSyncModal from '../CodefSyncModal';
@@ -13,23 +13,28 @@ const NAV_ITEMS = [
   { path: '/health-report',    label: '건강 통합 리포트' },
 ];
 
-const Icon = ({ children, size = 13 }) => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
-    strokeLinecap="round" strokeLinejoin="round"
-    style={{ width: size, height: size, flexShrink: 0 }}>
-    {children}
-  </svg>
-);
-
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
   const [hasHealthData, setHasHealthData] = useState(() => (
     localStorage.getItem('healthDataLoaded') === 'true'
   ));
 
-  const shouldShowSyncGuide = !hasHealthData;
+  const shouldShowSyncGuide = !hasHealthData && !user?.codefConnectionCount;
+  const displayId = user?.codefId || localStorage.getItem('codefId') || user?.email || localStorage.getItem('email') || '로그인 사용자';
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -83,15 +88,28 @@ export default function Navbar() {
               내 건강 불러오기
             </button>
           </div>
-          <button className="mc-btn mc-btn-icon-only" title="알림">
-            <Icon size={13}>
-              <path d="M8 2a4 4 0 0 1 4 4v3l1.5 2h-11L4 9V6a4 4 0 0 1 4-4z"/>
-              <path d="M6.5 12.5a1.5 1.5 0 0 0 3 0"/>
-            </Icon>
-          </button>
-          <button className="mc-nav-avatar" onClick={handleLogout} title={user?.name ? `${user.name} · 로그아웃` : '로그아웃'}>
-            {user?.name?.[0] || '김'}
-          </button>
+          <div className="mc-user-menu-wrap" ref={userMenuRef}>
+            <button
+              className="mc-nav-avatar"
+              onClick={() => setShowUserMenu((v) => !v)}
+              title={user?.name ? `${user.name} 메뉴` : '사용자 메뉴'}
+              aria-expanded={showUserMenu}
+            >
+              {user?.name?.[0] || '김'}
+            </button>
+            {showUserMenu && (
+              <div className="mc-user-menu">
+                <button
+                  className="mc-user-menu-id"
+                  onClick={() => { setShowUserMenu(false); navigate('/account'); }}
+                  type="button"
+                >
+                  {displayId}
+                </button>
+                <button className="mc-user-menu-logout" onClick={handleLogout}>로그아웃</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>
