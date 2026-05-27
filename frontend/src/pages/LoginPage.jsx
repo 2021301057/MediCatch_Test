@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 
-
 export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
+  const [signupInfoStep, setSignupInfoStep] = useState(1); // 1: 계정 정보 | 2: 본인인증 정보
   const [sessionKey, setSessionKey] = useState('');
 
   const [form, setForm] = useState({
@@ -16,7 +16,8 @@ export default function LoginPage() {
     passwordConfirm: '',
     agree: false,
     id: '',
-    identity: '',
+    identityFront: '',
+    identityBack: '',
     telecom: '0',
     phoneNo: '',
     authMethod: '0',
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [duplicateEmail, setDuplicateEmail] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const identityBackRef = useRef(null);
 
   const { login } = useAuthStore();
   const navigate = useNavigate();
@@ -40,6 +42,7 @@ export default function LoginPage() {
     setSuccessMessage('');
     if (mode === 'signup') {
       setSignupStep(1);
+      setSignupInfoStep(1);
       setSessionKey('');
       setSmsAuthNo('');
       setEmailAuthNo('');
@@ -54,10 +57,34 @@ export default function LoginPage() {
     }
   };
 
+  const clearFieldError = (name) => {
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
+    }
+  };
+
+  const handleIdentityFront = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setForm((f) => ({ ...f, identityFront: value }));
+    clearFieldError('identity');
+    if (value.length === 6) {
+      identityBackRef.current?.focus();
+    }
+  };
+
+  const handleIdentityBack = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 7);
+    setForm((f) => ({ ...f, identityBack: value }));
+    clearFieldError('identity');
+  };
+
   const switchMode = (next) => {
     setMode(next);
     setError('');
     setFieldErrors({});
+    if (next === 'signup') {
+      setSignupInfoStep(1);
+    }
   };
 
   // ── 로그인 ───────────────────────────────────────────
@@ -67,7 +94,7 @@ export default function LoginPage() {
     setError('');
     try {
       const data = await authAPI.login({ codefId: form.id, password: form.password });
-      login(data, data.accessToken, data.refreshToken);
+      login({ ...data, codefId: data.codefId || form.id }, data.accessToken, data.refreshToken);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
@@ -76,22 +103,11 @@ export default function LoginPage() {
     }
   };
 
-  // ── 회원가입 Step1 ────────────────────────────────────
-  const handleSignupStep1 = async (e) => {
-    e.preventDefault();
-    setError('');
-    setFieldErrors({});
-    setDuplicateEmail('');
-
-    if (!form.agree) {
-      setError('서비스 이용약관 및 개인정보 처리방침에 동의해주세요.');
-      return;
-    }
-
+  const validateSignupAccount = () => {
     // 아이디 형식 (영문 시작, 영문+숫자 6~12자)
     if (!/^[a-zA-Z][a-zA-Z0-9]{5,11}$/.test(form.id)) {
       setFieldErrors({ id: '아이디는 영문으로 시작하는 영문+숫자 6~12자여야 합니다.' });
-      return;
+      return false;
     }
 
     // 이메일 도메인
@@ -101,43 +117,81 @@ export default function LoginPage() {
     const emailDomain = form.email.split('@')[1]?.toLowerCase();
     if (!emailDomain || !ALLOWED_DOMAINS.includes(emailDomain)) {
       setFieldErrors({ email: '사용 가능한 이메일 도메인이 아닙니다. (naver.com, daum.net, kakao.com 등)' });
-      return;
+      return false;
     }
 
     // 비밀번호 규칙
     const pw = form.password;
     if (pw.length < 9 || pw.length > 20) {
       setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' });
-      return;
+      return false;
     }
     if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
       setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' });
-      return;
+      return false;
     }
     for (let i = 0; i < pw.length - 2; i++) {
       if (pw[i] === pw[i+1] && pw[i] === pw[i+2]) {
         setFieldErrors({ password: '동일한 문자/숫자를 3자 이상 연속 사용할 수 없습니다.' });
-        return;
+        return false;
       }
       const d1 = pw.charCodeAt(i+1) - pw.charCodeAt(i);
       const d2 = pw.charCodeAt(i+2) - pw.charCodeAt(i+1);
       if ((d1 === 1 && d2 === 1) || (d1 === -1 && d2 === -1)) {
         setFieldErrors({ password: '연속되는 문자/숫자를 3자 이상 사용할 수 없습니다.' });
-        return;
+        return false;
       }
     }
     if (pw.toLowerCase().includes(form.id.toLowerCase())) {
       setFieldErrors({ password: '비밀번호에 아이디를 포함할 수 없습니다.' });
-      return;
+      return false;
     }
 
     if (pw !== form.passwordConfirm) {
       setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSignupAccountNext = (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    setDuplicateEmail('');
+
+    if (!validateSignupAccount()) return;
+    setSignupInfoStep(2);
+  };
+
+  // ── 회원가입 Step1 ────────────────────────────────────
+  const handleSignupStep1 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    setDuplicateEmail('');
+
+    if (!validateSignupAccount()) return;
+
+    if (!form.name.trim()) {
+      setFieldErrors({ name: '이름을 입력해주세요.' });
       return;
     }
-    const cleanIdentity = form.identity.replace(/-/g, '');
+
+    if (!form.phoneNo.trim()) {
+      setFieldErrors({ phoneNo: '전화번호를 입력해주세요.' });
+      return;
+    }
+
+    const cleanIdentity = `${form.identityFront}${form.identityBack}`;
     if (cleanIdentity.length !== 13) {
       setFieldErrors({ identity: '주민등록번호 13자리를 입력해주세요.' });
+      return;
+    }
+
+    if (!form.agree) {
+      setError('서비스 이용약관 및 개인정보 처리방침에 동의해주세요.');
       return;
     }
 
@@ -216,12 +270,18 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const data = await authAPI.signupStep4({ sessionKey, emailAuthNo: emailAuthNo.trim() });
-      setSuccessMessage('회원가입이 완료되었습니다!');
-      setTimeout(() => {
-        login(data, data.accessToken, data.refreshToken);
-        navigate('/');
-      }, 1000);
+      await authAPI.signupStep4({ sessionKey, emailAuthNo: emailAuthNo.trim() });
+      const signedUpId = form.id;
+      if (form.phoneNo) localStorage.setItem('phoneNo', form.phoneNo);
+      if (form.name) localStorage.setItem('userName', form.name);
+      setSuccessMessage('회원가입이 완료되었습니다. 아이디가 자동 입력되었으니 비밀번호만 입력해 로그인해주세요.');
+      setMode('login');
+      setSignupStep(1);
+      setSignupInfoStep(1);
+      setSessionKey('');
+      setSmsAuthNo('');
+      setEmailAuthNo('');
+      setForm((f) => ({ ...f, id: signedUpId, password: '', passwordConfirm: '' }));
     } catch (err) {
       const msg = err.response?.data?.message || '';
       const fe = err.response?.data?.fieldErrors;
@@ -244,6 +304,7 @@ export default function LoginPage() {
 
   const goBackToStep1 = () => {
     setSignupStep(1);
+    setSignupInfoStep(2);
     setSessionKey('');
     setSmsAuthNo('');
     setEmailAuthNo('');
@@ -268,18 +329,18 @@ export default function LoginPage() {
             <span style={s.brandText}>MediCatch</span>
           </div>
           <h1 style={s.headline}>
-            <span style={{ color: '#1d4ed8' }}>내 건강 데이터로 찾는,</span>
+            <span style={{ color: '#10233f' }}>내 건강 데이터로 찾는,</span>
             <br />
-            <span style={{ color: '#0ea371' }}>나에게 딱 맞는 보험.</span>
+            <span style={{ color: '#1d4ed8' }}>나에게 딱 맞는 보험.</span>
           </h1>
           <p style={s.subcopy}>
             건강보험공단·보험사 데이터를 한 곳에서 안전하게 연동하고,
             <br />
-            내 상태에 맞는 보장을 자동으로 찾아드립니다.
+            내 상태에 맞는 보장과 건강 위험 신호를 자동으로 찾아드립니다.
           </p>
           <div style={s.featureList}>
-            <FeatureCard icon="🛡" iconBg="#dbeafe" iconColor="#1d4ed8" title="개인정보는 암호화 우선" desc="건강·보험 데이터는 256-bit AES 암호화로 안전하게 보관됩니다." />
-            <FeatureCard icon="⚡" iconBg="#d1fae5" iconColor="#059669" title="원클릭 데이터 연동" desc="본인인증 한 번으로 내 보험·진료 내역을 한 번에 불러옵니다." />
+            <FeatureCard iconBg="#dbeafe" iconColor="#1d4ed8" title="개인정보는 암호화 우선" desc="건강·보험 데이터는 256-bit AES 암호화로 안전하게 보관됩니다." />
+            <FeatureCard iconBg="#d1fae5" iconColor="#059669" title="원클릭 데이터 연동" desc="CODEF 기반 본인인증 한 번으로 내 보험·진료 내역을 한 번에 불러옵니다." />
           </div>
         </section>
 
@@ -295,9 +356,11 @@ export default function LoginPage() {
               </h2>
               <p style={s.formSub}>
                 {isLogin
-                  ? '아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
+                  ? '내보험다보여 아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
                   : signupStep === 1
-                  ? '몇 가지 정보만 입력하면 시작할 수 있어요.'
+                  ? signupInfoStep === 1
+                    ? '아이디와 비밀번호, 이메일만 먼저 입력해주세요.'
+                    : '휴대폰 인증에 필요한 정보를 이어서 입력해주세요.'
                   : signupStep === 2
                   ? (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')
                   : '가입에 사용한 이메일로 발송된 인증번호를 입력해주세요.'}
@@ -330,10 +393,10 @@ export default function LoginPage() {
             {/* ── 로그인 폼 ── */}
             {isLogin && (
               <form onSubmit={handleLogin} style={s.form}>
-                <Field label="로그인 아이디" icon="🪪">
+                <Field label="아이디">
                   <input name="id" type="text" value={form.id} onChange={handle} placeholder="아이디" style={s.input} required autoComplete="username" />
                 </Field>
-                <Field label="비밀번호" icon="🔒">
+                <Field label="비밀번호">
                   <input name="password" type="password" value={form.password} onChange={handle} placeholder="비밀번호" style={s.input} required autoComplete="current-password" />
                 </Field>
                 {error && <div style={s.error}>{error}</div>}
@@ -343,47 +406,54 @@ export default function LoginPage() {
               </form>
             )}
 
-            {/* ── 회원가입 Step1 폼 ── */}
-            {!isLogin && signupStep === 1 && (
+            {/* ── 회원가입 Step1-1: 계정 정보 ── */}
+            {!isLogin && signupStep === 1 && signupInfoStep === 1 && (
+              <form onSubmit={handleSignupAccountNext} style={s.form}>
+                <Field label="아이디" error={fieldErrors.id}>
+                  <input name="id" value={form.id} onChange={handle} placeholder="아이디" style={{ ...s.input, ...(fieldErrors.id ? s.inputError : {}) }} required />
+                </Field>
+
+                <Field label="비밀번호" error={fieldErrors.password}>
+                  <input name="password" type="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
+                </Field>
+
+                <Field label="비밀번호 확인" error={fieldErrors.passwordConfirm}>
+                  <input
+                    name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={handle}
+                    placeholder="비밀번호 재입력"
+                    style={{
+                      ...s.input,
+                      border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}`,
+                    }}
+                    required autoComplete="new-password"
+                  />
+                </Field>
+
+                <div style={s.fieldGroup}>
+                  <Field label="이메일" error={fieldErrors.email}>
+                    <input name="email" type="email" value={form.email} onChange={handle} placeholder="you@example.com" style={{ ...s.input, ...(fieldErrors.email ? s.inputError : {}) }} required autoComplete="email" />
+                  </Field>
+                  <div style={s.emailHint}>※ gmail은 사용 불가합니다.</div>
+                </div>
+
+                {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {error && <div style={s.error}>{error}</div>}
+
+                <button type="submit" style={s.cta}>
+                  다음 →
+                </button>
+              </form>
+            )}
+
+            {/* ── 회원가입 Step1-2: 본인인증 정보 ── */}
+            {!isLogin && signupStep === 1 && signupInfoStep === 2 && (
               <form onSubmit={handleSignupStep1} style={s.form}>
-                <Field label="이름" icon="👤" error={fieldErrors.name}>
+                <Field label="이름" error={fieldErrors.name}>
                   <input name="name" value={form.name} onChange={handle} placeholder="홍길동" style={{ ...s.input, ...(fieldErrors.name ? s.inputError : {}) }} required />
                 </Field>
 
-                <Field label="이메일" icon="✉" error={fieldErrors.email}>
-                  <input name="email" type="email" value={form.email} onChange={handle} placeholder="you@example.com" style={{ ...s.input, ...(fieldErrors.email ? s.inputError : {}) }} required autoComplete="email" />
-                </Field>
-
                 <div style={s.row2}>
-                  <Field label="비밀번호" icon="🔒" error={fieldErrors.password}>
-                    <input name="password" type="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
-                  </Field>
-                  <Field label="비밀번호 확인" icon="🔒" error={fieldErrors.passwordConfirm}>
-                    <input
-                      name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={handle}
-                      placeholder="비밀번호 재입력"
-                      style={{
-                        ...s.input,
-                        border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}`,
-                      }}
-                      required autoComplete="new-password"
-                    />
-                  </Field>
-                </div>
-
-                {/* 계정 정보 구분선 */}
-                <div style={s.divider}><span style={s.dividerText}>계정 정보</span></div>
-
-                <Field label="로그인 아이디" icon="🪪" error={fieldErrors.id}>
-                  <input name="id" value={form.id} onChange={handle} placeholder="사용할 아이디" style={{ ...s.input, ...(fieldErrors.id ? s.inputError : {}) }} required />
-                </Field>
-
-                <Field label="주민등록번호 (13자리)" icon="🔢" error={fieldErrors.identity}>
-                  <input name="identity" type="password" value={form.identity} onChange={handle} placeholder="하이픈(-) 없이 13자리 입력" maxLength={13} style={{ ...s.input, ...(fieldErrors.identity ? s.inputError : {}) }} required autoComplete="off" />
-                </Field>
-
-                <div style={s.row2}>
-                  <Field label="통신사" icon="📶" error={fieldErrors.telecom}>
+                  <Field label="통신사" error={fieldErrors.telecom}>
                     <select name="telecom" value={form.telecom} onChange={handle} style={s.input}>
                       <option value="0">SKT</option>
                       <option value="1">KT</option>
@@ -393,7 +463,7 @@ export default function LoginPage() {
                       <option value="5">알뜰폰(LG U+)</option>
                     </select>
                   </Field>
-                  <Field label="인증방법" icon="🔐" error={fieldErrors.authMethod}>
+                  <Field label="인증방법" error={fieldErrors.authMethod}>
                     <select name="authMethod" value={form.authMethod} onChange={handle} style={s.input}>
                       <option value="0">SMS 인증</option>
                       <option value="1">PASS 앱 인증</option>
@@ -401,8 +471,36 @@ export default function LoginPage() {
                   </Field>
                 </div>
 
-                <Field label="전화번호" icon="📱" error={fieldErrors.phoneNo}>
+                <Field label="전화번호" error={fieldErrors.phoneNo}>
                   <input name="phoneNo" value={form.phoneNo} onChange={handle} placeholder="01012345678 (- 없이)" style={{ ...s.input, ...(fieldErrors.phoneNo ? s.inputError : {}) }} required />
+                </Field>
+
+                <Field label="주민등록번호" error={fieldErrors.identity}>
+                  <div style={s.identityRow}>
+                    <input
+                      name="identityFront"
+                      inputMode="numeric"
+                      value={form.identityFront}
+                      onChange={handleIdentityFront}
+                      maxLength={6}
+                      style={{ ...s.input, ...s.identityInput, ...(fieldErrors.identity ? s.inputError : {}) }}
+                      required
+                      autoComplete="off"
+                    />
+                    <span style={s.identityDash}>-</span>
+                    <input
+                      ref={identityBackRef}
+                      name="identityBack"
+                      type="password"
+                      inputMode="numeric"
+                      value={form.identityBack}
+                      onChange={handleIdentityBack}
+                      maxLength={7}
+                      style={{ ...s.input, ...s.identityInput, ...(fieldErrors.identity ? s.inputError : {}) }}
+                      required
+                      autoComplete="off"
+                    />
+                  </div>
                 </Field>
 
                 <label style={s.agree}>
@@ -420,6 +518,9 @@ export default function LoginPage() {
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
                   {loading ? '처리 중...' : '인증 요청 →'}
                 </button>
+                <button type="button" onClick={() => setSignupInfoStep(1)} style={s.backBtn}>
+                  ← 계정 정보 수정
+                </button>
               </form>
             )}
 
@@ -427,7 +528,7 @@ export default function LoginPage() {
             {!isLogin && signupStep === 2 && (
               <form onSubmit={handleSignupStep2} style={s.form}>
                 {form.authMethod === '0' ? (
-                  <Field label="SMS 인증번호" icon="💬" error={fieldErrors.smsAuthNo}>
+                  <Field label="SMS 인증번호" error={fieldErrors.smsAuthNo}>
                     <input
                       value={smsAuthNo}
                       onChange={(e) => {
@@ -466,7 +567,7 @@ export default function LoginPage() {
             {/* ── 회원가입 Step3: 이메일 인증 ── */}
             {!isLogin && signupStep === 3 && (
               <form onSubmit={handleSignupStep3} style={s.form}>
-                <Field label="이메일 인증번호" icon="📧" error={fieldErrors.emailAuthNo}>
+                <Field label="이메일 인증번호" error={fieldErrors.emailAuthNo}>
                   <input
                     value={emailAuthNo}
                     onChange={(e) => {
@@ -502,7 +603,7 @@ export default function LoginPage() {
 
           <div style={s.securityBadge}>
             <span>🛡</span>
-            <span>256-bit AES 암호화 전송</span>
+            <span>CODEF API · 256-bit AES 암호화 전송</span>
           </div>
         </section>
       </div>
@@ -516,7 +617,6 @@ function Field({ label, icon, children, error }) {
     <label style={s.field}>
       <span style={s.fieldLabel}>{label}</span>
       <div style={s.inputWrap}>
-        <span style={s.inputIcon}>{icon}</span>
         {children}
       </div>
       {error && <span style={s.fieldError}>{error}</span>}
@@ -566,9 +666,9 @@ const s = {
   // LEFT
   left: { flex: '1 1 440px', maxWidth: 560, minWidth: 300 },
   brand: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 48 },
-  brandDot: { display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: 'linear-gradient(135deg, #2563eb, #059669)' },
-  brandText: { fontSize: 20, fontWeight: 800, color: '#0f766e', letterSpacing: -0.3 },
-  headline: { fontSize: 40, fontWeight: 800, lineHeight: 1.2, margin: 0, letterSpacing: -0.8 },
+  brandDot: { display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: 'linear-gradient(135deg, #2F6FE8, #22b8cf)' },
+  brandText: { fontSize: 20, fontWeight: 800, color: '#2563eb', letterSpacing: -0.3 },
+  headline: { fontSize: 40, fontWeight: 800, lineHeight: 1.2, margin: 0, letterSpacing: -0.8, textShadow: '0 1px 0 rgba(255,255,255,.5)' },
   subcopy: { fontSize: 15, color: '#475569', lineHeight: 1.7, marginTop: 16, marginBottom: 32 },
   featureList: { display: 'flex', flexDirection: 'column', gap: 12 },
   feature: {
@@ -608,13 +708,17 @@ const s = {
 
   // 폼
   form: { display: 'flex', flexDirection: 'column', gap: 12 },
+  fieldGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
+  emailHint: { fontSize: 11.5, color: '#94a3b8', lineHeight: 1.4, marginTop: -1, paddingLeft: 2 },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
   fieldLabel: { fontSize: 11.5, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, textTransform: 'uppercase' },
   fieldError: { fontSize: 11.5, color: '#dc2626', marginTop: 2 },
   inputWrap: { position: 'relative' },
-  inputIcon: { position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#94a3b8', pointerEvents: 'none' },
-  input: { width: '100%', padding: '11px 14px 11px 36px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none', background: '#f8fafc', boxSizing: 'border-box', transition: 'border-color .15s, background .15s' },
+  input: { width: '100%', padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none', background: '#f8fafc', boxSizing: 'border-box', transition: 'border-color .15s, background .15s' },
   inputError: { border: '1.5px solid #ef4444' },
+  identityRow: { display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8 },
+  identityInput: { padding: '11px 14px', textAlign: 'center', letterSpacing: 0.5 },
+  identityDash: { color: '#94a3b8', fontWeight: 700, fontSize: 16 },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   hintError: { fontSize: 12, color: '#dc2626', marginTop: -4 },
   agree: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: '#475569', lineHeight: 1.5, marginTop: 4 },
