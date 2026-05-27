@@ -1610,3 +1610,155 @@ body::before {
     padding: 0 14px;
   }
 }
+
+/* ===================== Navbar 사용자 드롭다운 ===================== */
+.mc-user-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.mc-user-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: max-content;
+  min-width: 0;
+  padding: 2px 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.12);
+  z-index: 300;
+}
+
+.mc-user-menu::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  width: 10px;
+  height: 10px;
+  background: #FFFFFF;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+
+.mc-user-menu-id {
+  display: block;
+  width: 100%;
+  padding: 3px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: right;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.mc-user-menu-id:hover {
+  color: var(--blue);
+}
+
+.mc-user-menu-logout {
+  width: 100%;
+  margin-top: 2px;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: #F8FAFC;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  cursor: pointer;
+}
+
+.mc-user-menu-logout:hover {
+  background: #EEF4FF;
+  color: var(--blue);
+}
+
+/* ===================== AccountPage ===================== */
+.mc-account-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.mc-account-card-wide {
+  grid-column: 1 / -1;
+}
+
+.mc-account-section-title {
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-1);
+  letter-spacing: -0.02em;
+}
+
+.mc-account-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mc-account-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 14px;
+}
+
+.mc-account-info-row:last-child { border-bottom: 0; }
+
+.mc-account-info-row span { color: var(--text-3); font-weight: 700; }
+
+.mc-account-info-row strong { color: var(--text-1); font-weight: 800; word-break: break-all; text-align: right; }
+
+.mc-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mc-account-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-2);
+}
+
+.mc-account-message {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #F8FAFC;
+  border: 1px solid var(--border-soft);
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mc-account-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mc-account-submit {
+  justify-content: center;
+  border-radius: 9px;
+  padding: 7px 14px;
+  min-width: 64px;
+  font-size: 13px;
+}
