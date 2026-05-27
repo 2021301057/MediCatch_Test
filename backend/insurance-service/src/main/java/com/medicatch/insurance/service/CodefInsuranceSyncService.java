@@ -14,7 +14,10 @@ import io.codef.api.EasyCodefUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -43,18 +46,26 @@ public class CodefInsuranceSyncService {
     private final PolicyRepository policyRepository;
     private final ClaimPaymentRepository claimPaymentRepository;
     private final CoverageComparisonRepository coverageComparisonRepository;
+    private final TransactionTemplate requiresNewTx;
 
     public CodefInsuranceSyncService(ObjectMapper objectMapper,
                                      PolicyRepository policyRepository,
                                      ClaimPaymentRepository claimPaymentRepository,
-                                     CoverageComparisonRepository coverageComparisonRepository) {
+                                     CoverageComparisonRepository coverageComparisonRepository,
+                                     PlatformTransactionManager txManager) {
         this.objectMapper = objectMapper;
         this.policyRepository = policyRepository;
         this.claimPaymentRepository = claimPaymentRepository;
         this.coverageComparisonRepository = coverageComparisonRepository;
+        this.requiresNewTx = new TransactionTemplate(txManager);
+        this.requiresNewTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Transactional
+    /**
+     * CODEF API 호출은 트랜잭션 없이 진행하고, 저장은 savePolicies/saveClaimPayments/
+     * saveCoverageComparisons 내부에서 개별 트랜잭션으로 처리한다.
+     * (long-running HTTP + per-row 부분 실패 허용을 위해 outer @Transactional 제거)
+     */
     public int syncInsuranceData(Long userId, String codefId, String codefPassword) {
         try {
             if (publicKey == null || publicKey.isBlank()) {
@@ -95,7 +106,7 @@ public class CodefInsuranceSyncService {
 
     @SuppressWarnings("unchecked")
     private int savePolicies(Long userId, String codefId, Map<String, Object> data) {
-        policyRepository.deleteByCodefId(codefId);
+        requiresNewTx.executeWithoutResult(status -> policyRepository.deleteByCodefId(codefId));
 
         List<Policy> toSave = new ArrayList<>();
 
@@ -170,18 +181,32 @@ public class CodefInsuranceSyncService {
         });
 
         List<Policy> unique = new ArrayList<>(deduped.values());
-        policyRepository.saveAll(unique);
-        log.info("보험 데이터 저장 완료 - codefId: {}, policies: {}", codefId, unique.size());
+        int saved = 0;
+        List<String> failed = new ArrayList<>();
+        // 개별 보험을 REQUIRES_NEW로 저장 → 한 건 실패가 다른 건에 영향 없음
+        for (Policy p : unique) {
+            try {
+                requiresNewTx.executeWithoutResult(status -> policyRepository.save(p));
+                saved++;
+            } catch (Exception e) {
+                String key = p.getPolicyNumber() != null ? p.getPolicyNumber() : p.getPolicyNumberHid();
+                failed.add(key + " (" + p.getInsurerName() + ")");
+                log.warn("보험 저장 실패 - policyNumber: {}, insurer: {}, reason: {}",
+                        key, p.getInsurerName(), e.getMessage());
+            }
+        }
+        log.info("보험 데이터 저장 완료 - codefId: {}, saved: {}/{}, failed: {}",
+                codefId, saved, unique.size(), failed);
 
         saveClaimPayments(userId, codefId, data);
         saveCoverageComparisons(userId, codefId, data);
 
-        return unique.size();
+        return saved;
     }
 
     @SuppressWarnings("unchecked")
     private void saveCoverageComparisons(Long userId, String codefId, Map<String, Object> data) {
-        coverageComparisonRepository.deleteByCodefId(codefId);
+        requiresNewTx.executeWithoutResult(status -> coverageComparisonRepository.deleteByCodefId(codefId));
 
         List<Map<String, Object>> list =
                 (List<Map<String, Object>>) data.getOrDefault("resFlatRateStatisticsList", List.of());
@@ -201,13 +226,21 @@ public class CodefInsuranceSyncService {
                     .build());
         }
 
-        coverageComparisonRepository.saveAll(comparisons);
-        log.info("보장 비교 통계 저장 완료 - codefId: {}, comparisons: {}", codefId, comparisons.size());
+        int saved = 0;
+        for (CoverageComparison c : comparisons) {
+            try {
+                requiresNewTx.executeWithoutResult(status -> coverageComparisonRepository.save(c));
+                saved++;
+            } catch (Exception e) {
+                log.warn("보장 비교 저장 실패 - coverageName: {}, reason: {}", c.getCoverageName(), e.getMessage());
+            }
+        }
+        log.info("보장 비교 통계 저장 완료 - codefId: {}, saved: {}/{}", codefId, saved, comparisons.size());
     }
 
     @SuppressWarnings("unchecked")
     private void saveClaimPayments(Long userId, String codefId, Map<String, Object> data) {
-        claimPaymentRepository.deleteByCodefId(codefId);
+        requiresNewTx.executeWithoutResult(status -> claimPaymentRepository.deleteByCodefId(codefId));
 
         List<Map<String, Object>> paymentList =
                 (List<Map<String, Object>>) data.getOrDefault("resActualLossPaymentList", List.of());
@@ -249,8 +282,16 @@ public class CodefInsuranceSyncService {
             }
         }
 
-        claimPaymentRepository.saveAll(payments);
-        log.info("보험금 지급 내역 저장 완료 - codefId: {}, payments: {}", codefId, payments.size());
+        int saved = 0;
+        for (ClaimPayment cp : payments) {
+            try {
+                requiresNewTx.executeWithoutResult(status -> claimPaymentRepository.save(cp));
+                saved++;
+            } catch (Exception e) {
+                log.warn("보험금 지급 저장 실패 - companyName: {}, reason: {}", cp.getCompanyName(), e.getMessage());
+            }
+        }
+        log.info("보험금 지급 내역 저장 완료 - codefId: {}, saved: {}/{}", codefId, saved, payments.size());
     }
 
     private boolean isNonLifeCompany(String companyName) {
