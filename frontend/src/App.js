@@ -14,6 +14,7 @@ import InsuranceList    from './pages/InsuranceList';
 import MedicalRecords   from './pages/MedicalRecords';
 import InsurancePlan    from './pages/InsurancePlan';
 import HealthReport     from './pages/HealthReport';
+import AccountPage      from './pages/AccountPage';
 
 function Layout({ children }) {
   const location = useLocation();
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/medical-records" element={<PrivateRoute><MedicalRecords /></PrivateRoute>} />
           <Route path="/insurance-plan"  element={<PrivateRoute><InsurancePlan /></PrivateRoute>} />
           <Route path="/health-report"   element={<PrivateRoute><HealthReport /></PrivateRoute>} />
+          <Route path="/account"         element={<PrivateRoute><AccountPage /></PrivateRoute>} />
           <Route path="/chat"            element={<PrivateRoute><Navigate to="/" replace /></PrivateRoute>} />
           <Route path="*"                element={<Navigate to="/" replace />} />
         </Routes>
