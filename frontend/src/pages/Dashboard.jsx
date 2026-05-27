@@ -56,7 +56,13 @@ export default function Dashboard() {
   const [nextCheckup, setNextCheckup] = useState(null);
 
   useEffect(() => {
-    healthAPI.getMedicalRecords()
+    // 대시보드는 최근 12개월 기준으로 집계
+    const today = new Date();
+    const since = new Date(today);
+    since.setMonth(since.getMonth() - 12);
+    const startDate = since.toISOString().slice(0, 10);
+
+    healthAPI.getMedicalRecords({ startDate })
       .then((rows) => {
         if (!Array.isArray(rows)) return;
         setTotalVisits(rows.length);

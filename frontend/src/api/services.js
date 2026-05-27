@@ -95,7 +95,7 @@ export const authAPI = {
 
 // ── Health ────────────────────────────────────────
 export const healthAPI = {
-  getMedicalRecords: () => api.get('/health/medical-records')
+  getMedicalRecords: (params) => api.get('/health/medical-records', { params })
     .then((rows) => Array.isArray(rows) ? rows.map(normalizeMedicalRecord) : rows),
   getMedications:    () => api.get('/health/medications'),
   getCheckupResults: () => api.get('/health/checkup-results')
