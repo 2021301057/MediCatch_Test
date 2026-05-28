@@ -50,7 +50,6 @@ const normalizePolicy = (row) => {
     insurer_name: 'companyName',
     policy_details: 'productName',
     policy_number: 'policyNumber',
-    policy_number_hid: 'policyNumberHid',
     insurance_type: 'policyType',
     start_date: 'startDate',
     end_date: 'endDate',

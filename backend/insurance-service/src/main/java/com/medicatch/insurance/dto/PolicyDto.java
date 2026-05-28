@@ -18,7 +18,6 @@ public class PolicyDto {
     private String companyName;
     private String productName;
     private String policyNumber;
-    private String policyNumberHid;
     private String policyType;
     private String contractStatus;
     private LocalDate startDate;
@@ -58,7 +57,6 @@ public class PolicyDto {
                 .companyName(p.getInsurerName())
                 .productName(p.getPolicyDetails())
                 .policyNumber(p.getPolicyNumber())
-                .policyNumberHid(p.getPolicyNumberHid())
                 .policyType(p.getInsuranceType())
                 .contractStatus(p.isActive() ? "ACTIVE" : "EXPIRED")
                 .startDate(p.getStartDate())
