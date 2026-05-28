@@ -17,6 +17,8 @@ public class UserProfileResponse {
     private Long userId;
     private String email;
     private String name;
+    private String codefId;
+    private String phoneNo;
     private LocalDate birthDate;
     private String gender;
     private LocalDateTime createdAt;

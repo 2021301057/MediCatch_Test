@@ -134,6 +134,7 @@ public class AuthService {
                 .email(sessionData.getEmail())
                 .passwordHash(sessionData.getBcryptHash())
                 .name(sessionData.getName())
+                .phoneNo(sessionData.getPhoneNo())
                 .birthDate(sessionData.getBirthDate())
                 .gender(gender)
                 .codefId(sessionData.getCodefId())
@@ -150,6 +151,7 @@ public class AuthService {
                 savedUser.getEmail(),
                 savedUser.getName(),
                 savedUser.getCodefId(),
+                savedUser.getPhoneNo(),
                 accessToken,
                 refreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -183,6 +185,7 @@ public class AuthService {
                 user.getEmail(),
                 user.getName(),
                 user.getCodefId(),
+                user.getPhoneNo(),
                 accessToken,
                 refreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()
@@ -218,6 +221,7 @@ public class AuthService {
                 user.getEmail(),
                 user.getName(),
                 user.getCodefId(),
+                user.getPhoneNo(),
                 newAccessToken,
                 newRefreshToken,
                 jwtTokenProvider.getAccessTokenExpiry()

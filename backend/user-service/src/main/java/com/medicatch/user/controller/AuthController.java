@@ -118,6 +118,8 @@ public class AuthController {
                 .userId(user.getId())
                 .email(user.getEmail())
                 .name(user.getName())
+                .codefId(user.getCodefId())
+                .phoneNo(user.getPhoneNo())
                 .birthDate(user.getBirthDate())
                 .gender(user.getGender().name())
                 .createdAt(user.getCreatedAt())

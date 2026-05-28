@@ -96,7 +96,7 @@ public class CodefService {
 
             String sessionKey = UUID.randomUUID().toString();
             signupSessions.put(sessionKey, new SignupSessionData(
-                    email, name, birthDate, gender, codefId, bcryptHash, rsaPassword,
+                    email, name, phoneNo, birthDate, gender, codefId, bcryptHash, rsaPassword,
                     authMethod, paramMap, step1Data, null, null, LocalDateTime.now()
             ));
 
@@ -438,6 +438,7 @@ public class CodefService {
     public static class SignupSessionData {
         private String email;
         private String name;
+        private String phoneNo;
         private LocalDate birthDate;
         private String gender;
         private String codefId;

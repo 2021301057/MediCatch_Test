@@ -15,18 +15,20 @@ public class AuthResponse {
     private String email;
     private String name;
     private String codefId;
+    private String phoneNo;
     private String accessToken;
     private String refreshToken;
     private long expiresIn;
     private String tokenType;
 
-    public static AuthResponse of(Long userId, String email, String name, String codefId,
+    public static AuthResponse of(Long userId, String email, String name, String codefId, String phoneNo,
                                    String accessToken, String refreshToken, long expiresIn) {
         return AuthResponse.builder()
                 .userId(userId)
                 .email(email)
                 .name(name)
                 .codefId(codefId)
+                .phoneNo(phoneNo)
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .expiresIn(expiresIn)

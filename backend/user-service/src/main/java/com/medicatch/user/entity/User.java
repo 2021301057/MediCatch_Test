@@ -33,6 +33,9 @@ public class User {
     @Column(nullable = false)
     private String name;
 
+    @Column(length = 20)
+    private String phoneNo;
+
     @Column(nullable = false)
     private LocalDate birthDate;
 
