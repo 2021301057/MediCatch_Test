@@ -80,7 +80,7 @@ server:
     context-path: /
 
 jwt:
-  secret: medicatch-secret-key-for-jwt-token-generation-2024-secure-key-make-it-long
+  secret: ${JWT_SECRET}
 
 eureka:
   client:

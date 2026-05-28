@@ -16,7 +16,7 @@ import java.util.Date;
 @Component
 public class JwtTokenProvider {
 
-    @Value("${jwt.secret:medicatch-secret-key-for-jwt-token-generation-2024}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.access-token-expire:900000}")  // 15 minutes in milliseconds

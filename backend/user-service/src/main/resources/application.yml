@@ -26,7 +26,7 @@ server:
     include-message: always
 
 jwt:
-  secret: medicatch-secret-key-for-jwt-token-generation-2024-secure-key-make-it-long
+  secret: ${JWT_SECRET}
   access-token-expire: 900000
   refresh-token-expire: 604800000
 

@@ -20,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
 
-    @Value("${jwt.secret:medicatch-secret-key-for-jwt-token-generation-2024-secure-key-make-it-long}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
 
     public JwtAuthenticationFilter() {
