@@ -18,7 +18,7 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
       MYSQL_DATABASE: medicatch
     # 호스트의 mysql 클라이언트 디버깅용으로만 127.0.0.1에 바인딩 (외부 노출 차단)
     ports:
@@ -77,14 +77,14 @@ services:
       SERVER_PORT: 8001
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_user
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (min 64 chars for HS512)}
-      CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID}
-      CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET}
+      CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID:?CODEF_API_CLIENT_ID must be set in .env}
+      CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET:?CODEF_API_CLIENT_SECRET must be set in .env}
       CODEF_DEMO_CLIENT_ID: ${CODEF_DEMO_CLIENT_ID}
       CODEF_DEMO_CLIENT_SECRET: ${CODEF_DEMO_CLIENT_SECRET}
-      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY}
+      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY:?CODEF_PUBLIC_KEY must be set in .env}
       CODEF_USE_DEMO: ${CODEF_USE_DEMO:-true}
     depends_on:
       mysql:
@@ -102,14 +102,14 @@ services:
       SERVER_PORT: 8002
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_health
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       CODEF_HEALTH_API_URL: ${CODEF_HEALTH_API_URL:-https://api.codef.io}
-      CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID}
-      CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET}
+      CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID:?CODEF_API_CLIENT_ID must be set in .env}
+      CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET:?CODEF_API_CLIENT_SECRET must be set in .env}
       CODEF_DEMO_CLIENT_ID: ${CODEF_DEMO_CLIENT_ID}
       CODEF_DEMO_CLIENT_SECRET: ${CODEF_DEMO_CLIENT_SECRET}
-      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY}
+      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY:?CODEF_PUBLIC_KEY must be set in .env}
       CODEF_USE_DEMO: ${CODEF_USE_DEMO:-true}
     depends_on:
       mysql:
@@ -127,13 +127,13 @@ services:
       SERVER_PORT: 8003
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_insurance
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID}
-      CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET}
+      CODEF_API_CLIENT_ID: ${CODEF_API_CLIENT_ID:?CODEF_API_CLIENT_ID must be set in .env}
+      CODEF_API_CLIENT_SECRET: ${CODEF_API_CLIENT_SECRET:?CODEF_API_CLIENT_SECRET must be set in .env}
       CODEF_DEMO_CLIENT_ID: ${CODEF_DEMO_CLIENT_ID}
       CODEF_DEMO_CLIENT_SECRET: ${CODEF_DEMO_CLIENT_SECRET}
-      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY}
+      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY:?CODEF_PUBLIC_KEY must be set in .env}
       CODEF_USE_DEMO: ${CODEF_USE_DEMO:-true}
     depends_on:
       mysql:
@@ -151,8 +151,8 @@ services:
       SERVER_PORT: 8004
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_analysis
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
-      AI_API_KEY: ${AI_API_KEY}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
+      AI_API_KEY: ${AI_API_KEY:?AI_API_KEY must be set in .env (Groq/OpenAI key)}
       AI_MODEL: ${AI_MODEL:-llama-3.3-70b-versatile}
       AI_BASE_URL: ${AI_BASE_URL:-https://api.groq.com/openai/v1}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
@@ -172,8 +172,8 @@ services:
       SERVER_PORT: 8007
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/medicatch_chat
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-medicatch123}
-      AI_API_KEY: ${AI_API_KEY}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
+      AI_API_KEY: ${AI_API_KEY:?AI_API_KEY must be set in .env (Groq/OpenAI key)}
       AI_MODEL: ${AI_MODEL:-llama-3.3-70b-versatile}
       AI_BASE_URL: ${AI_BASE_URL:-https://api.groq.com/openai/v1}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
