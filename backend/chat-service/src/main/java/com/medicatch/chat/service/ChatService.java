@@ -248,7 +248,7 @@ public class ChatService {
             if (hasSupp && !"SUPPLEMENTARY".equals(String.valueOf(rawType))) {
                 m.put("실손포함여부", "포함");
             }
-            Object gen = p.get("silsonGeneration");
+            Object gen = p.get("actualLossGeneration");
             if (gen != null && !String.valueOf(gen).isBlank()) {
                 m.put("실손세대", gen);
             }
