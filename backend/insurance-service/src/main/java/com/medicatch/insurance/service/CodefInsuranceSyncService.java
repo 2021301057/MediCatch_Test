@@ -82,7 +82,6 @@ public class CodefInsuranceSyncService {
             EasyCodef codef = createCodef();
             log.info("CODEF 보험 계약 정보 조회 - codefId: {}", codefId);
             String result = codef.requestProduct(CONTRACT_URL, serviceType(), params);
-            log.debug("보험 계약 응답: {}", result);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
             Map<String, Object> resultField = toMap(responseMap.get("result"));

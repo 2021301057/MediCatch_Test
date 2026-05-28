@@ -87,7 +87,6 @@ public class CodefService {
 
             log.info("CODEF 내보험다보여 1차 요청 (PASS/SMS 트리거) - codefId: {}", codefId);
             String result = codef.requestProduct(REGISTER_URL, serviceType(), paramMap);
-            log.debug("CODEF 1차 응답: {}", result);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
             checkStep1Result(responseMap);
@@ -133,7 +132,6 @@ public class CodefService {
 
             log.info("CODEF 내보험다보여 2차 요청 (PASS/SMS 확인) - sessionKey: {}", sessionKey);
             String result = codef.requestCertification(REGISTER_URL, serviceType(), reqCertMap);
-            log.debug("CODEF 2차 응답: {}", result);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
             checkStep2Result(responseMap);
@@ -166,7 +164,6 @@ public class CodefService {
 
             log.info("CODEF 내보험다보여 3차 요청 (이메일 발송 트리거) - sessionKey: {}", sessionKey);
             String result = codef.requestCertification(REGISTER_URL, serviceType(), reqCertMap);
-            log.debug("CODEF 3차 응답: {}", result);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
             checkStep3Result(responseMap);
@@ -202,7 +199,6 @@ public class CodefService {
 
             log.info("CODEF 내보험다보여 4차 요청 (이메일 인증 확인) - sessionKey: {}", sessionKey);
             String result = codef.requestCertification(REGISTER_URL, serviceType(), reqCertMap);
-            log.debug("CODEF 4차 응답: {}", result);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
             checkFinalResult(responseMap);
@@ -236,7 +232,6 @@ public class CodefService {
 
             log.info("CODEF 아이디 가용성 확인 1차 - codefId: {}", codefId);
             String result1 = codef.requestProduct(STATUS_URL, serviceType(), paramMap);
-            log.debug("CODEF 아이디 확인 1차 응답: {}", result1);
 
             Map<String, Object> map1 = objectMapper.readValue(result1, Map.class);
             Map<String, Object> res1 = (Map<String, Object>) map1.get("result");
@@ -258,7 +253,6 @@ public class CodefService {
 
             log.info("CODEF 아이디 가용성 확인 2차 - codefId: {}", codefId);
             String result2 = codef.requestCertification(STATUS_URL, serviceType(), reqCertMap);
-            log.debug("CODEF 아이디 확인 2차 응답: {}", result2);
 
             Map<String, Object> map2 = objectMapper.readValue(result2, Map.class);
             Map<String, Object> res2 = (Map<String, Object>) map2.get("result");
