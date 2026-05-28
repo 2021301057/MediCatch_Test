@@ -79,7 +79,7 @@ public class ChatService {
                 .role(ChatHistory.Role.ASSISTANT)
                 .message(aiResponse)
                 .intentType(intentType)
-                .contextJson(safeToJson(intentContext.data))
+                .contextJson(null)
                 .build();
         ChatHistory saved = aiSuccess ? chatHistoryRepository.save(assistantChatHistory) : assistantChatHistory;
 
@@ -292,9 +292,12 @@ public class ChatService {
         return records.stream().limit(15).map(r -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("일자", r.getOrDefault("visitDate", r.get("visit_date")));
-            m.put("병원", r.getOrDefault("hospitalName", r.get("hospital")));
             m.put("진료과", r.get("department"));
-            m.put("진단", r.get("diagnosis"));
+            Object diag = r.get("diagnosis");
+            if (diag != null) {
+                String s = diag.toString();
+                m.put("진단", s.length() > 30 ? s.substring(0, 30) : s);
+            }
             return m;
         }).collect(Collectors.toList());
     }
