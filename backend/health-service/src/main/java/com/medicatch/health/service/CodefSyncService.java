@@ -886,6 +886,9 @@ public class CodefSyncService {
             String code = (String) resultField.get("code");
             log.info("HIRA 진료정보 2차 응답 - code: {}", code);
             if (!"CF-00000".equals(code)) {
+                if ("CF-03002".equals(code)) {
+                    throw new RuntimeException("앱 인증이 아직 완료되지 않았습니다. 인증 앱에서 승인 후 다시 눌러주세요.");
+                }
                 String msg = (String) resultField.getOrDefault("message", "진료정보 인증 실패");
                 throw new RuntimeException("진료정보(HIRA) 인증 오류 [" + code + "]: " + msg);
             }

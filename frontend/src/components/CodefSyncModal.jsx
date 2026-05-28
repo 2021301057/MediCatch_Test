@@ -42,10 +42,11 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
   }));
   const identityBackRef = useRef(null);
 
-  const [checkupSessionKey, setCheckupSessionKey] = useState('');
-  const [medicalSessionKey, setMedicalSessionKey] = useState('');
-  const [checkupResult,     setCheckupResult]     = useState(null);
-  const [medicalResult,     setMedicalResult]     = useState(null);
+  const [checkupSessionKey,  setCheckupSessionKey]  = useState('');
+  const [medicalSessionKey,  setMedicalSessionKey]  = useState('');
+  const [checkupResult,      setCheckupResult]      = useState(null);
+  const [insuranceResult,    setInsuranceResult]    = useState(null);
+  const [medicalResult,      setMedicalResult]      = useState(null);
 
   const handle = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
   const handleIdentityFront = (e) => {
@@ -70,7 +71,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
 
     setLoading(true);
     try {
-      const [, data] = await Promise.all([
+      const [insData, data] = await Promise.all([
         insuranceAPI.sync({ codefId: form.codefId, codefPassword: form.codefPassword }),
         healthAPI.syncCheckupStep1({
           userId,
@@ -80,6 +81,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         }),
       ]);
       localStorage.setItem('codefId', form.codefId);
+      setInsuranceResult(insData);
       setCheckupSessionKey(data.sessionKey);
       setScreen('checkup-auth');
     } catch (err) {
@@ -265,7 +267,8 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
         {screen === 'medical-ready' && (
           <div style={s.body}>
             <ResultBox title="건강검진 + 보험 연동 완료">
-              건강검진 결과 <b>{checkupResult?.savedCheckups ?? 0}건</b> 저장됐습니다.
+              건강검진 결과 <b>{checkupResult?.savedCheckups ?? 0}건</b>,{' '}
+              보험 계약 <b>{insuranceResult?.savedPolicies ?? 0}건</b> 저장됐습니다.
             </ResultBox>
             <InfoBox>
               이어서 진료 기록(HIRA) 연동을 시작합니다.<br />
@@ -300,6 +303,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
               <div style={s.doneDesc}>건강 데이터와 보험 정보를 안전하게 불러왔습니다.</div>
               <div style={s.resultGrid}>
                 <ResultRow label="건강검진 결과" value={`${checkupResult?.savedCheckups ?? 0}건`} />
+                <ResultRow label="보험 계약"     value={`${insuranceResult?.savedPolicies ?? 0}건`} />
                 <ResultRow label="진료 기록"     value={`${medicalResult?.savedMedicals ?? 0}건`} />
                 <ResultRow label="처방 약품"     value={`${medicalResult?.savedMedications ?? 0}건`} />
               </div>
