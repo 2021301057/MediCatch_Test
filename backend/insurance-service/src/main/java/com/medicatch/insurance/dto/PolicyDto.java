@@ -28,6 +28,7 @@ public class PolicyDto {
     private String paymentPeriod;
     private List<CoverageItemDto> coverageItems;
     private boolean hasSupplementaryCoverage;
+    private String silsonGeneration;
 
     @Data
     @Builder
@@ -52,6 +53,9 @@ public class PolicyDto {
                                 .build())
                         .collect(Collectors.toList());
 
+        boolean isSilson = "SUPPLEMENTARY".equals(p.getInsuranceType()) || p.isHasSupplementaryCoverage();
+        String generation = isSilson ? computeSilsonGeneration(p.getStartDate()) : null;
+
         return PolicyDto.builder()
                 .id(p.getId())
                 .companyName(p.getInsurerName())
@@ -67,6 +71,16 @@ public class PolicyDto {
                 .paymentPeriod(p.getPaymentPeriod())
                 .coverageItems(items)
                 .hasSupplementaryCoverage(p.isHasSupplementaryCoverage())
+                .silsonGeneration(generation)
                 .build();
+    }
+
+    private static String computeSilsonGeneration(LocalDate startDate) {
+        if (startDate == null) return null;
+        if (startDate.isBefore(LocalDate.of(2009, 10, 1))) return "1세대";
+        if (startDate.isBefore(LocalDate.of(2013, 4, 1)))  return "표준화실손";
+        if (startDate.isBefore(LocalDate.of(2017, 4, 1)))  return "2세대";
+        if (startDate.isBefore(LocalDate.of(2021, 7, 1)))  return "3세대";
+        return "4세대";
     }
 }

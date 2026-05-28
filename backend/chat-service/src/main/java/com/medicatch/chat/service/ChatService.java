@@ -240,14 +240,39 @@ public class ChatService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("회사", p.getOrDefault("companyName", p.get("insurer_name")));
             m.put("상품", p.getOrDefault("productName", p.get("policy_details")));
-            m.put("유형", p.getOrDefault("policyType", p.get("insurance_type")));
+            Object rawType = p.getOrDefault("policyType", p.get("insurance_type"));
+            m.put("유형", labelInsuranceType(rawType));
             m.put("월보험료", p.getOrDefault("monthlyPremium", p.get("monthly_premium")));
+
+            boolean hasSupp = Boolean.TRUE.equals(p.getOrDefault("hasSupplementaryCoverage", p.get("has_supplementary_coverage")));
+            if (hasSupp && !"SUPPLEMENTARY".equals(String.valueOf(rawType))) {
+                m.put("실손포함여부", "포함");
+            }
+            Object gen = p.get("silsonGeneration");
+            if (gen != null && !String.valueOf(gen).isBlank()) {
+                m.put("실손세대", gen);
+            }
+
             if (includeCoverage) {
                 String covSummary = summarizeCoverageItems(p.getOrDefault("coverageItems", p.get("coverage_items")));
                 if (!covSummary.isBlank()) m.put("보장", covSummary);
             }
             return m;
         }).collect(Collectors.toList());
+    }
+
+    private String labelInsuranceType(Object code) {
+        if (code == null) return null;
+        return switch (code.toString()) {
+            case "SUPPLEMENTARY" -> "실손의료비";
+            case "HEALTH" -> "건강";
+            case "SAVINGS" -> "저축";
+            case "CAR" -> "자동차";
+            case "PROPERTY" -> "화재/재물";
+            case "ACCIDENT" -> "상해";
+            case "NATIONAL_HEALTH" -> "국민건강보험";
+            default -> code.toString();
+        };
     }
 
     @SuppressWarnings("unchecked")
