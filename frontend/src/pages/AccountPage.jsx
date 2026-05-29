@@ -167,7 +167,7 @@ export default function AccountPage() {
           // 이메일로 임시비번 발송됨 → step3으로 이동 (세션키 유지)
           setStep(3);
           setTempPassword('');
-          setMessage(res.message || '이메일로 임시비밀번호를 발송했습니다. 확인 후 입력해주세요.');
+          setMessage(res.message || '휴대폰으로 임시비밀번호를 발송했습니다. 확인 후 입력해주세요.');
         } else {
           setMessage('비밀번호가 변경되었습니다.');
           setStep(1); setSessionKey(''); setSmsCode('');
@@ -183,7 +183,7 @@ export default function AccountPage() {
 
   // ── Step3: 이메일 임시비번 확인 → 최종 비밀번호 변경 완료 ──
   const handleConfirmStep3 = async () => {
-    if (!tempPassword.trim()) { setMessage('이메일로 받은 임시비밀번호를 입력해주세요.'); return; }
+    if (!tempPassword.trim()) { setMessage('휴대폰으로 받은 임시비밀번호를 입력해주세요.'); return; }
     setLoading('step3');
     try {
       await authAPI.changePwdStep3({ sessionKey, tempPassword: tempPassword.trim() });
@@ -191,7 +191,7 @@ export default function AccountPage() {
       setStep(1); setSessionKey(''); setSmsCode(''); setTempPassword('');
       setForm((f) => ({ ...f, password: '', passwordConfirm: '', identityFront: '', identityBack: '' }));
     } catch (e) {
-      setMessage(errMessage(e, '임시비밀번호가 올바르지 않습니다. 다시 확인해주세요.'));
+      setMessage(errMessage(e, '임시비밀번호가 올바르지 않습니다. 휴대폰 문자를 다시 확인해주세요.'));
     } finally {
       setLoading('');
     }
@@ -336,10 +336,10 @@ export default function AccountPage() {
                 )}
                 {step === 3 && activeAction === 'password' && (
                   <div>
-                    <label className="mc-account-label">이메일 임시비밀번호</label>
+                    <label className="mc-account-label">휴대폰 임시비밀번호</label>
                     <input className="mc-input" type="text" value={tempPassword}
                       onChange={(e) => { setTempPassword(e.target.value); setMessage(''); }}
-                      placeholder="이메일로 받은 임시비밀번호 입력" autoComplete="off" />
+                      placeholder="휴대폰으로 받은 임시비밀번호 입력" autoComplete="off" />
                   </div>
                 )}
               </div>

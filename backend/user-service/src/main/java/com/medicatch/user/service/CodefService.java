@@ -317,6 +317,7 @@ public class CodefService {
             paramMap.put("telecom", telecom);
             paramMap.put("phoneNo", phoneNo);
             paramMap.put("authMethod", authMethod);
+            paramMap.put("sendMethod", "1"); // 임시비번 휴대폰 수신
             if (email != null && !email.isBlank()) {
                 paramMap.put("email", email);
             }
