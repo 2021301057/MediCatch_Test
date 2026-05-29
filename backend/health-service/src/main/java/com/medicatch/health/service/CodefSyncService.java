@@ -562,12 +562,13 @@ public class CodefSyncService {
     public CheckupStep2Result syncCheckupStep2(String sessionKey) {
         CheckupMultiSession session = getValidCheckupMultiSession(sessionKey);
 
-        // 백그라운드 예측 futures 수집 (최대 30초 대기 — CODEF demo가 호출당 ~27초 소요)
+        // 백그라운드 예측 futures 수집 (최대 70초 대기)
+        // 실서버에서 건강나이/뇌졸중/당뇨/심뇌혈관 응답이 호출당 40초 이상 걸릴 수 있고,
+        // 4개를 800ms 간격으로 발사하므로 마지막 응답까지 30초로는 부족 → 70초로 여유 확보.
         List<CompletableFuture<CheckupApiContext>> pending = session.getPendingPredictionFutures();
         if (pending != null && !pending.isEmpty()) {
             try {
-                // CODEF demo가 호출당 ~27초 소요 → 사용자 인증 시간과 겹쳐도 여유 있게 30초 대기
-                CompletableFuture.allOf(pending.toArray(new CompletableFuture[0])).get(30, TimeUnit.SECONDS);
+                CompletableFuture.allOf(pending.toArray(new CompletableFuture[0])).get(70, TimeUnit.SECONDS);
             } catch (TimeoutException te) {
                 log.warn("예측 백그라운드 future 일부 미완료 - 완료된 것만 수집");
             } catch (Exception ignored) {}
