@@ -3,6 +3,7 @@ package com.medicatch.user.controller;
 import com.medicatch.user.dto.AuthResponse;
 import com.medicatch.user.dto.ChangeEmailRequest;
 import com.medicatch.user.dto.ChangePwdRequest;
+import com.medicatch.user.dto.ForgotPwdStep1Request;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
@@ -195,6 +196,43 @@ public class AuthController {
             throw new IllegalArgumentException("sessionKey와 tempPassword가 필요합니다.");
         }
         authService.changePwdStep3(userId, sessionKey, tempPassword);
+        return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
+    }
+
+    // ── 비밀번호 찾기 (비인증) ─────────────────────────────────────────
+
+    /** 비밀번호 찾기 1차: codefId로 사용자 조회 → CODEF SMS/PASS 인증 트리거 */
+    @PostMapping("/forgot-pwd/step1")
+    public ResponseEntity<SignupStep1Response> forgotPwdStep1(@Valid @RequestBody ForgotPwdStep1Request request) {
+        log.info("POST /api/auth/forgot-pwd/step1 - codefId: {}", request.getCodefId());
+        return ResponseEntity.ok(authService.forgotPwdStep1(request));
+    }
+
+    /** 비밀번호 찾기 2차: SMS/PASS 인증 확인 */
+    @PostMapping("/forgot-pwd/step2")
+    public ResponseEntity<Map<String, Object>> forgotPwdStep2(@Valid @RequestBody SignupStep2Request request) {
+        log.info("POST /api/auth/forgot-pwd/step2 - sessionKey: {}", request.getSessionKey());
+        boolean needsStep3 = authService.forgotPwdStep2(request);
+        if (needsStep3) {
+            return ResponseEntity.ok(Map.of(
+                    "needsStep3", true,
+                    "message", "휴대폰으로 임시비밀번호를 발송했습니다. 확인 후 입력해주세요.",
+                    "sessionKey", request.getSessionKey()
+            ));
+        }
+        return ResponseEntity.ok(Map.of("needsStep3", false, "message", "비밀번호가 변경되었습니다."));
+    }
+
+    /** 비밀번호 찾기 3차: 휴대폰 임시비번 확인 → CODEF 완료 + DB 갱신 */
+    @PostMapping("/forgot-pwd/step3")
+    public ResponseEntity<Map<String, String>> forgotPwdStep3(@RequestBody Map<String, String> request) {
+        log.info("POST /api/auth/forgot-pwd/step3");
+        String sessionKey = request.get("sessionKey");
+        String tempPassword = request.get("tempPassword");
+        if (sessionKey == null || sessionKey.isBlank() || tempPassword == null || tempPassword.isBlank()) {
+            throw new IllegalArgumentException("sessionKey와 tempPassword가 필요합니다.");
+        }
+        authService.forgotPwdStep3(sessionKey, tempPassword);
         return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
     }
 

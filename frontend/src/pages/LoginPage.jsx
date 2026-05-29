@@ -4,9 +4,11 @@ import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
   const [signupInfoStep, setSignupInfoStep] = useState(1); // 1: 계정 정보 | 2: 본인인증 정보
+  const [forgotStep, setForgotStep] = useState(1); // 1 | 2 | 3
+  const [forgotTempPassword, setForgotTempPassword] = useState('');
   const [sessionKey, setSessionKey] = useState('');
 
   const [form, setForm] = useState({
@@ -47,6 +49,12 @@ export default function LoginPage() {
       setSmsAuthNo('');
       setEmailAuthNo('');
     }
+    if (mode === 'forgot') {
+      setForgotStep(1);
+      setSessionKey('');
+      setSmsAuthNo('');
+      setForgotTempPassword('');
+    }
   }, [mode]);
 
   const handle = (e) => {
@@ -84,6 +92,97 @@ export default function LoginPage() {
     setFieldErrors({});
     if (next === 'signup') {
       setSignupInfoStep(1);
+    }
+  };
+
+  // ── 비밀번호 찾기 Step1 ─────────────────────────────────────────
+  const handleForgotStep1 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+
+    if (!form.id.trim()) { setFieldErrors({ id: '아이디를 입력해주세요.' }); return; }
+
+    const pw = form.password;
+    if (pw.length < 9 || pw.length > 20) { setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' }); return; }
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
+      setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' }); return;
+    }
+    if (pw !== form.passwordConfirm) { setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' }); return; }
+    if (!form.phoneNo.trim()) { setFieldErrors({ phoneNo: '전화번호를 입력해주세요.' }); return; }
+    const cleanIdentity = `${form.identityFront}${form.identityBack}`;
+    if (cleanIdentity.length !== 13) { setFieldErrors({ identity: '주민등록번호 13자리를 입력해주세요.' }); return; }
+
+    setLoading(true);
+    try {
+      const data = await authAPI.forgotPwdStep1({
+        codefId: form.id,
+        identity: cleanIdentity,
+        telecom: form.telecom,
+        phoneNo: form.phoneNo,
+        authMethod: form.authMethod,
+        password: form.password,
+        passwordConfirm: form.passwordConfirm,
+      });
+      setSessionKey(data.sessionKey);
+      setForgotStep(2);
+    } catch (err) {
+      const fe = err.response?.data?.fieldErrors;
+      if (fe && Object.keys(fe).length > 0) {
+        setFieldErrors(fe);
+        if (!fe.general) setError(err.response?.data?.message || '입력 정보를 확인해주세요.');
+      } else {
+        setError(err.response?.data?.message || '인증 요청에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 비밀번호 찾기 Step2 ──────────────────────────────────────────
+  const handleForgotStep2 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    if (form.authMethod === '0' && !smsAuthNo.trim()) {
+      setFieldErrors({ smsAuthNo: 'SMS 인증번호를 입력해주세요.' }); return;
+    }
+    setLoading(true);
+    try {
+      const res = await authAPI.forgotPwdStep2({ sessionKey, smsAuthNo: smsAuthNo.trim() });
+      if (res?.needsStep3) {
+        setForgotStep(3);
+        setForgotTempPassword('');
+      } else {
+        setSuccessMessage('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
+        switchMode('login');
+      }
+    } catch (err) {
+      const fe = err.response?.data?.fieldErrors;
+      if (fe && Object.keys(fe).length > 0) {
+        setFieldErrors(fe);
+      } else {
+        setError(err.response?.data?.message || '인증에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 비밀번호 찾기 Step3 ──────────────────────────────────────────
+  const handleForgotStep3 = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!forgotTempPassword.trim()) { setError('휴대폰으로 받은 임시비밀번호를 입력해주세요.'); return; }
+    setLoading(true);
+    try {
+      await authAPI.forgotPwdStep3({ sessionKey, tempPassword: forgotTempPassword.trim() });
+      setSuccessMessage('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
+      switchMode('login');
+    } catch (err) {
+      setError(err.response?.data?.message || '임시비밀번호가 올바르지 않습니다. 다시 확인해주세요.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -313,6 +412,7 @@ export default function LoginPage() {
   };
 
   const isLogin = mode === 'login';
+  const isForgot = mode === 'forgot';
   const pwMatch = form.passwordConfirm && form.password === form.passwordConfirm;
   const pwMismatch = form.passwordConfirm && form.password !== form.passwordConfirm;
 
@@ -350,6 +450,7 @@ export default function LoginPage() {
             <header style={s.formHead}>
               <h2 style={s.formTitle}>
                 {isLogin ? '다시 오신 것을 환영합니다'
+                  : isForgot ? '비밀번호 찾기'
                   : signupStep === 1 ? '계정 만들기'
                   : signupStep === 2 ? '본인 인증'
                   : '이메일 인증'}
@@ -357,6 +458,12 @@ export default function LoginPage() {
               <p style={s.formSub}>
                 {isLogin
                   ? '내보험다보여 아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
+                  : isForgot
+                  ? forgotStep === 1
+                    ? '아이디와 새 비밀번호, 본인인증 정보를 입력해주세요.'
+                    : forgotStep === 2
+                    ? (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')
+                    : '휴대폰으로 발송된 임시비밀번호를 입력해주세요.'
                   : signupStep === 1
                   ? signupInfoStep === 1
                     ? '아이디와 비밀번호, 이메일만 먼저 입력해주세요.'
@@ -367,8 +474,8 @@ export default function LoginPage() {
               </p>
             </header>
 
-            {/* 탭 – step2에서는 숨김 */}
-            {(isLogin || signupStep === 1) && (
+            {/* 탭 – forgot 모드 또는 step2에서는 숨김 */}
+            {!isForgot && (isLogin || signupStep === 1) && (
               <div style={s.tabs}>
                 <button type="button" onClick={() => switchMode('login')} style={{ ...s.tab, ...(isLogin ? s.tabActive : {}) }}>로그인</button>
                 <button type="button" onClick={() => switchMode('signup')} style={{ ...s.tab, ...(!isLogin ? s.tabActive : {}) }}>회원가입</button>
@@ -402,6 +509,103 @@ export default function LoginPage() {
                 {error && <div style={s.error}>{error}</div>}
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
                   {loading ? '처리 중...' : '로그인 →'}
+                </button>
+              </form>
+            )}
+
+            {/* ── 비밀번호 찾기 Step1 ── */}
+            {isForgot && forgotStep === 1 && (
+              <form onSubmit={handleForgotStep1} style={s.form}>
+                <Field label="아이디" error={fieldErrors.codefId || fieldErrors.id}>
+                  <input name="id" value={form.id} onChange={handle} placeholder="아이디" style={{ ...s.input, ...(fieldErrors.codefId || fieldErrors.id ? s.inputError : {}) }} required />
+                </Field>
+                <Field label="새 비밀번호" error={fieldErrors.password}>
+                  <input name="password" type="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
+                </Field>
+                <Field label="비밀번호 확인" error={fieldErrors.passwordConfirm}>
+                  <input name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={handle} placeholder="비밀번호 재입력"
+                    style={{ ...s.input, border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}` }}
+                    required autoComplete="new-password" />
+                </Field>
+                <div style={s.row2}>
+                  <Field label="통신사" error={fieldErrors.telecom}>
+                    <select name="telecom" value={form.telecom} onChange={handle} style={s.input}>
+                      <option value="0">SKT</option>
+                      <option value="1">KT</option>
+                      <option value="2">LG U+</option>
+                      <option value="3">알뜰폰(SKT)</option>
+                      <option value="4">알뜰폰(KT)</option>
+                      <option value="5">알뜰폰(LG U+)</option>
+                    </select>
+                  </Field>
+                  <Field label="인증방법" error={fieldErrors.authMethod}>
+                    <select name="authMethod" value={form.authMethod} onChange={handle} style={s.input}>
+                      <option value="0">SMS 인증</option>
+                      <option value="1">PASS 앱 인증</option>
+                    </select>
+                  </Field>
+                </div>
+                <Field label="전화번호" error={fieldErrors.phoneNo}>
+                  <input name="phoneNo" value={form.phoneNo} onChange={handle} placeholder="01012345678 (- 없이)" style={{ ...s.input, ...(fieldErrors.phoneNo ? s.inputError : {}) }} required />
+                </Field>
+                <Field label="주민등록번호" error={fieldErrors.identity}>
+                  <div style={s.identityRow}>
+                    <input name="identityFront" inputMode="numeric" value={form.identityFront} onChange={handleIdentityFront} maxLength={6}
+                      style={{ ...s.input, ...s.identityInput, ...(fieldErrors.identity ? s.inputError : {}) }} required autoComplete="off" />
+                    <span style={s.identityDash}>-</span>
+                    <input ref={identityBackRef} name="identityBack" type="password" inputMode="numeric" value={form.identityBack} onChange={handleIdentityBack} maxLength={7}
+                      style={{ ...s.input, ...s.identityInput, ...(fieldErrors.identity ? s.inputError : {}) }} required autoComplete="off" />
+                  </div>
+                </Field>
+                {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {error && <div style={s.error}>{error}</div>}
+                <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
+                  {loading ? '처리 중...' : '인증 요청 →'}
+                </button>
+                <button type="button" onClick={() => switchMode('login')} style={s.backBtn}>← 로그인으로 돌아가기</button>
+              </form>
+            )}
+
+            {/* ── 비밀번호 찾기 Step2 ── */}
+            {isForgot && forgotStep === 2 && (
+              <form onSubmit={handleForgotStep2} style={s.form}>
+                {form.authMethod === '0' ? (
+                  <Field label="SMS 인증번호" error={fieldErrors.smsAuthNo}>
+                    <input value={smsAuthNo} onChange={(e) => { setSmsAuthNo(e.target.value); clearFieldError('smsAuthNo'); }}
+                      placeholder="SMS로 받은 인증번호 입력" maxLength={8}
+                      style={{ ...s.input, ...(fieldErrors.smsAuthNo ? s.inputError : {}) }} autoFocus />
+                  </Field>
+                ) : (
+                  <div style={s.passNotice}>
+                    <span style={{ fontSize: 36, lineHeight: 1 }}>📲</span>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>PASS 앱을 확인해주세요</div>
+                      <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>휴대폰 PASS 앱에서 인증 요청을 수락한 후 아래 버튼을 눌러주세요.</div>
+                    </div>
+                  </div>
+                )}
+                {fieldErrors.smsAuthNo && <div style={s.error}>{fieldErrors.smsAuthNo}</div>}
+                {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {error && <div style={s.error}>{error}</div>}
+                <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
+                  {loading ? '처리 중...' : '인증 완료 →'}
+                </button>
+                <button type="button" onClick={() => { setForgotStep(1); setSessionKey(''); setSmsAuthNo(''); setError(''); setFieldErrors({}); }} style={s.backBtn}>
+                  ← 다시 입력하기
+                </button>
+              </form>
+            )}
+
+            {/* ── 비밀번호 찾기 Step3 ── */}
+            {isForgot && forgotStep === 3 && (
+              <form onSubmit={handleForgotStep3} style={s.form}>
+                <Field label="휴대폰 임시비밀번호">
+                  <input value={forgotTempPassword} onChange={(e) => { setForgotTempPassword(e.target.value); setError(''); }}
+                    placeholder="휴대폰으로 받은 임시비밀번호 입력" style={s.input} autoFocus autoComplete="off" />
+                </Field>
+                {error && <div style={s.error}>{error}</div>}
+                <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
+                  {loading ? '처리 중...' : '비밀번호 변경 →'}
                 </button>
               </form>
             )}
@@ -594,8 +798,11 @@ export default function LoginPage() {
 
             <div style={s.switchRow}>
               {isLogin ? (
-                <>아직 계정이 없으신가요?{' '}<button type="button" onClick={() => switchMode('signup')} style={s.linkBtn}>회원가입</button></>
-              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+                  <span>아직 계정이 없으신가요?{' '}<button type="button" onClick={() => switchMode('signup')} style={s.linkBtn}>회원가입</button></span>
+                  <span>비밀번호를 잊으셨나요?{' '}<button type="button" onClick={() => switchMode('forgot')} style={s.linkBtn}>비밀번호 찾기</button></span>
+                </div>
+              ) : isForgot ? null : (
                 <>이미 계정이 있으신가요?{' '}<button type="button" onClick={() => switchMode('login')} style={s.linkBtn}>로그인</button></>
               )}
             </div>

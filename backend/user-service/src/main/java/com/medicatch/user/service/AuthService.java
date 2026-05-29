@@ -4,6 +4,7 @@ import com.medicatch.user.config.JwtTokenProvider;
 import com.medicatch.user.dto.AuthResponse;
 import com.medicatch.user.dto.ChangeEmailRequest;
 import com.medicatch.user.dto.ChangePwdRequest;
+import com.medicatch.user.dto.ForgotPwdStep1Request;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
@@ -290,6 +291,7 @@ public class AuthService {
         String bcryptHash = passwordEncoder.encode(request.getPassword());
 
         return codefService.changePwdStep1(
+                userId,
                 user.getName(),
                 request.getIdentity(),
                 request.getTelecom(),
@@ -323,6 +325,48 @@ public class AuthService {
         user.setPasswordHash(bcryptHash);
         userRepository.save(user);
         log.info("비밀번호 변경 완료 (step3) - userId: {}", userId);
+    }
+
+    // ── 비밀번호 찾기 (비인증) ──────────────────────────────────────────
+
+    /** 비밀번호 찾기 1차: codefId로 사용자 조회 → CODEF SMS/PASS 인증 트리거 */
+    public SignupStep1Response forgotPwdStep1(ForgotPwdStep1Request request) {
+        User user = userRepository.findByCodefId(request.getCodefId())
+                .orElseThrow(() -> new SignupFieldException("codefId", "등록되지 않은 아이디입니다."));
+
+        if (!request.getPassword().equals(request.getPasswordConfirm())) {
+            throw new SignupFieldException("passwordConfirm", "비밀번호가 일치하지 않습니다.");
+        }
+        validatePassword(request.getPassword(), user.getCodefId());
+
+        String bcryptHash = passwordEncoder.encode(request.getPassword());
+
+        return codefService.changePwdStep1(
+                user.getId(),
+                user.getName(),
+                request.getIdentity(),
+                request.getTelecom(),
+                request.getPhoneNo(),
+                request.getAuthMethod() != null ? request.getAuthMethod() : "0",
+                user.getCodefId(),
+                request.getPassword(),
+                bcryptHash,
+                user.getEmail());
+    }
+
+    /** 비밀번호 찾기 2차: SMS/PASS 인증 확인 */
+    public boolean forgotPwdStep2(SignupStep2Request request) {
+        return codefService.changePwdStep2(request.getSessionKey(), request.getSmsAuthNo());
+    }
+
+    /** 비밀번호 찾기 3차: 휴대폰 임시비번 확인 → CODEF 완료 + DB 갱신 (userId는 세션에서 조회) */
+    public void forgotPwdStep3(String sessionKey, String tempPassword) {
+        Long userId = codefService.getChangeSessionUserId(sessionKey);
+        User user = getUserById(userId);
+        String bcryptHash = codefService.changePwdStep3(sessionKey, tempPassword);
+        user.setPasswordHash(bcryptHash);
+        userRepository.save(user);
+        log.info("비밀번호 찾기 완료 (step3) - userId: {}", userId);
     }
 
     // ── 유효성 검증 ───────────────────────────────────────────────────
