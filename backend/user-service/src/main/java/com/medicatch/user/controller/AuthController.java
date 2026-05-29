@@ -168,12 +168,33 @@ public class AuthController {
         return ResponseEntity.ok(authService.changePwdStep1(userId, request));
     }
 
-    /** 비밀번호 변경 2단계: 인증번호 확인 → CODEF + 로컬 DB 갱신 */
+    /** 비밀번호 변경 2단계: SMS/PASS 인증 확인 → step3(이메일 임시비번) 필요 여부 반환 */
     @PostMapping("/change-pwd/step2")
-    public ResponseEntity<Map<String, String>> changePwdStep2(@Valid @RequestBody SignupStep2Request request) {
+    public ResponseEntity<Map<String, Object>> changePwdStep2(@Valid @RequestBody SignupStep2Request request) {
         Long userId = currentUserId();
         log.info("POST /api/auth/change-pwd/step2 - userId: {}", userId);
-        authService.changePwdStep2(userId, request);
+        boolean needsStep3 = authService.changePwdStep2(userId, request);
+        if (needsStep3) {
+            return ResponseEntity.ok(Map.of(
+                    "needsStep3", true,
+                    "message", "이메일로 임시비밀번호를 발송했습니다. 확인 후 입력해주세요.",
+                    "sessionKey", request.getSessionKey()
+            ));
+        }
+        return ResponseEntity.ok(Map.of("needsStep3", false, "message", "비밀번호가 변경되었습니다."));
+    }
+
+    /** 비밀번호 변경 3단계: 이메일 임시비번 확인 → CODEF 최종 완료 + DB 갱신 */
+    @PostMapping("/change-pwd/step3")
+    public ResponseEntity<Map<String, String>> changePwdStep3(@RequestBody Map<String, String> request) {
+        Long userId = currentUserId();
+        log.info("POST /api/auth/change-pwd/step3 - userId: {}", userId);
+        String sessionKey = request.get("sessionKey");
+        String tempPassword = request.get("tempPassword");
+        if (sessionKey == null || sessionKey.isBlank() || tempPassword == null || tempPassword.isBlank()) {
+            throw new IllegalArgumentException("sessionKey와 tempPassword가 필요합니다.");
+        }
+        authService.changePwdStep3(userId, sessionKey, tempPassword);
         return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
     }
 

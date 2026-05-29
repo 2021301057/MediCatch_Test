@@ -301,14 +301,28 @@ public class AuthService {
                 user.getEmail());
     }
 
-    /** 비밀번호 변경 2차: CODEF 인증 확인 성공 시 로컬 DB 비밀번호 해시 갱신 */
-    public void changePwdStep2(Long userId, SignupStep2Request request) {
-        User user = getUserById(userId);
-        String bcryptHash = codefService.changePwdStep2(request.getSessionKey(), request.getSmsAuthNo());
+    /**
+     * 비밀번호 변경 2차: SMS/PASS 인증 확인.
+     * type="0" 기준으로 항상 step3(이메일 임시비번)가 필요함 → true 반환.
+     * 드물게 step2에서 바로 완료되면(false) DB 갱신 후 false 반환.
+     */
+    public boolean changePwdStep2(Long userId, SignupStep2Request request) {
+        boolean needsStep3 = codefService.changePwdStep2(request.getSessionKey(), request.getSmsAuthNo());
+        if (!needsStep3) {
+            // step2에서 바로 완료된 케이스 — DB 갱신은 CodefService가 bcryptHash를 돌려줄 수 없으므로
+            // 이 경로는 현재 type="0"에서 실질적으로 발생하지 않음. 향후 대비용.
+            log.info("비밀번호 변경 step2 직접 완료 - userId: {}", userId);
+        }
+        return needsStep3;
+    }
 
+    /** 비밀번호 변경 3차: 이메일 임시비번 확인 → CODEF 최종 완료 + 로컬 DB 갱신 */
+    public void changePwdStep3(Long userId, String sessionKey, String tempPassword) {
+        User user = getUserById(userId);
+        String bcryptHash = codefService.changePwdStep3(sessionKey, tempPassword);
         user.setPasswordHash(bcryptHash);
         userRepository.save(user);
-        log.info("비밀번호 변경 완료 - userId: {}", userId);
+        log.info("비밀번호 변경 완료 (step3) - userId: {}", userId);
     }
 
     // ── 유효성 검증 ───────────────────────────────────────────────────

@@ -76,9 +76,10 @@ export default function AccountPage() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   const [activeAction, setActiveAction] = useState('password'); // 'password' | 'email'
-  const [step, setStep] = useState(1); // 1=입력/인증요청, 2=인증번호 확인
+  const [step, setStep] = useState(1); // 1=입력/인증요청, 2=인증번호 확인, 3=이메일 임시비번(비번변경 전용)
   const [sessionKey, setSessionKey] = useState('');
   const [smsCode, setSmsCode] = useState('');
+  const [tempPassword, setTempPassword] = useState('');
   const [form, setForm] = useState({
     email: '', password: '', passwordConfirm: '',
     identityFront: '', identityBack: '', telecom: '0',
@@ -102,6 +103,7 @@ export default function AccountPage() {
     setStep(1);
     setSessionKey('');
     setSmsCode('');
+    setTempPassword('');
     setMessage('');
     setForm({ email: '', password: '', passwordConfirm: '',
       identityFront: '', identityBack: '', telecom: '0',
@@ -145,7 +147,7 @@ export default function AccountPage() {
     }
   };
 
-  // ── Step2: 인증번호 확인 → CODEF + 로컬 DB 변경 완료 ──
+  // ── Step2: 인증번호 확인 ──
   const handleConfirm = async () => {
     if (!isPass && cleanDigits(smsCode).length < 6) { setMessage('인증번호 6자리를 입력해주세요.'); return; }
     setLoading('confirm');
@@ -157,15 +159,21 @@ export default function AccountPage() {
         localStorage.setItem('email', nextEmail);
         setUser({ ...currentUser, email: nextEmail });
         setMessage('이메일이 변경되었습니다.');
+        setStep(1); setSessionKey(''); setSmsCode('');
+        setForm((f) => ({ ...f, email: '', identityFront: '', identityBack: '' }));
       } else {
-        await authAPI.changePwdStep2(payload);
-        setMessage('비밀번호가 변경되었습니다.');
+        const res = await authAPI.changePwdStep2(payload);
+        if (res?.needsStep3) {
+          // 이메일로 임시비번 발송됨 → step3으로 이동 (세션키 유지)
+          setStep(3);
+          setTempPassword('');
+          setMessage(res.message || '이메일로 임시비밀번호를 발송했습니다. 확인 후 입력해주세요.');
+        } else {
+          setMessage('비밀번호가 변경되었습니다.');
+          setStep(1); setSessionKey(''); setSmsCode('');
+          setForm((f) => ({ ...f, password: '', passwordConfirm: '', identityFront: '', identityBack: '' }));
+        }
       }
-      setStep(1);
-      setSessionKey('');
-      setSmsCode('');
-      setForm((f) => ({ ...f, email: '', password: '', passwordConfirm: '',
-        identityFront: '', identityBack: '' }));
     } catch (e) {
       setMessage(errMessage(e, '인증에 실패했습니다. 다시 시도해주세요.'));
     } finally {
@@ -173,7 +181,23 @@ export default function AccountPage() {
     }
   };
 
-  const step2Locked = step === 2;
+  // ── Step3: 이메일 임시비번 확인 → 최종 비밀번호 변경 완료 ──
+  const handleConfirmStep3 = async () => {
+    if (!tempPassword.trim()) { setMessage('이메일로 받은 임시비밀번호를 입력해주세요.'); return; }
+    setLoading('step3');
+    try {
+      await authAPI.changePwdStep3({ sessionKey, tempPassword: tempPassword.trim() });
+      setMessage('비밀번호가 변경되었습니다.');
+      setStep(1); setSessionKey(''); setSmsCode(''); setTempPassword('');
+      setForm((f) => ({ ...f, password: '', passwordConfirm: '', identityFront: '', identityBack: '' }));
+    } catch (e) {
+      setMessage(errMessage(e, '임시비밀번호가 올바르지 않습니다. 다시 확인해주세요.'));
+    } finally {
+      setLoading('');
+    }
+  };
+
+  const step2Locked = step === 2 || step === 3;
 
   return (
     <div className="mc-page mc-account-page fade-in">
@@ -303,28 +327,47 @@ export default function AccountPage() {
                     <option value="1">PASS 인증</option>
                   </select>
                 </div>
-                {step2Locked && !isPass && (
+                {step === 2 && !isPass && (
                   <div>
                     <label className="mc-account-label">인증번호</label>
                     <input className="mc-input" value={smsCode} inputMode="numeric" maxLength={6}
                       onChange={(e) => { setSmsCode(e.target.value); setMessage(''); }} placeholder="인증번호 6자리" />
                   </div>
                 )}
+                {step === 3 && activeAction === 'password' && (
+                  <div>
+                    <label className="mc-account-label">이메일 임시비밀번호</label>
+                    <input className="mc-input" type="text" value={tempPassword}
+                      onChange={(e) => { setTempPassword(e.target.value); setMessage(''); }}
+                      placeholder="이메일로 받은 임시비밀번호 입력" autoComplete="off" />
+                  </div>
+                )}
               </div>
 
               <div className="mc-account-actions split">
-                {step === 1 ? (
+                {step === 1 && (
                   <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
                     onClick={handleRequest} disabled={loading === 'request'}>
                     {loading === 'request' ? '요청 중…' : (isPass ? 'PASS 인증요청' : '인증번호 받기')}
                   </button>
-                ) : (
+                )}
+                {step === 2 && (
                   <>
                     <button className="mc-btn mc-account-ghost-btn" type="button"
                       onClick={() => resetActionState(activeAction)} disabled={loading === 'confirm'}>취소</button>
                     <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
                       onClick={handleConfirm} disabled={loading === 'confirm'}>
-                      {loading === 'confirm' ? '처리 중…' : (activeAction === 'email' ? '이메일 변경' : '비밀번호 변경')}
+                      {loading === 'confirm' ? '처리 중…' : (activeAction === 'email' ? '이메일 변경' : '확인')}
+                    </button>
+                  </>
+                )}
+                {step === 3 && activeAction === 'password' && (
+                  <>
+                    <button className="mc-btn mc-account-ghost-btn" type="button"
+                      onClick={() => resetActionState(activeAction)} disabled={loading === 'step3'}>취소</button>
+                    <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                      onClick={handleConfirmStep3} disabled={loading === 'step3'}>
+                      {loading === 'step3' ? '처리 중…' : '비밀번호 변경'}
                     </button>
                   </>
                 )}
