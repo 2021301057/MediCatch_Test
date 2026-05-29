@@ -166,10 +166,10 @@ public class ChatService {
                             Map.of("query", userMessage));
                     ctx.data.put("preTreatmentResult", result);
                     ctx.sources.add("진료 전 검색 룰");
-                    addPoliciesContext(ctx);
+                    addPoliciesContext(ctx, true);
                 }
                 case "COVERAGE" -> {
-                    addPoliciesContext(ctx);
+                    addPoliciesContext(ctx, true);
                     addCoverageGapsContext(ctx);
                 }
                 case "HEALTH_RISK" -> {
@@ -191,7 +191,7 @@ public class ChatService {
                     ctx.sources.add("진료 기록");
                 }
                 default -> {
-                    addPoliciesContext(ctx);
+                    addPoliciesContext(ctx, false);
                 }
             }
         } catch (Exception e) {
@@ -200,10 +200,10 @@ public class ChatService {
         return ctx;
     }
 
-    private void addPoliciesContext(IntentContext ctx) {
+    private void addPoliciesContext(IntentContext ctx, boolean includeCoverage) {
         safeCall(() -> {
             List<Map<String, Object>> policies = insuranceServiceClient.getActivePolicies(ctx.userId);
-            ctx.data.put("policies", summarizePolicies(policies));
+            ctx.data.put("policies", summarizePolicies(policies, includeCoverage));
             ctx.sources.add("내 보험 데이터");
         });
     }
@@ -234,16 +234,70 @@ public class ChatService {
     }
 
     // ── 데이터 요약 (토큰 절약 + 핵심 추출) ──────────────────────
-    private List<Map<String, Object>> summarizePolicies(List<Map<String, Object>> policies) {
+    private List<Map<String, Object>> summarizePolicies(List<Map<String, Object>> policies, boolean includeCoverage) {
         if (policies == null) return List.of();
         return policies.stream().limit(10).map(p -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("회사", p.getOrDefault("companyName", p.get("insurer_name")));
             m.put("상품", p.getOrDefault("productName", p.get("policy_details")));
-            m.put("유형", p.getOrDefault("policyType", p.get("insurance_type")));
+            Object rawType = p.getOrDefault("policyType", p.get("insurance_type"));
+            m.put("유형", labelInsuranceType(rawType));
             m.put("월보험료", p.getOrDefault("monthlyPremium", p.get("monthly_premium")));
+
+            boolean hasSupp = Boolean.TRUE.equals(p.getOrDefault("hasSupplementaryCoverage", p.get("has_supplementary_coverage")));
+            if (hasSupp && !"SUPPLEMENTARY".equals(String.valueOf(rawType))) {
+                m.put("실손포함여부", "포함");
+            }
+            Object gen = p.get("actualLossGeneration");
+            if (gen != null && !String.valueOf(gen).isBlank()) {
+                m.put("실손세대", gen);
+            }
+
+            if (includeCoverage) {
+                String covSummary = summarizeCoverageItems(p.getOrDefault("coverageItems", p.get("coverage_items")));
+                if (!covSummary.isBlank()) m.put("보장", covSummary);
+            }
             return m;
         }).collect(Collectors.toList());
+    }
+
+    private String labelInsuranceType(Object code) {
+        if (code == null) return null;
+        return switch (code.toString()) {
+            case "SUPPLEMENTARY" -> "실손의료비";
+            case "HEALTH" -> "건강";
+            case "SAVINGS" -> "저축";
+            case "CAR" -> "자동차";
+            case "PROPERTY" -> "화재/재물";
+            case "ACCIDENT" -> "상해";
+            case "NATIONAL_HEALTH" -> "국민건강보험";
+            default -> code.toString();
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private String summarizeCoverageItems(Object items) {
+        if (!(items instanceof List<?> list)) return "";
+        return list.stream()
+                .filter(x -> x instanceof Map)
+                .map(x -> (Map<String, Object>) x)
+                .filter(ci -> Boolean.TRUE.equals(ci.getOrDefault("isCovered", ci.get("is_covered"))))
+                .limit(15)
+                .map(ci -> {
+                    String name = String.valueOf(ci.getOrDefault("name", ci.getOrDefault("item_name", "")));
+                    Object amt = ci.getOrDefault("amount", ci.get("max_benefit_amount"));
+                    return amt != null ? name + ":" + formatAmount(amt) : name;
+                })
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.joining(", "));
+    }
+
+    private String formatAmount(Object o) {
+        double d = toDouble(o);
+        if (d <= 0) return "";
+        if (d >= 100_000_000) return String.format("%.0f억원", d / 100_000_000);
+        if (d >= 10_000) return String.format("%.0f만원", d / 10_000);
+        return String.format("%.0f원", d);
     }
 
     private List<Map<String, Object>> summarizePredictions(List<Map<String, Object>> preds) {

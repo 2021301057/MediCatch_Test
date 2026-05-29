@@ -1,8 +1,69 @@
 import React, { useMemo, useState } from 'react';
+import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
+import ProfileAvatar from '../components/common/ProfileAvatar';
+
+const cleanDigits = (value) => (value || '').replace(/\D/g, '');
+
+const ALLOWED_EMAIL_DOMAINS = ['naver.com','hanmail.net','daum.net','nate.com','korea.kr',
+  'kcredit.or.kr','korea.com','yahoo.com','goe.go.kr','chol.com',
+  'sen.go.kr','gyo6.net','jnu.ac.kr','kakao.com'];
+
+const AVATAR_OPTIONS = [
+  { key: 'bot', label: '봇' },
+  { key: 'medi', label: '메디' },
+  { key: 'shield', label: '쉴드' },
+  { key: 'leaf', label: '리프' },
+  { key: 'pill', label: '필' },
+  { key: 'sparkle', label: '반짝' },
+];
+
+const TELECOM_OPTIONS = [
+  { value: '0', label: 'SKT' },
+  { value: '1', label: 'KT' },
+  { value: '2', label: 'LG U+' },
+  { value: '3', label: '알뜰폰(SKT)' },
+  { value: '4', label: '알뜰폰(KT)' },
+  { value: '5', label: '알뜰폰(LG U+)' },
+];
+
+const loadAvatar = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('medicatchAvatar') || 'null');
+    return AVATAR_OPTIONS.find((option) => option.key === saved?.key) || AVATAR_OPTIONS[0];
+  } catch {
+    return AVATAR_OPTIONS[0];
+  }
+};
+
+const validatePasswordPolicy = (password, codefId = '') => {
+  if (password.length < 9 || password.length > 20) return '비밀번호는 9자 이상 20자 이하여야 합니다.';
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\-]/.test(password)) {
+    return '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.';
+  }
+  for (let i = 0; i < password.length - 2; i += 1) {
+    if (password[i] === password[i + 1] && password[i] === password[i + 2]) {
+      return '동일한 문자/숫자를 3자 이상 연속 사용할 수 없습니다.';
+    }
+    const d1 = password.charCodeAt(i + 1) - password.charCodeAt(i);
+    const d2 = password.charCodeAt(i + 2) - password.charCodeAt(i + 1);
+    if ((d1 === 1 && d2 === 1) || (d1 === -1 && d2 === -1)) {
+      return '연속되는 문자/숫자를 3자 이상 사용할 수 없습니다.';
+    }
+  }
+  if (codefId && password.toLowerCase().includes(codefId.toLowerCase())) {
+    return '비밀번호에 아이디를 포함할 수 없습니다.';
+  }
+  return '';
+};
+
+const errMessage = (e, fallback) =>
+  e?.response?.data?.message
+  || e?.response?.data?.fieldErrors?.[0]?.message
+  || fallback;
 
 export default function AccountPage() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const currentUser = useMemo(() => ({
     userId: user?.userId || Number(localStorage.getItem('userId') || 0),
     codefId: user?.codefId || localStorage.getItem('codefId') || '',
@@ -11,107 +72,309 @@ export default function AccountPage() {
     phoneNo: user?.phoneNo || localStorage.getItem('phoneNo') || '',
   }), [user]);
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [passwordMessage, setPasswordMessage] = useState('');
+  const [avatar, setAvatar] = useState(loadAvatar);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
-  const getSavedPassword = () => {
-    const directPassword = localStorage.getItem('currentPassword');
-    if (directPassword) return directPassword;
+  const [activeAction, setActiveAction] = useState('password'); // 'password' | 'email'
+  const [step, setStep] = useState(1); // 1=입력/인증요청, 2=인증번호 확인, 3=이메일 임시비번(비번변경 전용)
+  const [sessionKey, setSessionKey] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [tempPassword, setTempPassword] = useState('');
+  const [form, setForm] = useState({
+    email: '', password: '', passwordConfirm: '',
+    identityFront: '', identityBack: '', telecom: '0',
+    phoneNo: currentUser.phoneNo || '', authMethod: '0',
+  });
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState('');
 
+  const isPass = form.authMethod === '1';
+  const setField = (patch) => { setForm((f) => ({ ...f, ...patch })); setMessage(''); };
+
+  const updateAvatar = (nextAvatar) => {
+    setAvatar(nextAvatar);
+    localStorage.setItem('medicatchAvatar', JSON.stringify(nextAvatar));
+    window.dispatchEvent(new CustomEvent('medicatch-avatar-change', { detail: nextAvatar }));
+    setShowAvatarPicker(false);
+  };
+
+  const resetActionState = (nextAction) => {
+    setActiveAction(nextAction);
+    setStep(1);
+    setSessionKey('');
+    setSmsCode('');
+    setTempPassword('');
+    setMessage('');
+    setForm({ email: '', password: '', passwordConfirm: '',
+      identityFront: '', identityBack: '', telecom: '0',
+      phoneNo: currentUser.phoneNo || '', authMethod: '0' });
+  };
+
+  // ── Step1: 입력값 검증 후 CODEF 인증요청(SMS 발송 / PASS 트리거) ──
+  const handleRequest = async () => {
+    const identity = cleanDigits(`${form.identityFront}${form.identityBack}`);
+    if (identity.length !== 13) { setMessage('주민등록번호 13자리를 정확히 입력해주세요.'); return; }
+    if (cleanDigits(form.phoneNo).length < 10) { setMessage('휴대폰번호를 정확히 입력해주세요.'); return; }
+
+    if (activeAction === 'email') {
+      const email = form.email.trim();
+      const domain = email.split('@')[1]?.toLowerCase();
+      if (!email.includes('@') || !domain || !ALLOWED_EMAIL_DOMAINS.includes(domain)) {
+        setMessage('사용 가능한 이메일 도메인이 아닙니다. (naver.com, daum.net, kakao.com 등)'); return;
+      }
+    } else {
+      if (form.password !== form.passwordConfirm) { setMessage('비밀번호가 일치하지 않습니다.'); return; }
+      const policyErr = validatePasswordPolicy(form.password, currentUser.codefId);
+      if (policyErr) { setMessage(policyErr); return; }
+    }
+
+    setLoading('request');
     try {
-      const demoUsers = JSON.parse(localStorage.getItem('medicatchDemoUsers') || '[]');
-      return demoUsers.find((u) => u.codefId === currentUser.codefId)?.password || '';
-    } catch {
-      return '';
+      const base = {
+        identity, telecom: form.telecom,
+        phoneNo: cleanDigits(form.phoneNo), authMethod: form.authMethod,
+      };
+      const res = activeAction === 'email'
+        ? await authAPI.changeEmailStep1({ ...base, email: form.email.trim() })
+        : await authAPI.changePwdStep1({ ...base, password: form.password, passwordConfirm: form.passwordConfirm });
+      setSessionKey(res?.sessionKey || '');
+      setStep(2);
+      setMessage(isPass ? 'PASS 앱에서 인증을 완료한 뒤 [변경]을 눌러주세요.' : '인증번호를 발송했습니다.');
+    } catch (e) {
+      setMessage(errMessage(e, '인증 요청에 실패했습니다.'));
+    } finally {
+      setLoading('');
     }
   };
 
-  const updateSavedPassword = (nextPassword) => {
-    localStorage.setItem('currentPassword', nextPassword);
+  // ── Step2: 인증번호 확인 ──
+  const handleConfirm = async () => {
+    if (!isPass && cleanDigits(smsCode).length < 6) { setMessage('인증번호 6자리를 입력해주세요.'); return; }
+    setLoading('confirm');
     try {
-      const demoUsers = JSON.parse(localStorage.getItem('medicatchDemoUsers') || '[]');
-      const nextUsers = demoUsers.map((u) => (
-        u.codefId === currentUser.codefId ? { ...u, password: nextPassword } : u
-      ));
-      localStorage.setItem('medicatchDemoUsers', JSON.stringify(nextUsers));
-    } catch {
-      // 데모 유저 저장소가 없으면 localStorage currentPassword만 갱신합니다.
+      const payload = { sessionKey, smsAuthNo: isPass ? '' : smsCode.trim() };
+      if (activeAction === 'email') {
+        await authAPI.changeEmailStep2(payload);
+        const nextEmail = form.email.trim();
+        localStorage.setItem('email', nextEmail);
+        setUser({ ...currentUser, email: nextEmail });
+        setMessage('이메일이 변경되었습니다.');
+        setStep(1); setSessionKey(''); setSmsCode('');
+        setForm((f) => ({ ...f, email: '', identityFront: '', identityBack: '' }));
+      } else {
+        const res = await authAPI.changePwdStep2(payload);
+        if (res?.needsStep3) {
+          // 이메일로 임시비번 발송됨 → step3으로 이동 (세션키 유지)
+          setStep(3);
+          setTempPassword('');
+          setMessage(res.message || '휴대폰으로 임시비밀번호를 발송했습니다. 확인 후 입력해주세요.');
+        } else {
+          setMessage('비밀번호가 변경되었습니다.');
+          setStep(1); setSessionKey(''); setSmsCode('');
+          setForm((f) => ({ ...f, password: '', passwordConfirm: '', identityFront: '', identityBack: '' }));
+        }
+      }
+    } catch (e) {
+      setMessage(errMessage(e, '인증에 실패했습니다. 다시 시도해주세요.'));
+    } finally {
+      setLoading('');
     }
   };
 
-  const handlePasswordSave = (e) => {
-    e.preventDefault();
-    const savedPassword = getSavedPassword();
-
-    if (!currentPassword) {
-      setPasswordMessage('현재 비밀번호를 입력해주세요.');
-      return;
+  // ── Step3: 이메일 임시비번 확인 → 최종 비밀번호 변경 완료 ──
+  const handleConfirmStep3 = async () => {
+    if (!tempPassword.trim()) { setMessage('휴대폰으로 받은 임시비밀번호를 입력해주세요.'); return; }
+    setLoading('step3');
+    try {
+      await authAPI.changePwdStep3({ sessionKey, tempPassword: tempPassword.trim() });
+      setMessage('비밀번호가 변경되었습니다.');
+      setStep(1); setSessionKey(''); setSmsCode(''); setTempPassword('');
+      setForm((f) => ({ ...f, password: '', passwordConfirm: '', identityFront: '', identityBack: '' }));
+    } catch (e) {
+      setMessage(errMessage(e, '임시비밀번호가 올바르지 않습니다. 휴대폰 문자를 다시 확인해주세요.'));
+    } finally {
+      setLoading('');
     }
-    if (savedPassword && currentPassword !== savedPassword) {
-      setPasswordMessage('현재 비밀번호가 일치하지 않습니다.');
-      return;
-    }
-    if (password.length < 9) {
-      setPasswordMessage('비밀번호는 9자 이상 입력해주세요.');
-      return;
-    }
-    if (password !== passwordConfirm) {
-      setPasswordMessage('비밀번호가 일치하지 않습니다.');
-      return;
-    }
-    updateSavedPassword(password);
-    localStorage.setItem('passwordUpdatedAt', new Date().toISOString());
-    setCurrentPassword('');
-    setPassword('');
-    setPasswordConfirm('');
-    setPasswordMessage('비밀번호가 수정되었습니다.');
   };
+
+  const step2Locked = step === 2 || step === 3;
 
   return (
     <div className="mc-page mc-account-page fade-in">
       <div className="mc-page-top">
         <div>
           <div className="mc-page-title">내 로그인 정보</div>
-          <div className="mc-page-subtitle">계정 정보를 확인하고 비밀번호를 수정할 수 있어요.</div>
+          <div className="mc-page-subtitle">본인확인 후 이메일과 비밀번호를 변경할 수 있어요.</div>
         </div>
       </div>
 
-      <div className="mc-account-grid">
-        <section className="mc-card mc-account-card">
+      <div className="mc-account-layout">
+        <section className="mc-card mc-account-summary-card">
           <div className="mc-card-body">
-            <h2 className="mc-account-section-title">계정 정보</h2>
-            <div className="mc-account-info-list">
+            <div className="mc-account-profile-head">
+              <div className="mc-account-avatar-zone">
+                <button
+                  type="button"
+                  className="mc-profile-avatar-button mc-profile-avatar-button-lg"
+                  onClick={() => setShowAvatarPicker((v) => !v)}
+                  aria-label="프로필 캐릭터 변경"
+                  title="프로필 캐릭터 변경"
+                >
+                  <ProfileAvatar type={avatar.key} size={48} />
+                  <span className="mc-avatar-edit-badge" aria-hidden="true">✎</span>
+                </button>
+                {showAvatarPicker && (
+                  <div className="mc-avatar-picker">
+                    <div className="mc-avatar-picker-title">프로필 선택</div>
+                    <div className="mc-avatar-picker-grid">
+                      {AVATAR_OPTIONS.map((option) => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`mc-avatar-choice ${avatar.key === option.key ? 'active' : ''}`}
+                          onClick={() => updateAvatar(option)}
+                          aria-label={`${option.label} 프로필`}
+                        >
+                          <span className="mc-avatar-choice-icon">
+                            <ProfileAvatar type={option.key} size={38} />
+                          </span>
+                          <em>{option.label}</em>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <h2 className="mc-account-profile-name">{currentUser.name || '사용자'}</h2>
+                <p className="mc-account-profile-id">{currentUser.codefId || '-'}</p>
+              </div>
+            </div>
+            <div className="mc-account-info-list compact">
               <InfoRow label="아이디" value={currentUser.codefId || '-'} />
-              <InfoRow label="이름" value={currentUser.name || '-'} />
               <InfoRow label="이메일" value={currentUser.email || '-'} />
               <InfoRow label="전화번호" value={currentUser.phoneNo || '-'} />
             </div>
           </div>
         </section>
 
-        <section className="mc-card mc-account-card">
+        <section className="mc-card mc-account-security-card">
           <div className="mc-card-body">
-            <h2 className="mc-account-section-title">비밀번호 수정</h2>
-            <form className="mc-account-form" onSubmit={handlePasswordSave}>
+            <div className="mc-account-security-head">
               <div>
-                <label className="mc-account-label">현재 비밀번호</label>
-                <input className="mc-input" type="password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); setPasswordMessage(''); }} placeholder="현재 비밀번호 입력" />
+                <h2 className="mc-account-section-title">로그인 정보 변경</h2>
               </div>
-              <div className="mc-grid mc-grid-2">
+              <div className="mc-account-tabs">
+                <button type="button" className={activeAction === 'password' ? 'active' : ''} onClick={() => resetActionState('password')}>비밀번호</button>
+                <button type="button" className={activeAction === 'email' ? 'active' : ''} onClick={() => resetActionState('email')}>이메일</button>
+              </div>
+            </div>
+
+            {/* 1) 변경할 값 입력 */}
+            {activeAction === 'email' ? (
+              <div className="mc-account-form compact">
+                <label className="mc-account-label">변경할 이메일</label>
+                <input className="mc-input" type="email" value={form.email} disabled={step2Locked}
+                  onChange={(e) => setField({ email: e.target.value })} placeholder="new@example.com" />
+              </div>
+            ) : (
+              <div className="mc-account-form compact">
+                <div className="mc-grid mc-grid-2">
+                  <div>
+                    <label className="mc-account-label">새 비밀번호</label>
+                    <input className="mc-input" type="password" value={form.password} disabled={step2Locked}
+                      onChange={(e) => setField({ password: e.target.value })} placeholder="9~20자, 영문+숫자+특수문자" />
+                  </div>
+                  <div>
+                    <label className="mc-account-label">비밀번호 확인</label>
+                    <input className="mc-input" type="password" value={form.passwordConfirm} disabled={step2Locked}
+                      onChange={(e) => setField({ passwordConfirm: e.target.value })} placeholder="비밀번호 재입력" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2) 본인인증 정보 */}
+            <div className="mc-phone-auth-box">
+              <div className="mc-identity-auth-grid">
                 <div>
-                  <label className="mc-account-label">새 비밀번호</label>
-                  <input className="mc-input" type="password" value={password} onChange={(e) => { setPassword(e.target.value); setPasswordMessage(''); }} placeholder="9자 이상 입력" />
+                  <label className="mc-account-label">주민등록번호</label>
+                  <div className="mc-identity-split">
+                    <input className="mc-input" value={form.identityFront} disabled={step2Locked} inputMode="numeric"
+                      onChange={(e) => setField({ identityFront: cleanDigits(e.target.value).slice(0, 6) })} placeholder="앞 6자리" />
+                    <span>-</span>
+                    <input className="mc-input" type="password" value={form.identityBack} disabled={step2Locked} inputMode="numeric"
+                      onChange={(e) => setField({ identityBack: cleanDigits(e.target.value).slice(0, 7) })} placeholder="뒤 7자리" />
+                  </div>
                 </div>
                 <div>
-                  <label className="mc-account-label">비밀번호 확인</label>
-                  <input className="mc-input" type="password" value={passwordConfirm} onChange={(e) => { setPasswordConfirm(e.target.value); setPasswordMessage(''); }} placeholder="비밀번호 재입력" />
+                  <label className="mc-account-label">통신사</label>
+                  <select className="mc-input" value={form.telecom} disabled={step2Locked}
+                    onChange={(e) => setField({ telecom: e.target.value })}>
+                    {TELECOM_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
                 </div>
+                <div>
+                  <label className="mc-account-label">휴대폰번호</label>
+                  <input className="mc-input" value={form.phoneNo} disabled={step2Locked} inputMode="tel"
+                    onChange={(e) => setField({ phoneNo: e.target.value })} placeholder="01012345678" />
+                </div>
+                <div>
+                  <label className="mc-account-label">인증방식</label>
+                  <select className="mc-input" value={form.authMethod} disabled={step2Locked}
+                    onChange={(e) => setField({ authMethod: e.target.value })}>
+                    <option value="0">SMS 인증</option>
+                    <option value="1">PASS 인증</option>
+                  </select>
+                </div>
+                {step === 2 && !isPass && (
+                  <div>
+                    <label className="mc-account-label">인증번호</label>
+                    <input className="mc-input" value={smsCode} inputMode="numeric" maxLength={6}
+                      onChange={(e) => { setSmsCode(e.target.value); setMessage(''); }} placeholder="인증번호 6자리" />
+                  </div>
+                )}
+                {step === 3 && activeAction === 'password' && (
+                  <div>
+                    <label className="mc-account-label">휴대폰 임시비밀번호</label>
+                    <input className="mc-input" type="text" value={tempPassword}
+                      onChange={(e) => { setTempPassword(e.target.value); setMessage(''); }}
+                      placeholder="휴대폰으로 받은 임시비밀번호 입력" autoComplete="off" />
+                  </div>
+                )}
               </div>
-              {passwordMessage && <div className="mc-account-message">{passwordMessage}</div>}
-              <div className="mc-account-actions"><button className="mc-btn mc-btn-primary mc-account-submit" type="submit">변경</button></div>
-            </form>
+
+              <div className="mc-account-actions split">
+                {step === 1 && (
+                  <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                    onClick={handleRequest} disabled={loading === 'request'}>
+                    {loading === 'request' ? '요청 중…' : (isPass ? 'PASS 인증요청' : '인증번호 받기')}
+                  </button>
+                )}
+                {step === 2 && (
+                  <>
+                    <button className="mc-btn mc-account-ghost-btn" type="button"
+                      onClick={() => resetActionState(activeAction)} disabled={loading === 'confirm'}>취소</button>
+                    <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                      onClick={handleConfirm} disabled={loading === 'confirm'}>
+                      {loading === 'confirm' ? '처리 중…' : (activeAction === 'email' ? '이메일 변경' : '확인')}
+                    </button>
+                  </>
+                )}
+                {step === 3 && activeAction === 'password' && (
+                  <>
+                    <button className="mc-btn mc-account-ghost-btn" type="button"
+                      onClick={() => resetActionState(activeAction)} disabled={loading === 'step3'}>취소</button>
+                    <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                      onClick={handleConfirmStep3} disabled={loading === 'step3'}>
+                      {loading === 'step3' ? '처리 중…' : '비밀번호 변경'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {message && <div className="mc-account-message">{message}</div>}
           </div>
         </section>
       </div>

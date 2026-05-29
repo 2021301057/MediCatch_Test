@@ -38,3 +38,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Playwright/test run artifacts (keep dir via .gitkeep)
+frontend/test-results/*
+!frontend/test-results/.gitkeep
