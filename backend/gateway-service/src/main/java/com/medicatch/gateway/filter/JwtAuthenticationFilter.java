@@ -117,6 +117,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 path.startsWith("/api/auth/login") ||
                 path.startsWith("/api/auth/refresh") ||
                 path.startsWith("/api/auth/health") ||
+                path.startsWith("/api/auth/forgot-pwd") ||
                 path.startsWith("/actuator");
     }
 
