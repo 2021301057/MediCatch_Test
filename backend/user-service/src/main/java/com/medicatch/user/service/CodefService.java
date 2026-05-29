@@ -444,11 +444,14 @@ public class CodefService {
             Map<String, Object> res1 = (Map<String, Object>) map1.get("result");
             String code1 = (String) res1.get("code");
 
-            if ("CF-12832".equals(code1)) {
-                log.info("CODEF 아이디 사용 가능 (1차 즉시 확인) - codefId: {}", codefId);
+            // CF-12832: 미가입 아이디(사용 가능), CF-12861: 미등록 아이디(비번 불일치 or 미가입) → 둘 다 가입 진행
+            // 실제 중복 여부는 이후 REGISTER_URL 요청에서 CODEF가 최종 판단
+            if ("CF-12832".equals(code1) || "CF-12861".equals(code1)) {
+                log.info("CODEF 아이디 신규 등록 가능 판단 - codefId: {}, code: {}", codefId, code1);
                 return;
             }
             if (!"CF-03002".equals(code1)) {
+                log.warn("CODEF 아이디 확인 실패 - code: {}, message: {}", code1, res1.get("message"));
                 throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
             }
 
@@ -465,10 +468,11 @@ public class CodefService {
             Map<String, Object> res2 = (Map<String, Object>) map2.get("result");
             String code2 = (String) res2.get("code");
 
-            if (!"CF-12832".equals(code2)) {
+            if (!"CF-12832".equals(code2) && !"CF-12861".equals(code2)) {
+                log.warn("CODEF 아이디 확인 실패 - code: {}, message: {}", code2, res2.get("message"));
                 throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
             }
-            log.info("CODEF 아이디 사용 가능 - codefId: {}", codefId);
+            log.info("CODEF 아이디 신규 등록 가능 판단 - codefId: {}, code: {}", codefId, code2);
 
         } catch (SignupFieldException e) {
             throw e;
