@@ -379,12 +379,10 @@ public class CodefService {
                 Map<String, Object> extraInfo = toMap(data.get("extraInfo"));
                 String reqUserPass1 = (String) extraInfo.get("reqUserPass1");
                 if (reqUserPass1 != null && !reqUserPass1.isBlank()) {
-                    // 이메일 임시비번 발송됨 → step3 필요, 세션에 step2 data 저장
                     session.setStep2ResponseData(data);
-                    log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨, step3 필요 - sessionKey: {}", sessionKey);
+                    log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(CF-03002), step3 필요 - sessionKey: {}", sessionKey);
                     return true;
                 }
-                // extraInfo에 에러 코드가 있는지 확인
                 String extraCode = (String) extraInfo.get("code");
                 String extraMsg  = (String) extraInfo.get("message");
                 if (extraCode != null && !extraCode.isBlank()) {
@@ -395,12 +393,18 @@ public class CodefService {
             }
 
             if ("CF-00000".equals(code)) {
-                // 드물게 type="0"에서 임시비번 없이 바로 완료되는 케이스
                 String status = (String) data.get("resRegistrationStatus");
                 if ("1".equals(status)) {
+                    // 임시비번 없이 바로 완료
                     changeSessions.remove(sessionKey);
                     log.info("CODEF 비밀번호 변경 2차에서 직접 완료 - sessionKey: {}", sessionKey);
                     return false;
+                }
+                if ("2".equals(status)) {
+                    // 임시비밀번호 발급 성공(변경은 미완) → step3 필요
+                    session.setStep2ResponseData(data);
+                    log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(CF-00000/status=2), step3 필요 - sessionKey: {}", sessionKey);
+                    return true;
                 }
             }
 
