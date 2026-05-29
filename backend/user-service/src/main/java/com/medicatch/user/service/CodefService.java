@@ -377,19 +377,20 @@ public class CodefService {
 
             if ("CF-03002".equals(code)) {
                 Map<String, Object> extraInfo = toMap(data.get("extraInfo"));
-                String reqUserPass1 = (String) extraInfo.get("reqUserPass1");
-                if (reqUserPass1 != null && !reqUserPass1.isBlank()) {
-                    session.setStep2ResponseData(data);
-                    log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(CF-03002), step3 필요 - sessionKey: {}", sessionKey);
-                    return true;
-                }
+                log.info("CODEF 비밀번호 변경 2차 CF-03002 - extraInfo: {}", extraInfo);
+
+                // extraInfo에 명시적 에러 코드가 있으면 실패
                 String extraCode = (String) extraInfo.get("code");
                 String extraMsg  = (String) extraInfo.get("message");
                 if (extraCode != null && !extraCode.isBlank()) {
                     throw new SignupFieldException(resolveErrorField(extraMsg),
                             extraMsg != null && !extraMsg.isBlank() ? extraMsg : "인증에 실패했습니다.");
                 }
-                throw new SignupFieldException("smsAuthNo", "인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+
+                // 에러 없는 CF-03002 → 이메일 임시비번 발송 단계 → step3 필요
+                session.setStep2ResponseData(data);
+                log.info("CODEF 비밀번호 변경 2차 완료 - step3 필요 - sessionKey: {}", sessionKey);
+                return true;
             }
 
             if ("CF-00000".equals(code)) {
