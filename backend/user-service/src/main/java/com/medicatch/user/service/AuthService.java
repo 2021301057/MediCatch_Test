@@ -2,6 +2,8 @@ package com.medicatch.user.service;
 
 import com.medicatch.user.config.JwtTokenProvider;
 import com.medicatch.user.dto.AuthResponse;
+import com.medicatch.user.dto.ChangeEmailRequest;
+import com.medicatch.user.dto.ChangePwdRequest;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
@@ -235,6 +237,78 @@ public class AuthService {
     public User getUserById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    // ── 이메일 변경 (CODEF 내보험다보여 + 로컬 DB 동시 갱신) ─────────────
+
+    /** 이메일 변경 1차: 검증 후 CODEF SMS/PASS 인증 트리거 */
+    public SignupStep1Response changeEmailStep1(Long userId, ChangeEmailRequest request) {
+        User user = getUserById(userId);
+
+        validateEmailDomain(request.getEmail());
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new SignupFieldException("email", "이미 사용 중인 이메일입니다.");
+        }
+        if (request.getEmail().equalsIgnoreCase(user.getEmail())) {
+            throw new SignupFieldException("email", "현재 이메일과 동일합니다.");
+        }
+
+        return codefService.changeEmailStep1(
+                user.getName(),
+                request.getIdentity(),
+                request.getTelecom(),
+                request.getPhoneNo(),
+                request.getAuthMethod() != null ? request.getAuthMethod() : "0",
+                request.getEmail());
+    }
+
+    /** 이메일 변경 2차: CODEF 인증 확인 성공 시 로컬 DB 이메일 갱신 */
+    public void changeEmailStep2(Long userId, SignupStep2Request request) {
+        User user = getUserById(userId);
+        String newEmail = codefService.changeEmailStep2(request.getSessionKey(), request.getSmsAuthNo());
+
+        // CODEF 성공 후 로컬 DB 갱신 (경쟁 상황 대비 유니크 재확인)
+        if (userRepository.existsByEmail(newEmail)) {
+            throw new SignupFieldException("email", "이미 사용 중인 이메일입니다.");
+        }
+        user.setEmail(newEmail);
+        userRepository.save(user);
+        log.info("이메일 변경 완료 - userId: {}", userId);
+    }
+
+    // ── 비밀번호 변경 (CODEF 내보험다보여 + 로컬 DB 동시 갱신) ───────────
+
+    /** 비밀번호 변경 1차: 검증 후 CODEF SMS/PASS 인증 트리거 */
+    public SignupStep1Response changePwdStep1(Long userId, ChangePwdRequest request) {
+        User user = getUserById(userId);
+
+        if (!request.getPassword().equals(request.getPasswordConfirm())) {
+            throw new SignupFieldException("passwordConfirm", "비밀번호가 일치하지 않습니다.");
+        }
+        validatePassword(request.getPassword(), user.getCodefId());
+
+        String bcryptHash = passwordEncoder.encode(request.getPassword());
+
+        return codefService.changePwdStep1(
+                user.getName(),
+                request.getIdentity(),
+                request.getTelecom(),
+                request.getPhoneNo(),
+                request.getAuthMethod() != null ? request.getAuthMethod() : "0",
+                user.getCodefId(),
+                request.getPassword(),
+                bcryptHash,
+                user.getEmail());
+    }
+
+    /** 비밀번호 변경 2차: CODEF 인증 확인 성공 시 로컬 DB 비밀번호 해시 갱신 */
+    public void changePwdStep2(Long userId, SignupStep2Request request) {
+        User user = getUserById(userId);
+        String bcryptHash = codefService.changePwdStep2(request.getSessionKey(), request.getSmsAuthNo());
+
+        user.setPasswordHash(bcryptHash);
+        userRepository.save(user);
+        log.info("비밀번호 변경 완료 - userId: {}", userId);
     }
 
     // ── 유효성 검증 ───────────────────────────────────────────────────

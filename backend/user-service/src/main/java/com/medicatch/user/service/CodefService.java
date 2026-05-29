@@ -43,12 +43,15 @@ public class CodefService {
     @Value("${codef.use-demo:true}")
     private boolean useDemo;
 
-    private static final String REGISTER_URL = "/v1/kr/insurance/0001/credit4u/register";
-    private static final String STATUS_URL   = "/v1/kr/insurance/0001/credit4u/registration-status";
+    private static final String REGISTER_URL     = "/v1/kr/insurance/0001/credit4u/register";
+    private static final String STATUS_URL       = "/v1/kr/insurance/0001/credit4u/registration-status";
+    private static final String CHANGE_EMAIL_URL = "/v1/kr/insurance/0001/credit4u/change-email";
+    private static final String CHANGE_PWD_URL   = "/v1/kr/insurance/0001/credit4u/change-pwd";
     private static final int SESSION_TIMEOUT_MINUTES = 10;
 
     private final ObjectMapper objectMapper;
     private final ConcurrentHashMap<String, SignupSessionData> signupSessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ChangeSessionData> changeSessions = new ConcurrentHashMap<>();
 
     public CodefService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -212,6 +215,210 @@ public class CodefService {
         } catch (Exception e) {
             log.error("CODEF 4차 요청 실패: {}", e.getMessage(), e);
             throw new SignupFieldException("emailAuthNo", "이메일 인증에 실패했습니다. 인증번호를 확인해주세요.");
+        }
+    }
+
+    // ── 이메일 변경: 1차(SMS/PASS 트리거) ─────────────────────────────
+
+    public SignupStep1Response changeEmailStep1(
+            String userName, String identity, String telecom, String phoneNo,
+            String authMethod, String newEmail) {
+        try {
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> paramMap = new HashMap<>();
+            paramMap.put("organization", "0001");
+            paramMap.put("userName", userName);
+            paramMap.put("identity", identity);
+            paramMap.put("email", newEmail);
+            paramMap.put("telecom", telecom);
+            paramMap.put("phoneNo", phoneNo);
+            paramMap.put("authMethod", authMethod);
+
+            log.info("CODEF 이메일 변경 1차 요청 (SMS/PASS 트리거) - userName: {}", userName);
+            String result = codef.requestProduct(CHANGE_EMAIL_URL, serviceType(), paramMap);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            checkStep1Result(responseMap);
+
+            Map<String, Object> step1Data = toMap(responseMap.get("data"));
+            String sessionKey = UUID.randomUUID().toString();
+            changeSessions.put(sessionKey, new ChangeSessionData(
+                    "email", authMethod, paramMap, step1Data, newEmail, null, LocalDateTime.now()));
+
+            log.info("CODEF 이메일 변경 1차 완료 - sessionKey: {}", sessionKey);
+            return SignupStep1Response.builder()
+                    .sessionKey(sessionKey)
+                    .requiresTwoWay(true)
+                    .authMethod(authMethod)
+                    .build();
+
+        } catch (SignupFieldException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 이메일 변경 1차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("이메일 변경 요청 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    // ── 이메일 변경: 2차(SMS/PASS 확인) → 변경할 이메일 반환 ─────────────
+
+    public String changeEmailStep2(String sessionKey, String smsAuthNo) {
+        ChangeSessionData session = getValidChangeSession(sessionKey);
+        try {
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> reqCertMap = new HashMap<>(session.getOriginalParams());
+            reqCertMap.put("twoWayInfo", buildTwoWayInfo(session.getStep1ResponseData()));
+            reqCertMap.put("is2Way", true);
+            reqCertMap.put("simpleAuth", "1");
+            if (smsAuthNo != null && !smsAuthNo.isBlank()) {
+                reqCertMap.put("smsAuthNo", smsAuthNo);
+            }
+
+            log.info("CODEF 이메일 변경 2차 요청 (인증 확인) - sessionKey: {}", sessionKey);
+            String result = codef.requestCertification(CHANGE_EMAIL_URL, serviceType(), reqCertMap);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            checkChangeFinalResult(responseMap, false);
+
+            changeSessions.remove(sessionKey);
+            log.info("CODEF 이메일 변경 완료 - sessionKey: {}", sessionKey);
+            return session.getNewEmail();
+
+        } catch (SignupFieldException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 이메일 변경 2차 실패: {}", e.getMessage(), e);
+            throw new SignupFieldException("smsAuthNo", "인증에 실패했습니다. 다시 시도해주세요.");
+        }
+    }
+
+    // ── 비밀번호 변경: 1차(SMS/PASS 트리거) ───────────────────────────
+
+    public SignupStep1Response changePwdStep1(
+            String userName, String identity, String telecom, String phoneNo,
+            String authMethod, String codefId, String rawPassword, String bcryptHash, String email) {
+        try {
+            if (publicKey == null || publicKey.isBlank()) {
+                throw new SignupFieldException("general", "CODEF 공개키가 설정되지 않았습니다. 관리자에게 문의하세요.");
+            }
+            String rsaPassword = EasyCodefUtil.encryptRSA(rawPassword, publicKey);
+
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> paramMap = new HashMap<>();
+            paramMap.put("organization", "0001");
+            paramMap.put("userName", userName);
+            paramMap.put("identity", identity);
+            paramMap.put("id", codefId);
+            paramMap.put("password", rsaPassword);
+            paramMap.put("type", "0");
+            paramMap.put("telecom", telecom);
+            paramMap.put("phoneNo", phoneNo);
+            paramMap.put("authMethod", authMethod);
+            if (email != null && !email.isBlank()) {
+                paramMap.put("email", email);
+            }
+
+            log.info("CODEF 비밀번호 변경 1차 요청 (SMS/PASS 트리거) - codefId: {}", codefId);
+            String result = codef.requestProduct(CHANGE_PWD_URL, serviceType(), paramMap);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            checkStep1Result(responseMap);
+
+            Map<String, Object> step1Data = toMap(responseMap.get("data"));
+            String sessionKey = UUID.randomUUID().toString();
+            changeSessions.put(sessionKey, new ChangeSessionData(
+                    "password", authMethod, paramMap, step1Data, null, bcryptHash, LocalDateTime.now()));
+
+            log.info("CODEF 비밀번호 변경 1차 완료 - sessionKey: {}", sessionKey);
+            return SignupStep1Response.builder()
+                    .sessionKey(sessionKey)
+                    .requiresTwoWay(true)
+                    .authMethod(authMethod)
+                    .build();
+
+        } catch (SignupFieldException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 비밀번호 변경 1차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("비밀번호 변경 요청 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    // ── 비밀번호 변경: 2차(SMS/PASS 확인) → bcrypt 해시 반환 ───────────
+
+    public String changePwdStep2(String sessionKey, String smsAuthNo) {
+        ChangeSessionData session = getValidChangeSession(sessionKey);
+        try {
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> reqCertMap = new HashMap<>(session.getOriginalParams());
+            reqCertMap.put("twoWayInfo", buildTwoWayInfo(session.getStep1ResponseData()));
+            reqCertMap.put("is2Way", true);
+            reqCertMap.put("simpleAuth", "1");
+            if (smsAuthNo != null && !smsAuthNo.isBlank()) {
+                reqCertMap.put("smsAuthNo", smsAuthNo);
+            }
+
+            log.info("CODEF 비밀번호 변경 2차 요청 (인증 확인) - sessionKey: {}", sessionKey);
+            String result = codef.requestCertification(CHANGE_PWD_URL, serviceType(), reqCertMap);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            checkChangeFinalResult(responseMap, true);
+
+            changeSessions.remove(sessionKey);
+            log.info("CODEF 비밀번호 변경 완료 - sessionKey: {}", sessionKey);
+            return session.getBcryptHash();
+
+        } catch (SignupFieldException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 비밀번호 변경 2차 실패: {}", e.getMessage(), e);
+            throw new SignupFieldException("smsAuthNo", "인증에 실패했습니다. 다시 시도해주세요.");
+        }
+    }
+
+    private ChangeSessionData getValidChangeSession(String sessionKey) {
+        ChangeSessionData session = changeSessions.get(sessionKey);
+        if (session == null) {
+            throw new SignupFieldException("general", "인증 세션이 없거나 만료되었습니다. 처음부터 다시 시도해주세요.");
+        }
+        if (session.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(SESSION_TIMEOUT_MINUTES))) {
+            changeSessions.remove(sessionKey);
+            throw new SignupFieldException("general", "인증 시간이 초과되었습니다. 처음부터 다시 시도해주세요.");
+        }
+        return session;
+    }
+
+    // 변경 API 최종 결과 검증. resRegistrationStatus "1"=성공, "2"=임시발급(비번변경 실패)
+    @SuppressWarnings("unchecked")
+    private void checkChangeFinalResult(Map<String, Object> responseMap, boolean isPwd) {
+        Map<String, Object> result = (Map<String, Object>) responseMap.get("result");
+        if (result == null) throw new RuntimeException("CODEF 응답 형식 오류");
+        String code = (String) result.get("code");
+
+        Map<String, Object> data = toMap(responseMap.get("data"));
+        Map<String, Object> extraInfo = toMap(data.get("extraInfo"));
+        String extraCode = (String) extraInfo.get("code");
+        String extraMsg  = (String) extraInfo.get("message");
+        if (extraCode != null && !extraCode.isBlank()) {
+            throw new SignupFieldException(resolveErrorField(extraMsg),
+                    extraMsg != null && !extraMsg.isBlank() ? extraMsg : "처리에 실패했습니다.");
+        }
+
+        if (!"CF-00000".equals(code) && !"CF-03002".equals(code)) {
+            String msg = buildErrorMessage(result);
+            throw new SignupFieldException(resolveErrorField(msg), msg);
+        }
+
+        String status = (String) data.get("resRegistrationStatus");
+        if (status != null && !"1".equals(status)) {
+            String desc = (String) data.get("resResultDesc");
+            String msg = (desc != null && !desc.isBlank()) ? desc
+                    : (isPwd ? "비밀번호 변경에 실패했습니다." : "이메일 변경에 실패했습니다.");
+            throw new SignupFieldException(resolveErrorField(msg), msg);
         }
     }
 
@@ -443,6 +650,20 @@ public class CodefService {
         private Map<String, Object> step1ResponseData;  // 2차 twoWayInfo 구성용
         private Map<String, Object> step2ResponseData;  // 3차 twoWayInfo 구성용
         private Map<String, Object> step3ResponseData;  // 4차 twoWayInfo 구성용
+        private LocalDateTime createdAt;
+    }
+
+    // ── 계정 변경(이메일/비밀번호) 세션 데이터 ──────────────────────────
+
+    @Data
+    @AllArgsConstructor
+    public static class ChangeSessionData {
+        private String type;            // "email" | "password"
+        private String authMethod;      // "0"=SMS, "1"=PASS
+        private HashMap<String, Object> originalParams;
+        private Map<String, Object> step1ResponseData;  // 2차 twoWayInfo 구성용
+        private String newEmail;        // type="email"일 때 변경할 이메일
+        private String bcryptHash;      // type="password"일 때 DB 저장용 bcrypt 해시
         private LocalDateTime createdAt;
     }
 }

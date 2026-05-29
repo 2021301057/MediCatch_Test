@@ -1,6 +1,8 @@
 package com.medicatch.user.controller;
 
 import com.medicatch.user.dto.AuthResponse;
+import com.medicatch.user.dto.ChangeEmailRequest;
+import com.medicatch.user.dto.ChangePwdRequest;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
@@ -135,6 +137,51 @@ public class AuthController {
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "UP", "service", "user-service"));
+    }
+
+    // ── 이메일 변경 (CODEF 2-way 인증) ───────────────────────────────────
+
+    /** 이메일 변경 1단계: CODEF SMS/PASS 인증 트리거 */
+    @PostMapping("/change-email/step1")
+    public ResponseEntity<SignupStep1Response> changeEmailStep1(@Valid @RequestBody ChangeEmailRequest request) {
+        Long userId = currentUserId();
+        log.info("POST /api/auth/change-email/step1 - userId: {}", userId);
+        return ResponseEntity.ok(authService.changeEmailStep1(userId, request));
+    }
+
+    /** 이메일 변경 2단계: 인증번호 확인 → CODEF + 로컬 DB 갱신 */
+    @PostMapping("/change-email/step2")
+    public ResponseEntity<Map<String, String>> changeEmailStep2(@Valid @RequestBody SignupStep2Request request) {
+        Long userId = currentUserId();
+        log.info("POST /api/auth/change-email/step2 - userId: {}", userId);
+        authService.changeEmailStep2(userId, request);
+        return ResponseEntity.ok(Map.of("message", "이메일이 변경되었습니다."));
+    }
+
+    // ── 비밀번호 변경 (CODEF 2-way 인증) ─────────────────────────────────
+
+    /** 비밀번호 변경 1단계: CODEF SMS/PASS 인증 트리거 */
+    @PostMapping("/change-pwd/step1")
+    public ResponseEntity<SignupStep1Response> changePwdStep1(@Valid @RequestBody ChangePwdRequest request) {
+        Long userId = currentUserId();
+        log.info("POST /api/auth/change-pwd/step1 - userId: {}", userId);
+        return ResponseEntity.ok(authService.changePwdStep1(userId, request));
+    }
+
+    /** 비밀번호 변경 2단계: 인증번호 확인 → CODEF + 로컬 DB 갱신 */
+    @PostMapping("/change-pwd/step2")
+    public ResponseEntity<Map<String, String>> changePwdStep2(@Valid @RequestBody SignupStep2Request request) {
+        Long userId = currentUserId();
+        log.info("POST /api/auth/change-pwd/step2 - userId: {}", userId);
+        authService.changePwdStep2(userId, request);
+        return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
+    }
+
+    /** SecurityContext(게이트웨이 X-User-Id 주입)에서 현재 사용자 ID 추출 */
+    private Long currentUserId() {
+        String userIdString = (String) SecurityContextHolder.getContext()
+                .getAuthentication().getPrincipal();
+        return Long.parseLong(userIdString);
     }
 
     // ── 예외 핸들러 ──────────────────────────────────────────────────
