@@ -90,14 +90,14 @@ body::before {
 
 .mc-nav-links {
   display: flex; align-items: center;
-  gap: 0; flex: 1;
+  gap: 4px; flex: 1;
   height: 100%;
 }
 
 .mc-nav-link {
   height: 100%;
   display: inline-flex; align-items: center;
-  padding: 0 6px;
+  padding: 0 7px;
   font-size: 15.6px; font-weight: 500;
   color: var(--text-2);
   letter-spacing: 0;
@@ -256,7 +256,7 @@ body::before {
 .mc-page-top-right { display: flex; align-items: center; gap: 10px; }
 
 .mc-sync-note {
-  font-size: 12px; color: var(--text-3);
+  font-size: 11px; color: var(--text-3);
   display: flex; align-items: center; gap: 5px;
 }
 
@@ -302,7 +302,7 @@ body::before {
 
 .mc-stat-val.blue { color: var(--blue); }
 
-.mc-stat-meta { font-size: 12px; color: var(--text-3); }
+.mc-stat-meta { font-size: 13.5px; color: var(--text-3); }
 
 .mc-stat-pill {
   display: inline-flex; align-items: center;
@@ -337,7 +337,7 @@ body::before {
 }
 .mc-stats-strip .mc-stat-sub {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-3);
   line-height: 1.35;
 }
@@ -353,7 +353,7 @@ body::before {
   color: var(--text-3); letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.mc-stat-sub { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+.mc-stat-sub { font-size: 13.5px; color: var(--text-3); margin-top: 3px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -502,16 +502,19 @@ body::before {
 
 .mc-ai-strip {
   margin-top: 12px;
-  padding: 12px 16px;
+  padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 12.5px; color: #2A5AAA; line-height: 1.6;
-  cursor: pointer; transition: background 0.1s;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  color: #2A5AAA; line-height: 1.45;
+  cursor: pointer; transition: background 0.1s, border-color 0.1s;
 }
 
-.mc-ai-strip:hover { background: var(--blue-soft); }
-.mc-ai-strip strong { font-weight: 700; }
+.mc-ai-strip:hover { background: var(--blue-soft); border-color: #bfdbfe; }
+.mc-ai-strip strong { display: block; font-size: 12.5px; font-weight: 800; color: #1d4ed8; margin-bottom: 2px; }
+.mc-ai-strip span { display: block; font-size: 12px; color: #64748b; word-break: keep-all; }
+.mc-ai-strip em { flex-shrink: 0; font-style: normal; font-weight: 800; color: #2563eb; }
 
 /* ── QUICK ACTIONS ───────────────────────────────── */
 .mc-action-grid {
@@ -674,7 +677,7 @@ body::before {
 
 .mc-card-sub {
   font-size: 12px; color: var(--text-3);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* ── BADGES / TAGS ────────────────────────── */
@@ -817,7 +820,7 @@ body::before {
 .mc-alert-success { background: #E8F2EC;         border-color: #BED4C7; }
 
 .mc-alert-title  { font-size: 13.5px; font-weight: 700; color: var(--text-1); }
-.mc-alert-body   { font-size: 12.5px; color: var(--text-2); margin-top: 2px; }
+.mc-alert-body   { font-size: 12.5px; color: var(--text-2); margin-top: 3px; }
 .mc-alert-strong { font-size: 16px; font-weight: 800; color: var(--blue); letter-spacing: -0.3px; }
 
 /* ── STATUS BADGES ─────────────────────────── */
@@ -880,7 +883,7 @@ body::before {
 
 .mc-list-info { flex: 1; min-width: 0; }
 .mc-list-name { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
-.mc-list-sub  { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.mc-list-sub  { font-size: 12px; color: var(--text-3); margin-top: 3px; }
 
 /* ── MODAL / DIALOG ──────────────────────── */
 .mc-modal-backdrop {
@@ -1034,26 +1037,6 @@ body::before {
 .mc-chat-bubble strong { font-weight: 700; }
 .mc-chat-bubble h2, .mc-chat-bubble h3 { margin: 10px 0 6px; font-size: 14px; }
 
-.mc-chat-sources {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--border-soft);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.mc-chat-source-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-2);
-  background: var(--blue-soft);
-  border-radius: 9999px;
-  line-height: 1.6;
-}
-
 .mc-chat-input-row {
   padding: 14px 18px;
   border-top: 1px solid var(--border);
@@ -1114,7 +1097,7 @@ body::before {
 
 .mc-login-headline {
   font-size: 34px; font-weight: 800;
-  color: var(--text-1); line-height: 1.25;
+  color: var(--text-1); line-height: 1.28;
   letter-spacing: -0.8px;
   margin-bottom: 18px;
 }
@@ -1142,7 +1125,7 @@ body::before {
 }
 
 .mc-login-feature-title { font-size: 13.5px; font-weight: 700; color: var(--text-1); }
-.mc-login-feature-desc  { font-size: 12.5px; color: var(--text-3); margin-top: 2px; line-height: 1.55; }
+.mc-login-feature-desc  { font-size: 12.5px; color: var(--text-3); margin-top: 3px; line-height: 1.55; }
 
 .mc-login-right {
   flex: 0 0 480px;
@@ -1460,10 +1443,13 @@ body::before {
 }
 
 .mc-floating-chat-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
   pointer-events: auto;
   width: min(440px, calc(100vw - 32px));
-  height: min(680px, calc(100vh - 96px));
-  margin-bottom: 12px;
+  height: min(640px, calc(100vh - 56px));
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1473,6 +1459,7 @@ body::before {
   box-shadow: 0 22px 60px rgba(13, 21, 32, 0.18);
   opacity: 0;
   transform: translateY(14px) scale(0.98);
+  transform-origin: bottom right;
   visibility: hidden;
   transition: opacity 0.16s, transform 0.16s, visibility 0.16s;
 }
@@ -1611,7 +1598,7 @@ body::before {
   }
 }
 
-/* ===================== Navbar 사용자 드롭다운 ===================== */
+/* ── USER MENU ───────────────────────────────────── */
 .mc-user-menu-wrap {
   position: relative;
   display: inline-flex;
@@ -1621,10 +1608,10 @@ body::before {
 .mc-user-menu {
   position: absolute;
   right: 0;
-  top: calc(100% + 6px);
+  top: calc(100% + 7px);
   width: max-content;
   min-width: 0;
-  padding: 2px 3px;
+  padding: 4px 5px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #FFFFFF;
@@ -1646,29 +1633,19 @@ body::before {
 }
 
 .mc-user-menu-id {
-  display: block;
-  width: 100%;
-  padding: 3px 4px;
-  border: 0;
+  padding: 4px 5px;
   border-bottom: 1px solid var(--border-soft);
-  background: transparent;
   color: #64748b;
-  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.25;
   text-align: right;
   word-break: break-all;
-  cursor: pointer;
-}
-
-.mc-user-menu-id:hover {
-  color: var(--blue);
 }
 
 .mc-user-menu-logout {
   width: 100%;
-  margin-top: 2px;
+  margin-top: 3px;
   padding: 3px 4px;
   border: 0;
   border-radius: 7px;
@@ -1686,44 +1663,147 @@ body::before {
   color: var(--blue);
 }
 
-/* ===================== AccountPage ===================== */
-.mc-account-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+
+/* ── CODEF MODAL CTA ───────────────────────────────── */
+.mc-codef-primary-btn {
+  transition: transform .14s ease, box-shadow .14s ease, background .14s ease, border-color .14s ease;
+}
+.mc-codef-primary-btn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #ffffff 0%, #dbeafe 100%) !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.16) !important;
+}
+.mc-codef-primary-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12) !important;
+}
+.mc-codef-next-cta {
+  animation: mcCtaBreathe 1.8s ease-in-out infinite;
+}
+@keyframes mcCtaBreathe {
+  0%, 100% { box-shadow: 0 8px 20px rgba(37,99,235,0.12); }
+  50% { box-shadow: 0 12px 30px rgba(37,99,235,0.20); }
 }
 
-.mc-account-card-wide {
-  grid-column: 1 / -1;
+/* ── ACCOUNT PAGE ─────────────────────────────────── */
+.mc-account-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.42fr) minmax(420px, 0.58fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mc-account-summary-card,
+.mc-account-security-card {
+  min-height: 0;
+}
+
+.mc-account-profile-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.mc-account-avatar-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2F6FE8, #22b8cf);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(47,111,232,.16);
+}
+
+.mc-account-profile-name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text-1);
+}
+
+.mc-account-profile-id {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+  font-weight: 700;
+}
+
+.mc-account-security-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .mc-account-section-title {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 17px;
   font-weight: 800;
   color: var(--text-1);
   letter-spacing: -0.02em;
 }
 
+.mc-account-section-sub {
+  margin: 5px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.mc-account-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #F1F5F9;
+  flex-shrink: 0;
+}
+
+.mc-account-tabs button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  padding: 7px 11px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mc-account-tabs button.active {
+  background: #fff;
+  color: var(--blue);
+  box-shadow: 0 1px 4px rgba(15,23,42,.08);
+}
+
 .mc-account-info-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
 }
 
 .mc-account-info-row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border-soft);
   font-size: 14px;
 }
 
 .mc-account-info-row:last-child { border-bottom: 0; }
-
 .mc-account-info-row span { color: var(--text-3); font-weight: 700; }
-
 .mc-account-info-row strong { color: var(--text-1); font-weight: 800; word-break: break-all; text-align: right; }
 
 .mc-account-form {
@@ -1732,16 +1812,51 @@ body::before {
   gap: 10px;
 }
 
+.mc-account-form.compact {
+  gap: 9px;
+}
+
+.mc-account-form.compact .mc-input {
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
 .mc-account-label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   font-size: 12px;
   font-weight: 800;
   color: var(--text-2);
 }
 
+
+.mc-phone-auth-box {
+  padding: 13px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: #F8FAFC;
+}
+
+.mc-account-actions.split {
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.mc-account-ghost-btn {
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.mc-account-form.compact input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
 .mc-account-message {
-  padding: 10px 12px;
+  padding: 9px 11px;
   border-radius: 10px;
   background: #F8FAFC;
   border: 1px solid var(--border-soft);
@@ -1753,6 +1868,7 @@ body::before {
 .mc-account-actions {
   display: flex;
   justify-content: flex-end;
+  margin-top: 2px;
 }
 
 .mc-account-submit {
@@ -1761,4 +1877,1125 @@ body::before {
   padding: 7px 14px;
   min-width: 64px;
   font-size: 13px;
+}
+
+@media (max-width: 920px) {
+  .mc-account-layout { grid-template-columns: 1fr; }
+  .mc-account-security-head { flex-direction: column; }
+}
+
+.mc-user-menu-id {
+  display: block;
+  width: 100%;
+  padding: 4px 5px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.28;
+  text-align: right;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.mc-user-menu-id:hover {
+  color: var(--blue);
+}
+
+@media (max-width: 760px) {
+  .mc-account-grid { grid-template-columns: 1fr; }
+}
+
+.mc-account-locked-note {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mc-account-reveal {
+  animation: mcAccountReveal .18s ease both;
+}
+
+@keyframes mcAccountReveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── PROFILE CSS AVATAR ───────────────────────────── */
+.mc-css-avatar {
+  --avatar-bg-1: #5B9AF8;
+  --avatar-bg-2: #2563D4;
+  --avatar-face: #ffffff;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--avatar-bg-1), var(--avatar-bg-2));
+  box-shadow: 0 8px 18px rgba(47, 111, 232, 0.16);
+  cursor: pointer;
+  color: #fff;
+  flex: 0 0 auto;
+}
+
+.mc-css-avatar-lg {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  box-shadow: 0 12px 24px rgba(47, 111, 232, 0.18);
+}
+
+.mc-avatar-mint { --avatar-bg-1: #A7F3D0; --avatar-bg-2: #2DD4BF; }
+.mc-avatar-lavender { --avatar-bg-1: #C7D2FE; --avatar-bg-2: #818CF8; }
+.mc-avatar-yellow { --avatar-bg-1: #FDE68A; --avatar-bg-2: #F59E0B; }
+.mc-avatar-blue { --avatar-bg-1: #5B9AF8; --avatar-bg-2: #2563D4; }
+
+.mc-avatar-face {
+  position: relative;
+  width: 58%;
+  height: 52%;
+  border-radius: 10px;
+  background: rgba(255,255,255,.92);
+  box-shadow: inset 0 -2px 0 rgba(15, 23, 42, .08);
+}
+
+.mc-css-avatar-lg .mc-avatar-face { border-radius: 13px; }
+
+.mc-avatar-face i {
+  position: absolute;
+  top: 35%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #2563D4;
+}
+.mc-avatar-face i:first-child { left: 30%; }
+.mc-avatar-face i:nth-child(2) { right: 30%; }
+.mc-css-avatar-lg .mc-avatar-face i { width: 4px; height: 4px; }
+.mc-avatar-face b {
+  position: absolute;
+  left: 50%;
+  bottom: 25%;
+  width: 9px;
+  height: 4px;
+  border-bottom: 2px solid #2563D4;
+  border-radius: 0 0 10px 10px;
+  transform: translateX(-50%);
+}
+
+.mc-avatar-leaf .mc-avatar-face { border-radius: 50% 50% 46% 46%; }
+.mc-avatar-soft .mc-avatar-face::before,
+.mc-avatar-soft .mc-avatar-face::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.9);
+}
+.mc-avatar-soft .mc-avatar-face::before { left: 5%; }
+.mc-avatar-soft .mc-avatar-face::after { right: 5%; }
+.mc-avatar-sun .mc-avatar-face { border-radius: 50%; }
+.mc-avatar-sun .mc-avatar-face b { width: 11px; height: 6px; }
+
+.mc-account-avatar-zone {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.mc-avatar-picker {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 196px;
+  padding: 10px;
+  border: 1px solid #D9E3F2;
+  border-radius: 14px;
+  background: #FFFFFF;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, .14);
+  z-index: 20;
+}
+
+.mc-avatar-picker::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 18px;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-left: 1px solid #D9E3F2;
+  border-top: 1px solid #D9E3F2;
+  transform: rotate(45deg);
+}
+
+.mc-avatar-picker-title {
+  margin: 0 0 8px;
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mc-avatar-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 7px;
+}
+
+.mc-avatar-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #E2E8F0;
+  border-radius: 11px;
+  background: #F8FAFC;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mc-avatar-choice .mc-css-avatar {
+  width: 28px;
+  height: 28px;
+  box-shadow: none;
+}
+
+.mc-avatar-choice em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748B;
+}
+
+.mc-avatar-choice:hover,
+.mc-avatar-choice.active {
+  border-color: #93C5FD;
+  background: #EFF6FF;
+}
+
+/* ── PROFILE AVATAR CUTE VARIANTS v2 ─────────────── */
+.mc-avatar-pink { --avatar-bg-1: #FDA4AF; --avatar-bg-2: #FB7185; }
+.mc-avatar-sky { --avatar-bg-1: #BAE6FD; --avatar-bg-2: #38BDF8; }
+
+.mc-avatar-picker {
+  width: 278px;
+  padding: 12px;
+}
+
+.mc-avatar-picker-grid {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mc-avatar-choice {
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-height: 74px;
+  padding: 9px 7px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
+}
+
+.mc-avatar-choice .mc-css-avatar {
+  width: 34px;
+  height: 34px;
+}
+
+.mc-avatar-choice em {
+  font-size: 11.5px;
+  color: #64748B;
+}
+
+.mc-avatar-face {
+  overflow: visible;
+}
+
+/* 곰돌: 둥근 귀 */
+.mc-avatar-bear::before,
+.mc-avatar-bear::after {
+  content: '';
+  position: absolute;
+  top: 13%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.88);
+  box-shadow: inset 0 -1px 0 rgba(37, 99, 235, .08);
+}
+.mc-avatar-bear::before { left: 18%; }
+.mc-avatar-bear::after { right: 18%; }
+.mc-avatar-bear .mc-avatar-face { width: 55%; height: 50%; border-radius: 46% 46% 42% 42%; }
+
+/* 토끼: 긴 귀 + 작은 입 */
+.mc-avatar-bunny::before,
+.mc-avatar-bunny::after {
+  content: '';
+  position: absolute;
+  top: 5%;
+  width: 16%;
+  height: 34%;
+  border-radius: 999px;
+  background: rgba(255,255,255,.9);
+  transform-origin: bottom center;
+}
+.mc-avatar-bunny::before { left: 28%; transform: rotate(-14deg); }
+.mc-avatar-bunny::after { right: 28%; transform: rotate(14deg); }
+.mc-avatar-bunny .mc-avatar-face { width: 54%; height: 48%; border-radius: 50% 50% 46% 46%; }
+.mc-avatar-bunny .mc-avatar-face b { width: 7px; height: 5px; border-bottom-width: 2px; }
+
+/* 냥이: 뾰족 귀 */
+.mc-avatar-cat::before,
+.mc-avatar-cat::after {
+  content: '';
+  position: absolute;
+  top: 17%;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 11px solid rgba(255,255,255,.9);
+}
+.mc-avatar-cat::before { left: 20%; transform: rotate(-18deg); }
+.mc-avatar-cat::after { right: 20%; transform: rotate(18deg); }
+.mc-avatar-cat .mc-avatar-face { width: 56%; height: 48%; border-radius: 42% 42% 50% 50%; }
+.mc-avatar-cat .mc-avatar-face::before,
+.mc-avatar-cat .mc-avatar-face::after {
+  content: '';
+  position: absolute;
+  top: 55%;
+  width: 9px;
+  height: 1px;
+  background: rgba(37, 99, 235, .45);
+}
+.mc-avatar-cat .mc-avatar-face::before { left: -1px; transform: rotate(12deg); }
+.mc-avatar-cat .mc-avatar-face::after { right: -1px; transform: rotate(-12deg); }
+
+/* 새싹: 잎 포인트 */
+.mc-avatar-sprout::before,
+.mc-avatar-sprout::after {
+  content: '';
+  position: absolute;
+  top: 8%;
+  width: 19%;
+  height: 25%;
+  border-radius: 90% 10% 90% 10%;
+  background: rgba(255,255,255,.88);
+}
+.mc-avatar-sprout::before { left: 36%; transform: rotate(-38deg); }
+.mc-avatar-sprout::after { right: 33%; transform: rotate(38deg) scaleX(-1); }
+.mc-avatar-sprout .mc-avatar-face { width: 57%; height: 50%; border-radius: 45% 45% 52% 52%; }
+.mc-avatar-sprout .mc-avatar-face b { border-bottom-color: #0F766E; }
+.mc-avatar-sprout .mc-avatar-face i { background: #0F766E; }
+
+/* 하트: 말랑 하트 */
+.mc-avatar-heart .mc-avatar-face {
+  width: 53%;
+  height: 49%;
+  border-radius: 44% 44% 54% 54%;
+}
+.mc-avatar-heart::before {
+  content: '';
+  position: absolute;
+  right: 17%;
+  top: 16%;
+  width: 11px;
+  height: 10px;
+  background: rgba(255,255,255,.9);
+  transform: rotate(-45deg);
+  border-radius: 2px;
+}
+.mc-avatar-heart::after {
+  content: '';
+  position: absolute;
+  right: 17%;
+  top: 13%;
+  width: 11px;
+  height: 11px;
+  background: rgba(255,255,255,.9);
+  border-radius: 50%;
+  box-shadow: -7px 0 0 rgba(255,255,255,.9);
+}
+.mc-avatar-heart .mc-avatar-face i { background: #BE123C; }
+.mc-avatar-heart .mc-avatar-face b { border-bottom-color: #BE123C; }
+
+/* 메디: 알약/헬스 느낌 */
+.mc-avatar-pill .mc-avatar-face {
+  width: 60%;
+  height: 42%;
+  border-radius: 999px;
+  transform: rotate(-10deg);
+}
+.mc-avatar-pill .mc-avatar-face::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  width: 1px;
+  height: 76%;
+  background: rgba(37, 99, 235, .2);
+}
+.mc-avatar-pill .mc-avatar-face i { top: 35%; width: 3px; height: 3px; }
+.mc-avatar-pill .mc-avatar-face b { bottom: 20%; width: 8px; }
+.mc-avatar-pill::before {
+  content: '+';
+  position: absolute;
+  left: 16%;
+  top: 16%;
+  color: rgba(255,255,255,.92);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mc-css-avatar-lg.mc-avatar-cat::before,
+.mc-css-avatar-lg.mc-avatar-cat::after {
+  border-left-width: 9px;
+  border-right-width: 9px;
+  border-bottom-width: 14px;
+}
+.mc-css-avatar-lg.mc-avatar-pill::before { font-size: 15px; }
+
+/* 귀가 있는 프로필은 얼굴을 살짝 아래로 내려 여백 균형 보정 */
+.mc-avatar-bear .mc-avatar-face,
+.mc-avatar-bunny .mc-avatar-face,
+.mc-avatar-cat .mc-avatar-face {
+  transform: translateY(3px);
+}
+
+.mc-css-avatar-lg.mc-avatar-bear .mc-avatar-face,
+.mc-css-avatar-lg.mc-avatar-bunny .mc-avatar-face,
+.mc-css-avatar-lg.mc-avatar-cat .mc-avatar-face {
+  transform: translateY(4px);
+}
+
+/* 곰돌 프로필 귀여움 보정 */
+.mc-avatar-bear {
+  --avatar-bg-1: #6EA8FF;
+  --avatar-bg-2: #3B82F6;
+}
+.mc-avatar-bear::before,
+.mc-avatar-bear::after {
+  top: 14%;
+  width: 24%;
+  height: 24%;
+  background: rgba(255,255,255,.94);
+  box-shadow: inset 0 -2px 0 rgba(37, 99, 235, .08);
+}
+.mc-avatar-bear::before { left: 17%; }
+.mc-avatar-bear::after { right: 17%; }
+.mc-avatar-bear .mc-avatar-face {
+  width: 60%;
+  height: 54%;
+  border-radius: 48% 48% 46% 46%;
+  transform: translateY(5px);
+}
+.mc-avatar-bear .mc-avatar-face::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22%;
+  height: 18%;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, .13);
+  transform: translate(-50%, -10%);
+}
+.mc-avatar-bear .mc-avatar-face i {
+  top: 32%;
+  width: 4px;
+  height: 4px;
+}
+.mc-avatar-bear .mc-avatar-face i:first-child { left: 28%; }
+.mc-avatar-bear .mc-avatar-face i:nth-child(2) { right: 28%; }
+.mc-avatar-bear .mc-avatar-face b {
+  bottom: 22%;
+  width: 10px;
+  height: 5px;
+  border-bottom-width: 2px;
+}
+.mc-css-avatar-lg.mc-avatar-bear .mc-avatar-face {
+  transform: translateY(6px);
+}
+
+/* 프로필 아이콘 표정/비율 보정 */
+.mc-avatar-face b {
+  bottom: 18%;
+  width: 8px;
+  height: 3px;
+  border-bottom-width: 1.6px;
+  border-radius: 0 0 8px 8px;
+  opacity: .82;
+}
+
+/* 곰돌: 귀를 얼굴 가까이 붙이고 입꼬리 완화 */
+.mc-avatar-bear::before,
+.mc-avatar-bear::after {
+  top: 20%;
+  width: 21%;
+  height: 21%;
+  z-index: 0;
+}
+.mc-avatar-bear::before { left: 23%; }
+.mc-avatar-bear::after { right: 23%; }
+.mc-avatar-bear .mc-avatar-face {
+  z-index: 1;
+  width: 61%;
+  height: 55%;
+  transform: translateY(6px);
+}
+.mc-avatar-bear .mc-avatar-face b {
+  bottom: 18%;
+  width: 8px;
+  height: 3px;
+}
+
+/* 토끼: 얼굴을 더 아래로 내려 귀/하단 여백 균형 조절 */
+.mc-avatar-bunny .mc-avatar-face {
+  transform: translateY(7px);
+  height: 50%;
+}
+.mc-css-avatar-lg.mc-avatar-bunny .mc-avatar-face {
+  transform: translateY(8px);
+}
+.mc-avatar-bunny::before,
+.mc-avatar-bunny::after {
+  top: 6%;
+  height: 32%;
+}
+
+/* 하트: 얼굴 자체를 하트 실루엣으로 */
+.mc-avatar-heart .mc-avatar-face {
+  width: 48%;
+  height: 48%;
+  border-radius: 10px 10px 14px 14px;
+  transform: translateY(5px) rotate(-45deg);
+  overflow: visible;
+}
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.92);
+}
+.mc-avatar-heart .mc-avatar-face::before {
+  left: 50%;
+  top: 0;
+}
+.mc-avatar-heart .mc-avatar-face::after {
+  left: 0;
+  top: -50%;
+}
+.mc-avatar-heart .mc-avatar-face i,
+.mc-avatar-heart .mc-avatar-face b {
+  transform: rotate(45deg);
+  z-index: 2;
+}
+.mc-avatar-heart .mc-avatar-face i:first-child {
+  left: 30%;
+  top: 38%;
+}
+.mc-avatar-heart .mc-avatar-face i:nth-child(2) {
+  right: 18%;
+  top: 50%;
+}
+.mc-avatar-heart .mc-avatar-face b {
+  left: 59%;
+  bottom: 20%;
+  width: 7px;
+  height: 3px;
+}
+.mc-avatar-heart::before,
+.mc-avatar-heart::after {
+  display: none;
+}
+
+.mc-css-avatar-lg.mc-avatar-heart .mc-avatar-face {
+  transform: translateY(6px) rotate(-45deg);
+}
+
+/* 하트 프로필 이목구비 정렬 보정 */
+.mc-avatar-heart .mc-avatar-face {
+  position: absolute;
+  width: 43%;
+  height: 43%;
+  left: 50%;
+  top: 50%;
+  border-radius: 9px 9px 12px 12px;
+  transform: translate(-50%, -38%) rotate(-45deg);
+}
+.mc-avatar-heart .mc-avatar-face i,
+.mc-avatar-heart .mc-avatar-face b {
+  display: none;
+}
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after {
+  z-index: 0;
+}
+.mc-avatar-heart .mc-avatar-face .mc-heart-features { display: none; }
+.mc-avatar-heart::before,
+.mc-avatar-heart::after {
+  display: block;
+  content: '';
+  position: absolute;
+  z-index: 3;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #BE123C;
+  top: 47%;
+}
+.mc-avatar-heart::before { left: 40%; }
+.mc-avatar-heart::after { right: 40%; }
+.mc-avatar-heart {
+  overflow: hidden;
+}
+.mc-avatar-heart > .mc-avatar-face + span,
+.mc-avatar-heart .mc-avatar-face + i { display: none; }
+.mc-avatar-heart .mc-avatar-face b { display: none !important; }
+.mc-avatar-heart .mc-avatar-face i { display: none !important; }
+.mc-avatar-heart .mc-avatar-face ~ * { pointer-events: none; }
+.mc-avatar-heart .mc-avatar-face::selection { background: transparent; }
+.mc-avatar-heart .mc-avatar-face {
+  box-shadow: none;
+}
+.mc-avatar-heart .mc-avatar-face::selection { color: inherit; }
+.mc-avatar-heart .mc-avatar-face:empty::before { opacity: 1; }
+.mc-avatar-heart .mc-avatar-face:empty::after { opacity: 1; }
+.mc-avatar-heart .mc-avatar-face b::after { display: none; }
+.mc-avatar-heart .mc-avatar-face::selection { background: none; }
+.mc-avatar-heart .mc-avatar-face + b { display:none; }
+.mc-avatar-heart .mc-avatar-face:after { box-shadow: -9px 0 0 rgba(255,255,255,.92); }
+.mc-avatar-heart .mc-avatar-face:before { display: none; }
+.mc-avatar-heart .mc-avatar-face::after {
+  left: 0;
+  top: -50%;
+}
+.mc-avatar-heart .mc-avatar-face::before {
+  left: 50%;
+  top: 0;
+}
+.mc-avatar-heart .mc-avatar-face::after {
+  box-shadow: 9px 9px 0 rgba(255,255,255,.92);
+}
+.mc-avatar-heart .mc-avatar-face::before { display: block; }
+.mc-avatar-heart .mc-avatar-face::after { display: block; }
+.mc-avatar-heart .mc-avatar-face + .mc-heart-mouth { display: none; }
+.mc-avatar-heart::marker { display: none; }
+.mc-avatar-heart .mc-avatar-face::first-letter { color: transparent; }
+.mc-avatar-heart .mc-avatar-face b { visibility: hidden; }
+.mc-avatar-heart .mc-avatar-face i { visibility: hidden; }
+.mc-avatar-heart .mc-avatar-face + * { display:none; }
+.mc-avatar-heart .mc-avatar-face::selection { background: transparent; }
+.mc-avatar-heart .mc-avatar-face { color: transparent; }
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after { color: initial; }
+.mc-avatar-heart .mc-avatar-face + span { display:none; }
+.mc-avatar-heart .mc-avatar-face ~ span { display:none; }
+
+.mc-avatar-heart .mc-avatar-face::before {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.92);
+}
+.mc-avatar-heart .mc-avatar-face::after {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255,255,255,.92);
+  left: 0;
+  top: -50%;
+  box-shadow: 50% 50% 0 rgba(255,255,255,.92);
+}
+
+.mc-avatar-heart .mc-avatar-face {
+  --heart-mouth-x: 50%;
+}
+.mc-avatar-heart .mc-avatar-face + .mc-avatar-mouth { display: none; }
+.mc-avatar-heart:has(.mc-avatar-face)::after { }
+.mc-avatar-heart .mc-avatar-face b { opacity: 0; }
+.mc-avatar-heart .mc-avatar-face i { opacity: 0; }
+.mc-avatar-heart .mc-avatar-face::before { left: 50%; top: 0; }
+.mc-avatar-heart .mc-avatar-face::after { left: 0; top: -50%; box-shadow: none; }
+.mc-avatar-heart .mc-avatar-face {
+  background: rgba(255,255,255,.92);
+}
+.mc-avatar-heart .mc-avatar-face::before { transform: none; }
+.mc-avatar-heart .mc-avatar-face::after { transform: none; }
+
+.mc-avatar-heart .mc-avatar-face + .heart-mouth { display:none; }
+.mc-avatar-heart::selection { background: transparent; }
+
+.mc-avatar-heart .mc-avatar-face ~ b { display:none; }
+.mc-avatar-heart .mc-avatar-face ~ i { display:none; }
+
+.mc-avatar-heart .mc-avatar-face::backdrop { display:none; }
+
+.mc-avatar-heart .mc-avatar-face + .mc-avatar-face { display:none; }
+
+.mc-avatar-heart .mc-avatar-face b,
+.mc-avatar-heart .mc-avatar-face i { position:absolute; }
+
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after { pointer-events:none; }
+
+.mc-avatar-heart .mc-avatar-face { overflow: visible; }
+
+.mc-avatar-heart .mc-avatar-face span { display:none; }
+
+.mc-avatar-heart .mc-avatar-face::first-line { color: transparent; }
+
+.mc-avatar-heart .mc-avatar-face { isolation: isolate; }
+
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after { z-index: -1; }
+
+.mc-avatar-heart .mc-avatar-face i:first-child,
+.mc-avatar-heart .mc-avatar-face i:nth-child(2),
+.mc-avatar-heart .mc-avatar-face b { display: none !important; }
+
+.mc-avatar-heart .mc-avatar-face {
+  filter: none;
+}
+
+.mc-avatar-heart .mc-heart-mouth-fix { display: none; }
+
+.mc-avatar-heart .mc-avatar-face::selection { background: transparent; }
+
+.mc-avatar-heart .mc-avatar-face:before,
+.mc-avatar-heart .mc-avatar-face:after { box-sizing: border-box; }
+
+.mc-avatar-heart .mc-avatar-face { pointer-events: none; }
+.mc-avatar-heart .mc-avatar-face::before { pointer-events: none; }
+.mc-avatar-heart .mc-avatar-face::after { pointer-events: none; }
+
+.mc-avatar-heart .mc-avatar-face:empty { font-size: 0; }
+
+.mc-avatar-heart .mc-avatar-face + * { font-size: 0; }
+
+.mc-avatar-heart .mc-avatar-face::selection { text-shadow: none; }
+
+.mc-avatar-heart .mc-avatar-face { text-shadow: none; }
+
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after { text-shadow: none; }
+
+.mc-avatar-heart .mc-avatar-face { line-height: 0; }
+
+.mc-avatar-heart .mc-avatar-face + b { opacity:0; }
+
+.mc-avatar-heart::selection { background: transparent; }
+
+.mc-avatar-heart .mc-avatar-face::before { box-shadow: none; }
+.mc-avatar-heart .mc-avatar-face::after { box-shadow: none; }
+
+.mc-avatar-heart .mc-avatar-face { transform-origin: center; }
+
+.mc-avatar-heart .mc-avatar-face { margin: 0; }
+
+.mc-avatar-heart .mc-avatar-face { border: 0; }
+
+.mc-avatar-heart .mc-avatar-face { outline: 0; }
+
+.mc-avatar-heart .mc-avatar-face { padding: 0; }
+
+.mc-avatar-heart .mc-avatar-face { min-width: 0; min-height: 0; }
+
+.mc-avatar-heart .mc-avatar-face::before { content: ''; }
+.mc-avatar-heart .mc-avatar-face::after { content: ''; }
+
+.mc-avatar-heart .mc-avatar-face { opacity: 1; }
+
+.mc-avatar-heart .mc-avatar-face { visibility: visible; }
+
+.mc-avatar-heart .mc-avatar-face { display: block; }
+
+.mc-avatar-heart .mc-avatar-face { z-index: 1; }
+
+.mc-avatar-heart::before,
+.mc-avatar-heart::after { box-shadow: none; }
+
+.mc-avatar-heart .mc-heart-mouth {
+  display: block;
+}
+
+.mc-avatar-heart .mc-avatar-face + .mc-avatar-face { display:none; }
+
+.mc-avatar-heart::after {
+  right: 40%;
+}
+
+.mc-avatar-heart::before {
+  left: 40%;
+}
+
+.mc-avatar-heart .mc-avatar-face::selection { color: transparent; }
+
+.mc-avatar-heart .mc-avatar-face { user-select: none; }
+
+/* 하트 입: 별도 pseudo 레이어로 중앙 정렬 */
+.mc-avatar-heart .mc-avatar-face b { display:none !important; }
+.mc-avatar-heart .mc-avatar-face i { display:none !important; }
+.mc-avatar-heart .mc-avatar-face::marker { display:none; }
+.mc-avatar-heart .mc-avatar-face { --dummy: 0; }
+.mc-avatar-heart .mc-avatar-face + b { display:none; }
+.mc-avatar-heart .mc-avatar-face + i { display:none; }
+.mc-avatar-heart .mc-avatar-face ~ b { display:none; }
+.mc-avatar-heart .mc-avatar-face ~ i { display:none; }
+.mc-avatar-heart .mc-avatar-face::spelling-error { text-decoration: none; }
+.mc-avatar-heart .mc-avatar-face::grammar-error { text-decoration: none; }
+.mc-avatar-heart .mc-avatar-face { caret-color: transparent; }
+
+.mc-avatar-heart .mc-avatar-face::after {
+  box-shadow: none;
+}
+
+.mc-avatar-heart .mc-avatar-face::before { left: 50%; top: 0; }
+.mc-avatar-heart .mc-avatar-face::after { left: 0; top: -50%; }
+
+.mc-avatar-heart .mc-avatar-face { background: rgba(255,255,255,.92); }
+
+.mc-avatar-heart .mc-avatar-face + span { display:none; }
+
+.mc-avatar-heart .mc-avatar-face::selection { background: transparent; }
+
+.mc-avatar-heart .mc-avatar-face:focus { outline: none; }
+
+/* 프로필 캐릭터 최종 밸런스 보정: 말랑한 표정 */
+.mc-avatar-face b {
+  border: 0 !important;
+  width: 5px !important;
+  height: 2px !important;
+  border-radius: 999px !important;
+  background: currentColor !important;
+  opacity: .55 !important;
+  bottom: 20% !important;
+}
+
+/* 곰돌: 곰인형처럼 단순하고 둥글게 */
+.mc-avatar-bear {
+  color: #2563D4;
+}
+.mc-avatar-bear::before,
+.mc-avatar-bear::after {
+  top: 19% !important;
+  width: 22% !important;
+  height: 22% !important;
+  background: rgba(255,255,255,.94) !important;
+  z-index: 0 !important;
+}
+.mc-avatar-bear::before { left: 24% !important; }
+.mc-avatar-bear::after { right: 24% !important; }
+.mc-avatar-bear .mc-avatar-face {
+  position: relative;
+  z-index: 1 !important;
+  width: 62% !important;
+  height: 58% !important;
+  border-radius: 48% !important;
+  transform: translateY(5px) !important;
+}
+.mc-avatar-bear .mc-avatar-face::before {
+  left: 50% !important;
+  top: 54% !important;
+  width: 22% !important;
+  height: 16% !important;
+  border-radius: 50% !important;
+  background: rgba(37, 99, 212, .12) !important;
+  transform: translate(-50%, -50%) !important;
+}
+.mc-avatar-bear .mc-avatar-face::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 53%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #2563D4;
+  transform: translate(-50%, -50%);
+}
+.mc-avatar-bear .mc-avatar-face i {
+  top: 34% !important;
+  width: 4px !important;
+  height: 4px !important;
+  background: #2563D4 !important;
+}
+.mc-avatar-bear .mc-avatar-face i:first-child { left: 29% !important; }
+.mc-avatar-bear .mc-avatar-face i:nth-child(2) { right: 29% !important; }
+.mc-avatar-bear .mc-avatar-face b {
+  left: 50% !important;
+  bottom: 17% !important;
+  width: 6px !important;
+  height: 2px !important;
+  background: #2563D4 !important;
+  transform: translateX(-50%) !important;
+}
+
+/* 토끼: 귀와 얼굴이 분리되어 보이지 않게 붙임 */
+.mc-avatar-bunny::before,
+.mc-avatar-bunny::after {
+  top: 12% !important;
+  width: 15% !important;
+  height: 30% !important;
+  z-index: 0 !important;
+  background: rgba(255,255,255,.92) !important;
+}
+.mc-avatar-bunny::before { left: 31% !important; transform: rotate(-10deg) !important; }
+.mc-avatar-bunny::after { right: 31% !important; transform: rotate(10deg) !important; }
+.mc-avatar-bunny .mc-avatar-face {
+  position: relative;
+  z-index: 1 !important;
+  width: 58% !important;
+  height: 52% !important;
+  transform: translateY(8px) !important;
+  border-radius: 48% 48% 46% 46% !important;
+}
+.mc-css-avatar-lg.mc-avatar-bunny .mc-avatar-face {
+  transform: translateY(9px) !important;
+}
+
+/* 하트: 이목구비 중앙 정렬 */
+.mc-avatar-heart {
+  color: #BE123C;
+}
+.mc-avatar-heart::before,
+.mc-avatar-heart::after {
+  display: none !important;
+}
+.mc-avatar-heart .mc-avatar-face {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  width: 54% !important;
+  height: 50% !important;
+  border-radius: 48% 48% 54% 54% !important;
+  transform: translateY(5px) !important;
+  background: rgba(255,255,255,.94) !important;
+  color: #BE123C !important;
+  overflow: visible !important;
+}
+.mc-avatar-heart .mc-avatar-face::before,
+.mc-avatar-heart .mc-avatar-face::after {
+  content: '' !important;
+  position: absolute !important;
+  display: block !important;
+  top: -16% !important;
+  width: 42% !important;
+  height: 42% !important;
+  border-radius: 50% !important;
+  background: rgba(255,255,255,.94) !important;
+  box-shadow: none !important;
+  z-index: -1 !important;
+}
+.mc-avatar-heart .mc-avatar-face::before { left: 10% !important; }
+.mc-avatar-heart .mc-avatar-face::after { right: 10% !important; left: auto !important; }
+.mc-avatar-heart .mc-avatar-face i {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  top: 34% !important;
+  width: 3.5px !important;
+  height: 3.5px !important;
+  background: #BE123C !important;
+  transform: none !important;
+  z-index: 2 !important;
+}
+.mc-avatar-heart .mc-avatar-face i:first-child { left: 30% !important; }
+.mc-avatar-heart .mc-avatar-face i:nth-child(2) { right: 30% !important; }
+.mc-avatar-heart .mc-avatar-face b {
+  display: block !important;
+  visibility: visible !important;
+  opacity: .58 !important;
+  left: 50% !important;
+  bottom: 20% !important;
+  width: 6px !important;
+  height: 2px !important;
+  background: #BE123C !important;
+  transform: translateX(-50%) !important;
+  z-index: 2 !important;
+}
+
+/* 새 프로필 SVG 아이콘 시스템 */
+.mc-profile-svg-avatar {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 7px 13px rgba(37, 99, 235, .10));
+}
+
+.mc-profile-avatar-button,
+.mc-profile-nav-avatar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.mc-profile-avatar-button-lg {
+  width: 48px;
+  height: 48px;
+}
+
+.mc-profile-nav-avatar {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50%;
+}
+
+.mc-avatar-choice-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 상단 우측 CTA/프로필 간격 보정 */
+.mc-sync-cta {
+  margin-right: 8px;
+}
+
+.mc-profile-nav-avatar {
+  width: 35px !important;
+  height: 35px !important;
+  margin-right: 7px;
+}
+
+.mc-profile-nav-avatar .mc-profile-svg-avatar {
+  width: 35px;
+  height: 35px;
+}
+
+/* 계정 정보 변경 본인확인 필드 레이아웃 */
+.mc-identity-auth-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, .8fr) minmax(180px, 1.15fr);
+  gap: 10px 12px;
+}
+
+.mc-identity-auth-grid > div:nth-child(3),
+.mc-identity-auth-grid > div:nth-child(4) {
+  grid-column: span 1;
+}
+
+@media (max-width: 760px) {
+  .mc-identity-auth-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 주민등록번호 분리 입력 */
+.mc-identity-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.mc-identity-split span {
+  color: #94A3B8;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.mc-identity-split .mc-input {
+  min-width: 0;
+}
+
+/* 프로필 변경 가능 표시 */
+.mc-profile-avatar-button-lg {
+  position: relative;
+}
+
+.mc-avatar-edit-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #2563EB;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 5px 12px rgba(37,99,235,.22);
+}
+
+/* 프로필 편집 배지 위치: 우측 상단 */
+.mc-avatar-edit-badge {
+  right: -3px;
+  top: -3px;
+  bottom: auto;
+}
+
+/* 상단 네비게이션 간격/크기 조정 */
+.mc-nav-links {
+  margin-left: 42px;
+  width: 853.89px;
+  flex: 0 1 853.89px;
+  column-gap: 16px;
+  row-gap: 0;
+}
+
+.mc-nav-link {
+  font-size: 16px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.mc-sync-cta {
+  margin-right: 22px;
+}
+
+.mc-profile-nav-avatar .mc-profile-svg-avatar {
+  margin-right: 16px;
+}
+
+/* ── test 전용: AI 채팅 출처칩 + 계정 카드 (eunju css 미포함분 보존) ── */
+.mc-chat-sources {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mc-chat-source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--blue-soft);
+  border-radius: 9999px;
+  line-height: 1.6;
+}
+.mc-account-card-wide {
+  grid-column: 1 / -1;
 }

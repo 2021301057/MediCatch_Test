@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import CodefSyncModal from '../CodefSyncModal';
+import ProfileAvatar from './ProfileAvatar';
 
 const NAV_ITEMS = [
   { path: '/',                 label: '대시보드',      end: true },
-  { path: '/pre-treatment',    label: '진료 전 검색',   badge: 'dot' },
+  { path: '/pre-treatment',    label: '진료 전 검색' },
   { path: '/checkup',          label: '건강 검진 기록' },
   { path: '/insurance',        label: '내 보험 조회' },
   { path: '/medical-records',  label: '진료 기록' },
@@ -13,11 +14,21 @@ const NAV_ITEMS = [
   { path: '/health-report',    label: '건강 통합 리포트' },
 ];
 
+const DEFAULT_AVATAR = { key: 'bot' };
+const loadAvatar = () => {
+  try {
+    return JSON.parse(localStorage.getItem('medicatchAvatar') || 'null') || DEFAULT_AVATAR;
+  } catch {
+    return DEFAULT_AVATAR;
+  }
+};
+
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [avatar, setAvatar] = useState(loadAvatar);
   const userMenuRef = useRef(null);
   const [hasHealthData, setHasHealthData] = useState(() => (
     localStorage.getItem('healthDataLoaded') === 'true'
@@ -34,6 +45,16 @@ export default function Navbar() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const syncAvatar = (event) => setAvatar(event.detail || loadAvatar());
+    window.addEventListener('medicatch-avatar-change', syncAvatar);
+    window.addEventListener('storage', syncAvatar);
+    return () => {
+      window.removeEventListener('medicatch-avatar-change', syncAvatar);
+      window.removeEventListener('storage', syncAvatar);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -90,12 +111,12 @@ export default function Navbar() {
           </div>
           <div className="mc-user-menu-wrap" ref={userMenuRef}>
             <button
-              className="mc-nav-avatar"
+              className="mc-nav-avatar mc-profile-nav-avatar"
               onClick={() => setShowUserMenu((v) => !v)}
               title={user?.name ? `${user.name} 메뉴` : '사용자 메뉴'}
               aria-expanded={showUserMenu}
             >
-              {user?.name?.[0] || '김'}
+              <ProfileAvatar type={avatar.key} size={30} />
             </button>
             {showUserMenu && (
               <div className="mc-user-menu">
