@@ -438,8 +438,8 @@ public class CodefService {
             HashMap<String, Object> reqCertMap = new HashMap<>(session.getOriginalParams());
             reqCertMap.put("twoWayInfo", buildTwoWayInfo(session.getStep2ResponseData()));
             reqCertMap.put("is2Way", true);
-            // 임시비번은 평문으로 전달 (명세상 RSA 암호화 언급 없음)
-            reqCertMap.put("password1", tempPassword);
+            String rsaTempPassword = EasyCodefUtil.encryptRSA(tempPassword, publicKey);
+            reqCertMap.put("password1", rsaTempPassword);
 
             log.info("CODEF 비밀번호 변경 3차 요청 (이메일 임시비번 확인) - sessionKey: {}", sessionKey);
             String result = codef.requestCertification(CHANGE_PWD_URL, serviceType(), reqCertMap);
