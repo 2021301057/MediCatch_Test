@@ -394,21 +394,25 @@ public class CodefService {
 
             if ("CF-00000".equals(code)) {
                 String status = (String) data.get("resRegistrationStatus");
+                log.info("CODEF 비밀번호 변경 2차 CF-00000 - resRegistrationStatus: {}, data keys: {}", status, data.keySet());
                 if ("1".equals(status)) {
-                    // 임시비번 없이 바로 완료
                     changeSessions.remove(sessionKey);
                     log.info("CODEF 비밀번호 변경 2차에서 직접 완료 - sessionKey: {}", sessionKey);
                     return false;
                 }
                 if ("2".equals(status)) {
-                    // 임시비밀번호 발급 성공(변경은 미완) → step3 필요
                     session.setStep2ResponseData(data);
-                    log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(CF-00000/status=2), step3 필요 - sessionKey: {}", sessionKey);
+                    log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(status=2), step3 필요 - sessionKey: {}", sessionKey);
                     return true;
                 }
+                // status가 null이거나 다른 값 → step3 필요로 처리 (DEMO 환경 대응)
+                log.warn("CODEF 비밀번호 변경 2차 CF-00000 - 예상치 못한 status: {}, step3로 진행", status);
+                session.setStep2ResponseData(data);
+                return true;
             }
 
             String msg = buildErrorMessage(resultField);
+            log.warn("CODEF 비밀번호 변경 2차 비정상 응답 - code: {}, msg: {}", code, msg);
             throw new SignupFieldException("smsAuthNo", msg.isBlank() ? "인증에 실패했습니다. 다시 시도해주세요." : msg);
 
         } catch (SignupFieldException e) {
