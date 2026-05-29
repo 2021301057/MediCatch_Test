@@ -611,7 +611,7 @@ export default function LoginPage() {
             )}
 
             {/* ── 회원가입 Step1-1: 계정 정보 ── */}
-            {!isLogin && signupStep === 1 && signupInfoStep === 1 && (
+            {!isLogin && !isForgot && signupStep === 1 && signupInfoStep === 1 && (
               <form onSubmit={handleSignupAccountNext} style={s.form}>
                 <Field label="아이디" error={fieldErrors.id}>
                   <input name="id" value={form.id} onChange={handle} placeholder="아이디" style={{ ...s.input, ...(fieldErrors.id ? s.inputError : {}) }} required />
@@ -650,7 +650,7 @@ export default function LoginPage() {
             )}
 
             {/* ── 회원가입 Step1-2: 본인인증 정보 ── */}
-            {!isLogin && signupStep === 1 && signupInfoStep === 2 && (
+            {!isLogin && !isForgot && signupStep === 1 && signupInfoStep === 2 && (
               <form onSubmit={handleSignupStep1} style={s.form}>
                 <Field label="이름" error={fieldErrors.name}>
                   <input name="name" value={form.name} onChange={handle} placeholder="홍길동" style={{ ...s.input, ...(fieldErrors.name ? s.inputError : {}) }} required />
@@ -729,7 +729,7 @@ export default function LoginPage() {
             )}
 
             {/* ── 회원가입 Step2 폼 ── */}
-            {!isLogin && signupStep === 2 && (
+            {!isLogin && !isForgot && signupStep === 2 && (
               <form onSubmit={handleSignupStep2} style={s.form}>
                 {form.authMethod === '0' ? (
                   <Field label="SMS 인증번호" error={fieldErrors.smsAuthNo}>
@@ -769,7 +769,7 @@ export default function LoginPage() {
             )}
 
             {/* ── 회원가입 Step3: 이메일 인증 ── */}
-            {!isLogin && signupStep === 3 && (
+            {!isLogin && !isForgot && signupStep === 3 && (
               <form onSubmit={handleSignupStep3} style={s.form}>
                 <Field label="이메일 인증번호" error={fieldErrors.emailAuthNo}>
                   <input
