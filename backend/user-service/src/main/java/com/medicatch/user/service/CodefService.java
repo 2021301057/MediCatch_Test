@@ -237,11 +237,12 @@ public class CodefService {
             Map<String, Object> res1 = (Map<String, Object>) map1.get("result");
             String code1 = (String) res1.get("code");
 
-            if ("CF-12832".equals(code1)) {
-                log.info("CODEF 아이디 사용 가능 (1차 즉시 확인) - codefId: {}", codefId);
+            if (isCodefIdAvailableForSignup(code1)) {
+                log.info("CODEF 아이디 신규 등록 가능 (1차 즉시 확인) - codefId: {}, code: {}", codefId, code1);
                 return;
             }
             if (!"CF-03002".equals(code1)) {
+                log.warn("CODEF 아이디 확인 1차 실패 - code: {}, message: {}", code1, res1.get("message"));
                 throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
             }
 
@@ -258,10 +259,11 @@ public class CodefService {
             Map<String, Object> res2 = (Map<String, Object>) map2.get("result");
             String code2 = (String) res2.get("code");
 
-            if (!"CF-12832".equals(code2)) {
+            if (!isCodefIdAvailableForSignup(code2)) {
+                log.warn("CODEF 아이디 확인 2차 실패 - code: {}, message: {}", code2, res2.get("message"));
                 throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
             }
-            log.info("CODEF 아이디 사용 가능 - codefId: {}", codefId);
+            log.info("CODEF 아이디 신규 등록 가능 - codefId: {}, code: {}", codefId, code2);
 
         } catch (SignupFieldException e) {
             throw e;
@@ -269,6 +271,10 @@ public class CodefService {
             log.error("CODEF 아이디 확인 실패: {}", e.getMessage(), e);
             throw new SignupFieldException("id", "아이디 확인 중 오류가 발생했습니다.");
         }
+    }
+
+    private boolean isCodefIdAvailableForSignup(String code) {
+        return "CF-12832".equals(code) || "CF-12861".equals(code);
     }
 
     private EasyCodef createCodef() {
