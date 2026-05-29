@@ -3,7 +3,7 @@ import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import ProfileAvatar from '../components/common/ProfileAvatar';
 
-const cleanDigits = (value) => value.replace(/\D/g, '');
+const cleanDigits = (value) => (value || '').replace(/\D/g, '');
 
 const ALLOWED_EMAIL_DOMAINS = ['naver.com','hanmail.net','daum.net','nate.com','korea.kr',
   'kcredit.or.kr','korea.com','yahoo.com','goe.go.kr','chol.com',
@@ -16,6 +16,15 @@ const AVATAR_OPTIONS = [
   { key: 'leaf', label: '리프' },
   { key: 'pill', label: '필' },
   { key: 'sparkle', label: '반짝' },
+];
+
+const TELECOM_OPTIONS = [
+  { value: '0', label: 'SKT' },
+  { value: '1', label: 'KT' },
+  { value: '2', label: 'LG U+' },
+  { value: '3', label: '알뜰폰(SKT)' },
+  { value: '4', label: '알뜰폰(KT)' },
+  { value: '5', label: '알뜰폰(LG U+)' },
 ];
 
 const loadAvatar = () => {
@@ -48,6 +57,11 @@ const validatePasswordPolicy = (password, codefId = '') => {
   return '';
 };
 
+const errMessage = (e, fallback) =>
+  e?.response?.data?.message
+  || e?.response?.data?.fieldErrors?.[0]?.message
+  || fallback;
+
 export default function AccountPage() {
   const { user, setUser } = useAuthStore();
   const currentUser = useMemo(() => ({
@@ -56,17 +70,25 @@ export default function AccountPage() {
     name: user?.name || localStorage.getItem('userName') || '',
     email: user?.email || localStorage.getItem('email') || '',
     phoneNo: user?.phoneNo || localStorage.getItem('phoneNo') || '',
-    identity: localStorage.getItem('identity13') || '',
   }), [user]);
 
-  const [activeAction, setActiveAction] = useState('password');
-  const [phoneAuth, setPhoneAuth] = useState({ name: currentUser.name, identityFront: '', identityBack: '', phoneNo: currentUser.phoneNo, code: '', requested: false, verified: false, authSessionId: '' });
-  const [emailForm, setEmailForm] = useState({ email: '' });
-  const [passwordForm, setPasswordForm] = useState({ password: '', passwordConfirm: '' });
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState('');
   const [avatar, setAvatar] = useState(loadAvatar);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+
+  const [activeAction, setActiveAction] = useState('password'); // 'password' | 'email'
+  const [step, setStep] = useState(1); // 1=입력/인증요청, 2=인증번호 확인
+  const [sessionKey, setSessionKey] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [form, setForm] = useState({
+    email: '', password: '', passwordConfirm: '',
+    identityFront: '', identityBack: '', telecom: '0',
+    phoneNo: currentUser.phoneNo || '', authMethod: '0',
+  });
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState('');
+
+  const isPass = form.authMethod === '1';
+  const setField = (patch) => { setForm((f) => ({ ...f, ...patch })); setMessage(''); };
 
   const updateAvatar = (nextAvatar) => {
     setAvatar(nextAvatar);
@@ -77,125 +99,81 @@ export default function AccountPage() {
 
   const resetActionState = (nextAction) => {
     setActiveAction(nextAction);
-    setPhoneAuth({ name: currentUser.name, identityFront: '', identityBack: '', phoneNo: currentUser.phoneNo, code: '', requested: false, verified: false, authSessionId: '' });
-    setEmailForm({ email: '' });
-    setPasswordForm({ password: '', passwordConfirm: '' });
+    setStep(1);
+    setSessionKey('');
+    setSmsCode('');
     setMessage('');
+    setForm({ email: '', password: '', passwordConfirm: '',
+      identityFront: '', identityBack: '', telecom: '0',
+      phoneNo: currentUser.phoneNo || '', authMethod: '0' });
   };
 
-  const verifyIdentityForm = () => {
-    const savedPhone = cleanDigits(currentUser.phoneNo || localStorage.getItem('phoneNo') || '');
-    const inputPhone = cleanDigits(phoneAuth.phoneNo || '');
-    const inputIdentity = cleanDigits(`${phoneAuth.identityFront || ''}${phoneAuth.identityBack || ''}`);
-    if (!phoneAuth.name.trim()) return '이름을 입력해주세요.';
-    if (currentUser.name && phoneAuth.name.trim() !== currentUser.name) return '가입된 이름과 일치하지 않습니다.';
-    if (inputIdentity.length !== 13) return '주민등록번호 13자리를 입력해주세요.';
-    if (!inputPhone) return '휴대폰번호를 입력해주세요.';
-    if (savedPhone && inputPhone !== savedPhone) return '가입된 휴대폰번호와 일치하지 않습니다.';
-    return '';
-  };
+  // ── Step1: 입력값 검증 후 CODEF 인증요청(SMS 발송 / PASS 트리거) ──
+  const handleRequest = async () => {
+    const identity = cleanDigits(`${form.identityFront}${form.identityBack}`);
+    if (identity.length !== 13) { setMessage('주민등록번호 13자리를 정확히 입력해주세요.'); return; }
+    if (cleanDigits(form.phoneNo).length < 10) { setMessage('휴대폰번호를 정확히 입력해주세요.'); return; }
 
-  const handleRequestPhoneAuth = async () => {
-    setMessage('');
-    const phoneError = verifyIdentityForm();
-    if (phoneError) { setMessage(phoneError); return; }
+    if (activeAction === 'email') {
+      const email = form.email.trim();
+      const domain = email.split('@')[1]?.toLowerCase();
+      if (!email.includes('@') || !domain || !ALLOWED_EMAIL_DOMAINS.includes(domain)) {
+        setMessage('사용 가능한 이메일 도메인이 아닙니다. (naver.com, daum.net, kakao.com 등)'); return;
+      }
+    } else {
+      if (form.password !== form.passwordConfirm) { setMessage('비밀번호가 일치하지 않습니다.'); return; }
+      const policyErr = validatePasswordPolicy(form.password, currentUser.codefId);
+      if (policyErr) { setMessage(policyErr); return; }
+    }
+
     setLoading('request');
     try {
-      const response = await authAPI.requestPhoneAuth?.({ name: phoneAuth.name.trim(), identity13: cleanDigits(`${phoneAuth.identityFront || ''}${phoneAuth.identityBack || ''}`), phoneNo: cleanDigits(phoneAuth.phoneNo), purpose: activeAction });
-      setPhoneAuth((f) => ({ ...f, requested: true, code: '', authSessionId: response?.authSessionId || response?.data?.authSessionId || '' }));
-    } catch {
-      // 백엔드 미연결/데모 환경에서는 인증번호 000000으로 처리합니다.
+      const base = {
+        identity, telecom: form.telecom,
+        phoneNo: cleanDigits(form.phoneNo), authMethod: form.authMethod,
+      };
+      const res = activeAction === 'email'
+        ? await authAPI.changeEmailStep1({ ...base, email: form.email.trim() })
+        : await authAPI.changePwdStep1({ ...base, password: form.password, passwordConfirm: form.passwordConfirm });
+      setSessionKey(res?.sessionKey || '');
+      setStep(2);
+      setMessage(isPass ? 'PASS 앱에서 인증을 완료한 뒤 [변경]을 눌러주세요.' : '인증번호를 발송했습니다.');
+    } catch (e) {
+      setMessage(errMessage(e, '인증 요청에 실패했습니다.'));
     } finally {
-      localStorage.setItem('accountPhoneAuthCode', '000000');
-      setPhoneAuth((f) => ({ ...f, requested: true, code: '', authSessionId: f.authSessionId || 'demo-auth-session' }));
-      setMessage('인증번호를 발송했습니다. 데모 환경에서는 000000을 입력해주세요.');
       setLoading('');
     }
   };
 
-  const handleVerifyPhoneAuth = async () => {
-    setMessage('');
-    const phoneError = verifyIdentityForm();
-    if (phoneError) { setMessage(phoneError); return; }
-    if (!phoneAuth.code.trim()) { setMessage('인증번호를 입력해주세요.'); return; }
-
-    setLoading('verify');
+  // ── Step2: 인증번호 확인 → CODEF + 로컬 DB 변경 완료 ──
+  const handleConfirm = async () => {
+    if (!isPass && cleanDigits(smsCode).length < 6) { setMessage('인증번호 6자리를 입력해주세요.'); return; }
+    setLoading('confirm');
     try {
-      await authAPI.verifyPhoneAuth?.({ authSessionId: phoneAuth.authSessionId, name: phoneAuth.name.trim(), identity13: cleanDigits(`${phoneAuth.identityFront || ''}${phoneAuth.identityBack || ''}`), phoneNo: cleanDigits(phoneAuth.phoneNo), code: phoneAuth.code.trim(), purpose: activeAction });
-    } catch {
-      const demoCode = localStorage.getItem('accountPhoneAuthCode') || '000000';
-      if (phoneAuth.code.trim() !== demoCode) {
-        setMessage('인증번호가 일치하지 않습니다.');
-        setLoading('');
-        return;
+      const payload = { sessionKey, smsAuthNo: isPass ? '' : smsCode.trim() };
+      if (activeAction === 'email') {
+        await authAPI.changeEmailStep2(payload);
+        const nextEmail = form.email.trim();
+        localStorage.setItem('email', nextEmail);
+        setUser({ ...currentUser, email: nextEmail });
+        setMessage('이메일이 변경되었습니다.');
+      } else {
+        await authAPI.changePwdStep2(payload);
+        setMessage('비밀번호가 변경되었습니다.');
       }
-    }
-    setPhoneAuth((f) => ({ ...f, verified: true }));
-    setMessage('');
-    setLoading('');
-  };
-
-  const updateDemoUser = (patch) => {
-    try {
-      const demoUsers = JSON.parse(localStorage.getItem('medicatchDemoUsers') || '[]');
-      const nextUsers = demoUsers.map((u) => (
-        u.codefId === currentUser.codefId ? { ...u, ...patch } : u
-      ));
-      localStorage.setItem('medicatchDemoUsers', JSON.stringify(nextUsers));
-    } catch {
-      // ignore demo store update
-    }
-  };
-
-  const handleEmailChange = async (e) => {
-    e.preventDefault();
-    setMessage('');
-    if (!phoneAuth.verified) { setMessage('휴대폰 본인인증을 먼저 완료해주세요.'); return; }
-    const nextEmailInput = emailForm.email.trim();
-    const emailDomain = nextEmailInput.split('@')[1]?.toLowerCase();
-    if (!nextEmailInput || !nextEmailInput.includes('@')) { setMessage('변경할 이메일을 올바르게 입력해주세요.'); return; }
-    if (!emailDomain || !ALLOWED_EMAIL_DOMAINS.includes(emailDomain)) { setMessage('사용 가능한 이메일 도메인이 아닙니다. (naver.com, daum.net, kakao.com 등)'); return; }
-
-    setLoading('email');
-    try {
-      await authAPI.changeEmail?.({ authSessionId: phoneAuth.authSessionId, name: phoneAuth.name.trim(), identity13: cleanDigits(`${phoneAuth.identityFront || ''}${phoneAuth.identityBack || ''}`), phoneNo: cleanDigits(phoneAuth.phoneNo), email: emailForm.email.trim() });
-    } catch {
-      // 백엔드 미연결/데모 환경에서는 로컬 데이터만 갱신합니다.
+      setStep(1);
+      setSessionKey('');
+      setSmsCode('');
+      setForm((f) => ({ ...f, email: '', password: '', passwordConfirm: '',
+        identityFront: '', identityBack: '' }));
+    } catch (e) {
+      setMessage(errMessage(e, '인증에 실패했습니다. 다시 시도해주세요.'));
     } finally {
-      const nextEmail = nextEmailInput;
-      localStorage.setItem('email', nextEmail);
-      updateDemoUser({ email: nextEmail });
-      setUser({ ...currentUser, email: nextEmail });
-      setEmailForm({ email: '' });
-      setPhoneAuth((f) => ({ ...f, verified: false, requested: false, code: '', authSessionId: '' }));
-      setMessage('이메일이 변경되었습니다.');
       setLoading('');
     }
   };
 
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    setMessage('');
-    if (!phoneAuth.verified) { setMessage('휴대폰 본인인증을 먼저 완료해주세요.'); return; }
-    if (passwordForm.password !== passwordForm.passwordConfirm) { setMessage('비밀번호가 일치하지 않습니다.'); return; }
-    const passwordPolicyError = validatePasswordPolicy(passwordForm.password, currentUser.codefId);
-    if (passwordPolicyError) { setMessage(passwordPolicyError); return; }
-
-    setLoading('password');
-    try {
-      await authAPI.changePassword?.({ authSessionId: phoneAuth.authSessionId, name: phoneAuth.name.trim(), identity13: cleanDigits(`${phoneAuth.identityFront || ''}${phoneAuth.identityBack || ''}`), phoneNo: cleanDigits(phoneAuth.phoneNo), password: passwordForm.password, passwordConfirm: passwordForm.passwordConfirm });
-    } catch {
-      // 백엔드 미연결/데모 환경에서는 로컬 데이터만 갱신합니다.
-    } finally {
-      localStorage.setItem('currentPassword', passwordForm.password);
-      localStorage.setItem('passwordUpdatedAt', new Date().toISOString());
-      updateDemoUser({ password: passwordForm.password });
-      setPasswordForm({ password: '', passwordConfirm: '' });
-      setPhoneAuth((f) => ({ ...f, verified: false, requested: false, code: '', authSessionId: '' }));
-      setMessage('비밀번호가 변경되었습니다.');
-      setLoading('');
-    }
-  };
+  const step2Locked = step === 2;
 
   return (
     <div className="mc-page mc-account-page fade-in">
@@ -268,62 +246,92 @@ export default function AccountPage() {
               </div>
             </div>
 
-            <div className="mc-phone-auth-box">
-              <div className="mc-identity-auth-grid">
-                <div>
-                  <label className="mc-account-label">이름</label>
-                  <input className="mc-input" value={phoneAuth.name} onChange={(e) => { setPhoneAuth((f) => ({ ...f, name: e.target.value, verified: false, authSessionId: '' })); setMessage(''); }} placeholder="이름" />
-                </div>
-                <div>
-                  <label className="mc-account-label">주민등록번호</label>
-                  <div className="mc-identity-split">
-                    <input className="mc-input" value={phoneAuth.identityFront} onChange={(e) => { setPhoneAuth((f) => ({ ...f, identityFront: cleanDigits(e.target.value).slice(0, 6), verified: false, authSessionId: '' })); setMessage(''); }} placeholder="" inputMode="numeric" />
-                    <span>-</span>
-                    <input className="mc-input" type="password" value={phoneAuth.identityBack} onChange={(e) => { setPhoneAuth((f) => ({ ...f, identityBack: cleanDigits(e.target.value).slice(0, 7), verified: false, authSessionId: '' })); setMessage(''); }} placeholder="" inputMode="numeric" />
-                  </div>
-                </div>
-                <div>
-                  <label className="mc-account-label">휴대폰번호</label>
-                  <input className="mc-input" value={phoneAuth.phoneNo} onChange={(e) => { setPhoneAuth((f) => ({ ...f, phoneNo: e.target.value, verified: false, authSessionId: '' })); setMessage(''); }} placeholder="01012345678" inputMode="tel" />
-                </div>
-                <div>
-                  <label className="mc-account-label">인증번호</label>
-                  <input className="mc-input" value={phoneAuth.code} onChange={(e) => { setPhoneAuth((f) => ({ ...f, code: e.target.value })); setMessage(''); }} placeholder="인증번호 입력" disabled={!phoneAuth.requested || phoneAuth.verified} inputMode="numeric" />
-                </div>
+            {/* 1) 변경할 값 입력 */}
+            {activeAction === 'email' ? (
+              <div className="mc-account-form compact">
+                <label className="mc-account-label">변경할 이메일</label>
+                <input className="mc-input" type="email" value={form.email} disabled={step2Locked}
+                  onChange={(e) => setField({ email: e.target.value })} placeholder="new@example.com" />
               </div>
-              <div className="mc-account-actions split">
-                <button className="mc-btn mc-account-ghost-btn" type="button" onClick={handleRequestPhoneAuth} disabled={loading === 'request'}>{phoneAuth.requested ? '재발송' : '인증번호 받기'}</button>
-                <button className="mc-btn mc-btn-primary mc-account-submit" type="button" onClick={handleVerifyPhoneAuth} disabled={!phoneAuth.requested || phoneAuth.verified || loading === 'verify'}>{phoneAuth.verified ? '인증 완료' : '확인'}</button>
-              </div>
-            </div>
-
-            {message && !phoneAuth.verified && <div className="mc-account-message">{message}</div>}
-
-            {!phoneAuth.verified ? null : activeAction === 'password' ? (
-              <form className="mc-account-form compact mc-account-reveal" onSubmit={handlePasswordChange}>
+            ) : (
+              <div className="mc-account-form compact">
                 <div className="mc-grid mc-grid-2">
                   <div>
                     <label className="mc-account-label">새 비밀번호</label>
-                    <input className="mc-input" type="password" value={passwordForm.password} onChange={(e) => { setPasswordForm((f) => ({ ...f, password: e.target.value })); setMessage(''); }} placeholder="9자 이상 입력" />
+                    <input className="mc-input" type="password" value={form.password} disabled={step2Locked}
+                      onChange={(e) => setField({ password: e.target.value })} placeholder="9~20자, 영문+숫자+특수문자" />
                   </div>
                   <div>
                     <label className="mc-account-label">비밀번호 확인</label>
-                    <input className="mc-input" type="password" value={passwordForm.passwordConfirm} onChange={(e) => { setPasswordForm((f) => ({ ...f, passwordConfirm: e.target.value })); setMessage(''); }} placeholder="비밀번호 재입력" />
+                    <input className="mc-input" type="password" value={form.passwordConfirm} disabled={step2Locked}
+                      onChange={(e) => setField({ passwordConfirm: e.target.value })} placeholder="비밀번호 재입력" />
                   </div>
                 </div>
-                {message && <div className="mc-account-message">{message}</div>}
-                <div className="mc-account-actions"><button className="mc-btn mc-btn-primary mc-account-submit" type="submit" disabled={loading === 'password'}>{loading === 'password' ? '변경 중' : '변경'}</button></div>
-              </form>
-            ) : (
-              <form className="mc-account-form compact mc-account-reveal" onSubmit={handleEmailChange}>
-                <div>
-                  <label className="mc-account-label">변경할 이메일</label>
-                  <input className="mc-input" type="email" value={emailForm.email} onChange={(e) => { setEmailForm((f) => ({ ...f, email: e.target.value })); setMessage(''); }} placeholder="new@example.com" />
-                </div>
-                {message && <div className="mc-account-message">{message}</div>}
-                <div className="mc-account-actions"><button className="mc-btn mc-btn-primary mc-account-submit" type="submit" disabled={loading === 'email'}>{loading === 'email' ? '변경 중' : '변경'}</button></div>
-              </form>
+              </div>
             )}
+
+            {/* 2) 본인인증 정보 */}
+            <div className="mc-phone-auth-box">
+              <div className="mc-identity-auth-grid">
+                <div>
+                  <label className="mc-account-label">주민등록번호</label>
+                  <div className="mc-identity-split">
+                    <input className="mc-input" value={form.identityFront} disabled={step2Locked} inputMode="numeric"
+                      onChange={(e) => setField({ identityFront: cleanDigits(e.target.value).slice(0, 6) })} placeholder="앞 6자리" />
+                    <span>-</span>
+                    <input className="mc-input" type="password" value={form.identityBack} disabled={step2Locked} inputMode="numeric"
+                      onChange={(e) => setField({ identityBack: cleanDigits(e.target.value).slice(0, 7) })} placeholder="뒤 7자리" />
+                  </div>
+                </div>
+                <div>
+                  <label className="mc-account-label">통신사</label>
+                  <select className="mc-input" value={form.telecom} disabled={step2Locked}
+                    onChange={(e) => setField({ telecom: e.target.value })}>
+                    {TELECOM_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mc-account-label">휴대폰번호</label>
+                  <input className="mc-input" value={form.phoneNo} disabled={step2Locked} inputMode="tel"
+                    onChange={(e) => setField({ phoneNo: e.target.value })} placeholder="01012345678" />
+                </div>
+                <div>
+                  <label className="mc-account-label">인증방식</label>
+                  <select className="mc-input" value={form.authMethod} disabled={step2Locked}
+                    onChange={(e) => setField({ authMethod: e.target.value })}>
+                    <option value="0">SMS 인증</option>
+                    <option value="1">PASS 인증</option>
+                  </select>
+                </div>
+                {step2Locked && !isPass && (
+                  <div>
+                    <label className="mc-account-label">인증번호</label>
+                    <input className="mc-input" value={smsCode} inputMode="numeric" maxLength={6}
+                      onChange={(e) => { setSmsCode(e.target.value); setMessage(''); }} placeholder="인증번호 6자리" />
+                  </div>
+                )}
+              </div>
+
+              <div className="mc-account-actions split">
+                {step === 1 ? (
+                  <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                    onClick={handleRequest} disabled={loading === 'request'}>
+                    {loading === 'request' ? '요청 중…' : (isPass ? 'PASS 인증요청' : '인증번호 받기')}
+                  </button>
+                ) : (
+                  <>
+                    <button className="mc-btn mc-account-ghost-btn" type="button"
+                      onClick={() => resetActionState(activeAction)} disabled={loading === 'confirm'}>취소</button>
+                    <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                      onClick={handleConfirm} disabled={loading === 'confirm'}>
+                      {loading === 'confirm' ? '처리 중…' : (activeAction === 'email' ? '이메일 변경' : '비밀번호 변경')}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {message && <div className="mc-account-message">{message}</div>}
           </div>
         </section>
       </div>
