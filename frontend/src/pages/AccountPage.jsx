@@ -20,12 +20,17 @@ const EYE_ICON = {
 const PW_TOGGLE_STYLE = { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 4, margin: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', lineHeight: 0 };
 
 // 비밀번호 입력 + 표시/숨김 토글 (서비스 공통 아이콘 스타일)
-function PasswordInput({ style, ...props }) {
+function PasswordInput({ style, onChange, ...props }) {
   const [show, setShow] = useState(false);
+  // 토글을 켜면 type=text라 한글 IME가 동작하므로, 비ASCII(한글 등) 입력을 제거해 차단
+  const handleChange = (e) => {
+    const clean = e.target.value.replace(/[^\x00-\x7F]/g, '');
+    if (clean !== e.target.value) e.target.value = clean;
+    onChange?.(e);
+  };
   return (
     <div style={{ position: 'relative', width: '100%' }}>
-      {/* type은 항상 password로 유지해 IME(한글 입력) 억제. 표시 전환은 -webkit-text-security로만 처리 */}
-      <input {...props} type="password" style={{ ...style, paddingRight: 42, WebkitTextSecurity: show ? 'none' : undefined }} />
+      <input {...props} onChange={handleChange} type={show ? 'text' : 'password'} style={{ ...style, paddingRight: 42 }} />
       <button
         type="button"
         onClick={() => setShow((v) => !v)}
