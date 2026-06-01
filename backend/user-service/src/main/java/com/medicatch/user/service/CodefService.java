@@ -398,7 +398,9 @@ public class CodefService {
 
             if ("CF-00000".equals(code)) {
                 String status = (String) data.get("resRegistrationStatus");
-                log.info("CODEF 비밀번호 변경 2차 CF-00000 - resRegistrationStatus: {}, data keys: {}", status, data.keySet());
+                String resultDesc = (String) data.get("resResultDesc");
+                log.info("CODEF 비밀번호 변경 2차 CF-00000 - resRegistrationStatus: {}, resResultDesc: {}, data keys: {}",
+                        status, resultDesc, data.keySet());
                 if ("1".equals(status)) {
                     changeSessions.remove(sessionKey);
                     log.info("CODEF 비밀번호 변경 2차에서 직접 완료 - sessionKey: {}", sessionKey);
@@ -408,6 +410,15 @@ public class CodefService {
                     session.setStep2ResponseData(data);
                     log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(status=2), step3 필요 - sessionKey: {}", sessionKey);
                     return true;
+                }
+                if ("0".equals(status)) {
+                    // status="0" = 변경 실패. resResultDesc에 사유가 담김.
+                    log.warn("CODEF 비밀번호 변경 2차 실패(status=0) - desc: {}, sessionKey: {}", resultDesc, sessionKey);
+                    changeSessions.remove(sessionKey);
+                    throw new SignupFieldException("general",
+                            resultDesc != null && !resultDesc.isBlank()
+                                    ? resultDesc
+                                    : "비밀번호 변경에 실패했습니다. 입력 정보를 확인해주세요.");
                 }
                 // status가 null이거나 다른 값 → step3 필요로 처리 (DEMO 환경 대응)
                 log.warn("CODEF 비밀번호 변경 2차 CF-00000 - 예상치 못한 status: {}, step3로 진행", status);
