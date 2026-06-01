@@ -848,15 +848,25 @@ function Field({ label, icon, children, error }) {
 // 비밀번호 입력 + 표시/숨김 토글 (서비스 공통 아이콘 스타일)
 function PasswordInput({ style, onChange, ...props }) {
   const [show, setShow] = useState(false);
-  // 토글을 켜면 type=text라 한글 IME가 동작하므로, 비ASCII(한글 등) 입력을 제거해 차단
-  const handleChange = (e) => {
+  // 토글을 켜면 type=text라 한글 IME가 동작하므로 비ASCII(한글 등)를 제거해 차단.
+  // 단, 조합(composition) 중에는 값을 건드리지 않고 조합 종료 시에만 정리해 기존 글자 손실을 방지.
+  const composing = useRef(false);
+  const sanitize = (e) => {
     const clean = e.target.value.replace(/[^\x00-\x7F]/g, '');
     if (clean !== e.target.value) e.target.value = clean;
     onChange?.(e);
   };
+  const handleChange = (e) => {
+    if (composing.current) { onChange?.(e); return; }
+    sanitize(e);
+  };
   return (
     <div style={s.pwWrap}>
-      <input {...props} onChange={handleChange} type={show ? 'text' : 'password'} style={{ ...style, paddingRight: 42 }} />
+      <input {...props}
+        onChange={handleChange}
+        onCompositionStart={() => { composing.current = true; }}
+        onCompositionEnd={(e) => { composing.current = false; sanitize(e); }}
+        type={show ? 'text' : 'password'} style={{ ...style, paddingRight: 42 }} />
       <button
         type="button"
         onClick={() => setShow((v) => !v)}
