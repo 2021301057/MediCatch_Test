@@ -3,6 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 
+// 서비스 공통 아이콘 스타일(인라인 SVG, stroke 기반)과 동일하게 구성
+const Icon = ({ children, size = 16 }) => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
+    strokeLinecap="round" strokeLinejoin="round"
+    style={{ width: size, height: size, flexShrink: 0 }}>
+    {children}
+  </svg>
+);
+
+const EYE_ICON = {
+  show: (<><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" /><circle cx="8" cy="8" r="2" /></>),
+  hide: (<><path d="M2 2l12 12" /><path d="M6.6 6.6a2 2 0 002.8 2.8" /><path d="M4 4.6C2.5 5.7 1 8 1 8s2.6 5 7 5c1.2 0 2.3-.3 3.3-.7" /><path d="M7.1 3.1A6 6 0 018 3c4.4 0 7 5 7 5s-.7 1.3-1.9 2.5" /></>),
+};
+
 export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
@@ -504,7 +518,7 @@ export default function LoginPage() {
                   <input name="id" type="text" value={form.id} onChange={handle} placeholder="아이디" style={s.input} required autoComplete="username" />
                 </Field>
                 <Field label="비밀번호">
-                  <input name="password" type="password" value={form.password} onChange={handle} placeholder="비밀번호" style={s.input} required autoComplete="current-password" />
+                  <PasswordInput name="password" value={form.password} onChange={handle} placeholder="비밀번호" style={s.input} required autoComplete="current-password" />
                 </Field>
                 {error && <div style={s.error}>{error}</div>}
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
@@ -520,10 +534,10 @@ export default function LoginPage() {
                   <input name="id" value={form.id} onChange={handle} placeholder="아이디" style={{ ...s.input, ...(fieldErrors.codefId || fieldErrors.id ? s.inputError : {}) }} required />
                 </Field>
                 <Field label="새 비밀번호" error={fieldErrors.password}>
-                  <input name="password" type="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
+                  <PasswordInput name="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
                 </Field>
                 <Field label="비밀번호 확인" error={fieldErrors.passwordConfirm}>
-                  <input name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={handle} placeholder="비밀번호 재입력"
+                  <PasswordInput name="passwordConfirm" value={form.passwordConfirm} onChange={handle} placeholder="비밀번호 재입력"
                     style={{ ...s.input, border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}` }}
                     required autoComplete="new-password" />
                 </Field>
@@ -618,12 +632,12 @@ export default function LoginPage() {
                 </Field>
 
                 <Field label="비밀번호" error={fieldErrors.password}>
-                  <input name="password" type="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
+                  <PasswordInput name="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
                 </Field>
 
                 <Field label="비밀번호 확인" error={fieldErrors.passwordConfirm}>
-                  <input
-                    name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={handle}
+                  <PasswordInput
+                    name="passwordConfirm" value={form.passwordConfirm} onChange={handle}
                     placeholder="비밀번호 재입력"
                     style={{
                       ...s.input,
@@ -831,6 +845,27 @@ function Field({ label, icon, children, error }) {
   );
 }
 
+// 비밀번호 입력 + 표시/숨김 토글 (서비스 공통 아이콘 스타일)
+function PasswordInput({ style, ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={s.pwWrap}>
+      <input {...props} type={show ? 'text' : 'password'} style={{ ...style, paddingRight: 42 }} />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        onMouseDown={(e) => e.preventDefault()}
+        style={s.pwToggle}
+        tabIndex={-1}
+        aria-label={show ? '비밀번호 숨기기' : '비밀번호 표시'}
+        title={show ? '비밀번호 숨기기' : '비밀번호 표시'}
+      >
+        <Icon size={16}>{show ? EYE_ICON.hide : EYE_ICON.show}</Icon>
+      </button>
+    </div>
+  );
+}
+
 function FeatureCard({ icon, iconBg, iconColor, title, desc }) {
   return (
     <div style={s.feature}>
@@ -922,6 +957,8 @@ const s = {
   fieldError: { fontSize: 11.5, color: '#dc2626', marginTop: 2 },
   inputWrap: { position: 'relative' },
   input: { width: '100%', padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none', background: '#f8fafc', boxSizing: 'border-box', transition: 'border-color .15s, background .15s' },
+  pwWrap: { position: 'relative', width: '100%' },
+  pwToggle: { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 4, margin: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', lineHeight: 0 },
   inputError: { border: '1.5px solid #ef4444' },
   identityRow: { display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8 },
   identityInput: { padding: '11px 14px', textAlign: 'center', letterSpacing: 0.5 },

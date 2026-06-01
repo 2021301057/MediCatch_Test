@@ -3,6 +3,43 @@ import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import ProfileAvatar from '../components/common/ProfileAvatar';
 
+// 서비스 공통 아이콘 스타일(인라인 SVG, stroke 기반)과 동일하게 구성
+const Icon = ({ children, size = 16 }) => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
+    strokeLinecap="round" strokeLinejoin="round"
+    style={{ width: size, height: size, flexShrink: 0 }}>
+    {children}
+  </svg>
+);
+
+const EYE_ICON = {
+  show: (<><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" /><circle cx="8" cy="8" r="2" /></>),
+  hide: (<><path d="M2 2l12 12" /><path d="M6.6 6.6a2 2 0 002.8 2.8" /><path d="M4 4.6C2.5 5.7 1 8 1 8s2.6 5 7 5c1.2 0 2.3-.3 3.3-.7" /><path d="M7.1 3.1A6 6 0 018 3c4.4 0 7 5 7 5s-.7 1.3-1.9 2.5" /></>),
+};
+
+const PW_TOGGLE_STYLE = { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 4, margin: 0, cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', lineHeight: 0 };
+
+// 비밀번호 입력 + 표시/숨김 토글 (서비스 공통 아이콘 스타일)
+function PasswordInput({ style, ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input {...props} type={show ? 'text' : 'password'} style={{ ...style, paddingRight: 42 }} />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        onMouseDown={(e) => e.preventDefault()}
+        style={PW_TOGGLE_STYLE}
+        tabIndex={-1}
+        aria-label={show ? '비밀번호 숨기기' : '비밀번호 표시'}
+        title={show ? '비밀번호 숨기기' : '비밀번호 표시'}
+      >
+        <Icon size={16}>{show ? EYE_ICON.hide : EYE_ICON.show}</Icon>
+      </button>
+    </div>
+  );
+}
+
 const cleanDigits = (value) => (value || '').replace(/\D/g, '');
 
 const ALLOWED_EMAIL_DOMAINS = ['naver.com','hanmail.net','daum.net','nate.com','korea.kr',
@@ -282,12 +319,12 @@ export default function AccountPage() {
                 <div className="mc-grid mc-grid-2">
                   <div>
                     <label className="mc-account-label">새 비밀번호</label>
-                    <input className="mc-input" type="password" value={form.password} disabled={step2Locked}
+                    <PasswordInput className="mc-input" value={form.password} disabled={step2Locked}
                       onChange={(e) => setField({ password: e.target.value })} placeholder="9~20자, 영문+숫자+특수문자" />
                   </div>
                   <div>
                     <label className="mc-account-label">비밀번호 확인</label>
-                    <input className="mc-input" type="password" value={form.passwordConfirm} disabled={step2Locked}
+                    <PasswordInput className="mc-input" value={form.passwordConfirm} disabled={step2Locked}
                       onChange={(e) => setField({ passwordConfirm: e.target.value })} placeholder="비밀번호 재입력" />
                   </div>
                 </div>
