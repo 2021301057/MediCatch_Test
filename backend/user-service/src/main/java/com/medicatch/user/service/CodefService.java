@@ -244,7 +244,7 @@ public class CodefService {
             Map<String, Object> step1Data = toMap(responseMap.get("data"));
             String sessionKey = UUID.randomUUID().toString();
             changeSessions.put(sessionKey, new ChangeSessionData(
-                    "email", authMethod, paramMap, step1Data, null, newEmail, null, LocalDateTime.now()));
+                    "email", authMethod, paramMap, step1Data, null, newEmail, null, null, LocalDateTime.now()));
 
             log.info("CODEF 이메일 변경 1차 완료 - sessionKey: {}", sessionKey);
             return SignupStep1Response.builder()
@@ -297,7 +297,7 @@ public class CodefService {
     // ── 비밀번호 변경: 1차(SMS/PASS 트리거) ───────────────────────────
 
     public SignupStep1Response changePwdStep1(
-            String userName, String identity, String telecom, String phoneNo,
+            Long userId, String userName, String identity, String telecom, String phoneNo,
             String authMethod, String codefId, String rawPassword, String bcryptHash, String email) {
         try {
             if (publicKey == null || publicKey.isBlank()) {
@@ -330,8 +330,10 @@ public class CodefService {
 
             Map<String, Object> step1Data = toMap(responseMap.get("data"));
             String sessionKey = UUID.randomUUID().toString();
-            changeSessions.put(sessionKey, new ChangeSessionData(
-                    "password", authMethod, paramMap, step1Data, null, null, bcryptHash, LocalDateTime.now()));
+            ChangeSessionData sessionData = new ChangeSessionData(
+                    "password", authMethod, paramMap, step1Data, null, null, bcryptHash, null, LocalDateTime.now());
+            sessionData.setUserId(userId);
+            changeSessions.put(sessionKey, sessionData);
 
             log.info("CODEF 비밀번호 변경 1차 완료 - sessionKey: {}", sessionKey);
             return SignupStep1Response.builder()
@@ -396,7 +398,9 @@ public class CodefService {
 
             if ("CF-00000".equals(code)) {
                 String status = (String) data.get("resRegistrationStatus");
-                log.info("CODEF 비밀번호 변경 2차 CF-00000 - resRegistrationStatus: {}, data keys: {}", status, data.keySet());
+                String resultDesc = (String) data.get("resResultDesc");
+                log.info("CODEF 비밀번호 변경 2차 CF-00000 - resRegistrationStatus: {}, resResultDesc: {}, data keys: {}",
+                        status, resultDesc, data.keySet());
                 if ("1".equals(status)) {
                     changeSessions.remove(sessionKey);
                     log.info("CODEF 비밀번호 변경 2차에서 직접 완료 - sessionKey: {}", sessionKey);
@@ -406,6 +410,15 @@ public class CodefService {
                     session.setStep2ResponseData(data);
                     log.info("CODEF 비밀번호 변경 2차 완료 - 이메일 임시비번 발송됨(status=2), step3 필요 - sessionKey: {}", sessionKey);
                     return true;
+                }
+                if ("0".equals(status)) {
+                    // status="0" = 변경 실패. resResultDesc에 사유가 담김.
+                    log.warn("CODEF 비밀번호 변경 2차 실패(status=0) - desc: {}, sessionKey: {}", resultDesc, sessionKey);
+                    changeSessions.remove(sessionKey);
+                    throw new SignupFieldException("general",
+                            resultDesc != null && !resultDesc.isBlank()
+                                    ? resultDesc
+                                    : "비밀번호 변경에 실패했습니다. 입력 정보를 확인해주세요.");
                 }
                 // status가 null이거나 다른 값 → step3 필요로 처리 (DEMO 환경 대응)
                 log.warn("CODEF 비밀번호 변경 2차 CF-00000 - 예상치 못한 status: {}, step3로 진행", status);
@@ -484,6 +497,10 @@ public class CodefService {
             log.error("CODEF 비밀번호 변경 3차 실패: {}", e.getMessage(), e);
             throw new SignupFieldException("tempPassword", "임시비밀번호 인증 중 오류가 발생했습니다. 다시 시도해주세요.");
         }
+    }
+
+    public Long getChangeSessionUserId(String sessionKey) {
+        return getValidChangeSession(sessionKey).getUserId();
     }
 
     private ChangeSessionData getValidChangeSession(String sessionKey) {
@@ -781,6 +798,7 @@ public class CodefService {
         private Map<String, Object> step2ResponseData;  // 3차 twoWayInfo 구성용 (비번 변경 임시비번 단계)
         private String newEmail;        // type="email"일 때 변경할 이메일
         private String bcryptHash;      // type="password"일 때 DB 저장용 bcrypt 해시
+        private Long userId;            // forgot-pwd 흐름에서 JWT 없이 DB 갱신 시 사용
         private LocalDateTime createdAt;
     }
 }

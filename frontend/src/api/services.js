@@ -96,6 +96,10 @@ export const authAPI = {
   changePwdStep1:   (data) => api.post('/auth/change-pwd/step1', data),
   changePwdStep2:   (data) => api.post('/auth/change-pwd/step2', data),
   changePwdStep3:   (data) => api.post('/auth/change-pwd/step3', data),
+  // 비밀번호 찾기 (비인증)
+  forgotPwdStep1:   (data) => api.post('/auth/forgot-pwd/step1', data),
+  forgotPwdStep2:   (data) => api.post('/auth/forgot-pwd/step2', data),
+  forgotPwdStep3:   (data) => api.post('/auth/forgot-pwd/step3', data),
 };
 
 // ── Health ────────────────────────────────────────
