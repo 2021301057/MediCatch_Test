@@ -24,7 +24,8 @@ function PasswordInput({ style, ...props }) {
   const [show, setShow] = useState(false);
   return (
     <div style={{ position: 'relative', width: '100%' }}>
-      <input {...props} type={show ? 'text' : 'password'} style={{ ...style, paddingRight: 42 }} />
+      {/* type은 항상 password로 유지해 IME(한글 입력) 억제. 표시 전환은 -webkit-text-security로만 처리 */}
+      <input {...props} type="password" style={{ ...style, paddingRight: 42, WebkitTextSecurity: show ? 'none' : undefined }} />
       <button
         type="button"
         onClick={() => setShow((v) => !v)}
