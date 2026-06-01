@@ -182,14 +182,16 @@ services:
         condition: service_healthy
 
   # ── 프론트엔드 ────────────────────────────────────
-  # 외부에 노출되는 유일한 포트. nginx가 / → 정적 파일, /api/ → gateway-service:8000 프록시
+  # 호스트 nginx(HTTPS 종단)가 127.0.0.1:8080 → 이 컨테이너로 프록시.
+  # 컨테이너 nginx가 / → 정적 파일, /api/ → gateway-service:8000 프록시.
+  # 127.0.0.1 바인딩으로 외부 직접 접근을 차단하고 호스트 nginx를 통해서만 노출.
   frontend:
     <<: *common
     build:
       context: ./frontend
     container_name: medicatch-frontend
     ports:
-      - "80:3000"
+      - "127.0.0.1:8080:3000"
     depends_on:
       - gateway-service
 
