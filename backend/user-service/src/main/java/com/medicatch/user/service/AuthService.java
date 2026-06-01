@@ -174,9 +174,7 @@ public class AuthService {
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.warn("로그인 실패: 비밀번호 불일치 - codefId: {}, hashPrefix: {}",
-                    request.getCodefId(),
-                    user.getPasswordHash() != null ? user.getPasswordHash().substring(0, Math.min(20, user.getPasswordHash().length())) : "NULL");
+            log.warn("로그인 실패: 비밀번호 불일치 - codefId: {}", request.getCodefId());
             throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
@@ -366,8 +364,6 @@ public class AuthService {
         Long userId = codefService.getChangeSessionUserId(sessionKey);
         User user = getUserById(userId);
         String bcryptHash = codefService.changePwdStep3(sessionKey, tempPassword);
-        log.info("비밀번호 찾기 step3 - userId: {}, codefId: {}, hashPrefix: {}",
-                userId, user.getCodefId(), bcryptHash != null ? bcryptHash.substring(0, Math.min(20, bcryptHash.length())) : "NULL");
         user.setPasswordHash(bcryptHash);
         userRepository.save(user);
         log.info("비밀번호 찾기 완료 (step3) - userId: {}", userId);
