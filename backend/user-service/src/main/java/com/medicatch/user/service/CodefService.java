@@ -263,7 +263,7 @@ public class CodefService {
 
     // ── 이메일 변경: 2차(SMS/PASS 확인) → 변경할 이메일 반환 ─────────────
 
-    public String changeEmailStep2(String sessionKey, String smsAuthNo) {
+    public boolean changeEmailStep2(String sessionKey, String smsAuthNo) {
         ChangeSessionData session = getValidChangeSession(sessionKey);
         try {
             EasyCodef codef = createCodef();
@@ -276,11 +276,67 @@ public class CodefService {
                 reqCertMap.put("smsAuthNo", smsAuthNo);
             }
 
-            log.info("CODEF 이메일 변경 2차 요청 (인증 확인) - sessionKey: {}", sessionKey);
+            log.info("CODEF 이메일 변경 2차 요청 (SMS 확인) - sessionKey: {}", sessionKey);
             String result = codef.requestCertification(CHANGE_EMAIL_URL, serviceType(), reqCertMap);
 
             Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = (Map<String, Object>) responseMap.get("result");
+            String code = (String) resultField.get("code");
+            Map<String, Object> data = toMap(responseMap.get("data"));
+
+            log.info("CODEF 이메일 변경 2차 응답 - code: {}, sessionKey: {}", code, sessionKey);
+
+            // 추가인증(이메일 인증번호) 필요: CF-03002 → 추가 2-way 진행 중.
+            // (비밀번호 변경 패턴과 동일하게 CF-03002 자체로 판단. continue2Way는 보조 신호.)
+            if ("CF-03002".equals(code)) {
+                Map<String, Object> extraInfo = toMap(data.get("extraInfo"));
+                String extraCode = (String) extraInfo.get("code");
+                String extraMsg  = (String) extraInfo.get("message");
+                if (extraCode != null && !extraCode.isBlank()) {  // 명시적 에러면 실패
+                    throw new SignupFieldException(resolveErrorField(extraMsg),
+                            extraMsg != null && !extraMsg.isBlank() ? extraMsg : "인증에 실패했습니다.");
+                }
+                // 새 이메일로 인증번호 발송됨 → step3(emailAuthNo) 필요
+                session.setStep2ResponseData(data);
+                log.info("CODEF 이메일 변경 2차 완료 - 이메일 인증번호 필요(step3), continue2Way: {} - sessionKey: {}",
+                        data.get("continue2Way"), sessionKey);
+                return true;
+            }
+
+            // 추가인증 없이 바로 완료된 경우
             checkChangeFinalResult(responseMap, false);
+            changeSessions.remove(sessionKey);
+            log.info("CODEF 이메일 변경 완료(2차 직접) - sessionKey: {}", sessionKey);
+            return false;
+
+        } catch (SignupFieldException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 이메일 변경 2차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("이메일 변경 처리 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    // ── 이메일 변경: 3차(이메일 인증번호 입력) → 최종 완료 → 변경된 이메일 반환 ──
+    @SuppressWarnings("unchecked")
+    public String changeEmailStep3(String sessionKey, String emailAuthNo) {
+        ChangeSessionData session = getValidChangeSession(sessionKey);
+        if (session.getStep2ResponseData() == null) {
+            throw new SignupFieldException("general", "인증 순서가 올바르지 않습니다. 처음부터 다시 시도해주세요.");
+        }
+        try {
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> reqCertMap = new HashMap<>(session.getOriginalParams());
+            reqCertMap.put("twoWayInfo", buildTwoWayInfo(session.getStep2ResponseData()));
+            reqCertMap.put("is2Way", true);
+            reqCertMap.put("emailAuthNo", emailAuthNo);   // CODEF 문서: 이메일 추가인증 필수 파라미터
+
+            log.info("CODEF 이메일 변경 3차 요청 (이메일 인증번호 확인) - sessionKey: {}", sessionKey);
+            String result = codef.requestCertification(CHANGE_EMAIL_URL, serviceType(), reqCertMap);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            checkChangeFinalResult(responseMap, false);   // CF-00000 + resRegistrationStatus="1" 검증
 
             changeSessions.remove(sessionKey);
             log.info("CODEF 이메일 변경 완료 - sessionKey: {}", sessionKey);
@@ -289,8 +345,8 @@ public class CodefService {
         } catch (SignupFieldException e) {
             throw e;
         } catch (Exception e) {
-            log.error("CODEF 이메일 변경 2차 실패: {}", e.getMessage(), e);
-            throw new RuntimeException("이메일 변경 처리 중 오류가 발생했습니다.", e);
+            log.error("CODEF 이메일 변경 3차 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("이메일 인증 처리 중 오류가 발생했습니다.", e);
         }
     }
 

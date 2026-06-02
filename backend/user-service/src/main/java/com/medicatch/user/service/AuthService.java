@@ -265,10 +265,16 @@ public class AuthService {
                 request.getEmail());
     }
 
-    /** 이메일 변경 2차: CODEF 인증 확인 성공 시 로컬 DB 이메일 갱신 */
-    public void changeEmailStep2(Long userId, SignupStep2Request request) {
+    /** 이메일 변경 2차: SMS 인증 확인 → 이메일 인증번호 입력(step3) 필요 여부 반환 */
+    public boolean changeEmailStep2(Long userId, SignupStep2Request request) {
+        getUserById(userId);  // 사용자 존재 확인
+        return codefService.changeEmailStep2(request.getSessionKey(), request.getSmsAuthNo());
+    }
+
+    /** 이메일 변경 3차: 새 이메일로 받은 인증번호 확인 → CODEF 완료 + 로컬 DB 갱신 */
+    public void changeEmailStep3(Long userId, String sessionKey, String emailAuthNo) {
         User user = getUserById(userId);
-        String newEmail = codefService.changeEmailStep2(request.getSessionKey(), request.getSmsAuthNo());
+        String newEmail = codefService.changeEmailStep3(sessionKey, emailAuthNo);
 
         // CODEF 성공 후 로컬 DB 갱신 (경쟁 상황 대비 유니크 재확인)
         if (userRepository.existsByEmail(newEmail)) {
@@ -276,7 +282,7 @@ public class AuthService {
         }
         user.setEmail(newEmail);
         userRepository.save(user);
-        log.info("이메일 변경 완료 - userId: {}", userId);
+        log.info("이메일 변경 완료 (step3) - userId: {}", userId);
     }
 
     // ── 비밀번호 변경 (CODEF 내보험다보여 + 로컬 DB 동시 갱신) ───────────

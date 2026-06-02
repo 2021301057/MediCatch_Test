@@ -93,6 +93,7 @@ export const authAPI = {
   // 계정 변경 (CODEF 2-way 인증)
   changeEmailStep1: (data) => api.post('/auth/change-email/step1', data),
   changeEmailStep2: (data) => api.post('/auth/change-email/step2', data),
+  changeEmailStep3: (data) => api.post('/auth/change-email/step3', data),
   changePwdStep1:   (data) => api.post('/auth/change-pwd/step1', data),
   changePwdStep2:   (data) => api.post('/auth/change-pwd/step2', data),
   changePwdStep3:   (data) => api.post('/auth/change-pwd/step3', data),

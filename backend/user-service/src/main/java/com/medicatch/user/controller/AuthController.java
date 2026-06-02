@@ -146,12 +146,33 @@ public class AuthController {
         return ResponseEntity.ok(authService.changeEmailStep1(userId, request));
     }
 
-    /** 이메일 변경 2단계: 인증번호 확인 → CODEF + 로컬 DB 갱신 */
+    /** 이메일 변경 2단계: SMS 인증 확인 → 이메일 인증번호 입력(step3) 필요 여부 반환 */
     @PostMapping("/change-email/step2")
-    public ResponseEntity<Map<String, String>> changeEmailStep2(@Valid @RequestBody SignupStep2Request request) {
+    public ResponseEntity<Map<String, Object>> changeEmailStep2(@Valid @RequestBody SignupStep2Request request) {
         Long userId = currentUserId();
         log.info("POST /api/auth/change-email/step2 - userId: {}", userId);
-        authService.changeEmailStep2(userId, request);
+        boolean needsStep3 = authService.changeEmailStep2(userId, request);
+        if (needsStep3) {
+            return ResponseEntity.ok(Map.of(
+                    "needsStep3", true,
+                    "message", "변경할 이메일 주소로 인증번호를 발송했습니다. 메일을 확인 후 입력해주세요.",
+                    "sessionKey", request.getSessionKey()
+            ));
+        }
+        return ResponseEntity.ok(Map.of("needsStep3", false, "message", "이메일이 변경되었습니다."));
+    }
+
+    /** 이메일 변경 3단계: 새 이메일로 받은 인증번호 확인 → CODEF 완료 + DB 갱신 */
+    @PostMapping("/change-email/step3")
+    public ResponseEntity<Map<String, String>> changeEmailStep3(@RequestBody Map<String, String> request) {
+        Long userId = currentUserId();
+        log.info("POST /api/auth/change-email/step3 - userId: {}", userId);
+        String sessionKey = request.get("sessionKey");
+        String emailAuthNo = request.get("emailAuthNo");
+        if (sessionKey == null || sessionKey.isBlank() || emailAuthNo == null || emailAuthNo.isBlank()) {
+            throw new IllegalArgumentException("sessionKey와 emailAuthNo가 필요합니다.");
+        }
+        authService.changeEmailStep3(userId, sessionKey, emailAuthNo);
         return ResponseEntity.ok(Map.of("message", "이메일이 변경되었습니다."));
     }
 
