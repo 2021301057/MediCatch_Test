@@ -146,7 +146,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 2차 요청 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("smsAuthNo", "인증에 실패했습니다. 다시 시도해주세요.");
+            throw new RuntimeException("CODEF 인증 처리 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -178,7 +178,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 3차 요청 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("general", "이메일 인증 요청 중 오류가 발생했습니다. 다시 시도해주세요.");
+            throw new RuntimeException("이메일 인증 요청 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -214,7 +214,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 4차 요청 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("emailAuthNo", "이메일 인증에 실패했습니다. 인증번호를 확인해주세요.");
+            throw new RuntimeException("이메일 인증 처리 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -290,7 +290,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 이메일 변경 2차 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("smsAuthNo", "인증에 실패했습니다. 다시 시도해주세요.");
+            throw new RuntimeException("이메일 변경 처리 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -434,7 +434,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 비밀번호 변경 2차 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("smsAuthNo", "인증에 실패했습니다. 다시 시도해주세요.");
+            throw new RuntimeException("비밀번호 변경 처리 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -495,7 +495,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 비밀번호 변경 3차 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("tempPassword", "임시비밀번호 인증 중 오류가 발생했습니다. 다시 시도해주세요.");
+            throw new RuntimeException("임시비밀번호 인증 처리 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -576,8 +576,9 @@ public class CodefService {
                 return;
             }
             if (!"CF-03002".equals(code1)) {
-                log.warn("CODEF 아이디 확인 1차 실패 - code: {}, message: {}", code1, res1.get("message"));
-                throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
+                String msg = buildErrorMessage(res1);
+                log.warn("CODEF 아이디 확인 1차 실패 - code: {}, message: {}", code1, msg);
+                throw new SignupFieldException(resolveErrorField(msg), msg);
             }
 
             // 2차 요청
@@ -594,8 +595,9 @@ public class CodefService {
             String code2 = (String) res2.get("code");
 
             if (!isCodefIdAvailableForSignup(code2)) {
-                log.warn("CODEF 아이디 확인 2차 실패 - code: {}, message: {}", code2, res2.get("message"));
-                throw new SignupFieldException("id", "이미 등록된 아이디이거나 사용할 수 없는 아이디입니다.");
+                String msg = buildErrorMessage(res2);
+                log.warn("CODEF 아이디 확인 2차 실패 - code: {}, message: {}", code2, msg);
+                throw new SignupFieldException(resolveErrorField(msg), msg);
             }
             log.info("CODEF 아이디 신규 등록 가능 - codefId: {}, code: {}", codefId, code2);
 
@@ -603,7 +605,7 @@ public class CodefService {
             throw e;
         } catch (Exception e) {
             log.error("CODEF 아이디 확인 실패: {}", e.getMessage(), e);
-            throw new SignupFieldException("id", "아이디 확인 중 오류가 발생했습니다.");
+            throw new RuntimeException("아이디 확인 중 오류가 발생했습니다.", e);
         }
     }
 

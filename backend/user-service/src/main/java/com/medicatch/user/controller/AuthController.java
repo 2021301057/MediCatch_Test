@@ -22,6 +22,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -83,13 +84,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         log.info("POST /api/auth/login - codefId: {}", request.getCodefId());
-        try {
-            AuthResponse response = authService.login(request);
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            log.warn("Login failed: {}", e.getMessage());
-            throw e;
-        }
+        AuthResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -273,5 +269,23 @@ public class AuthController {
         Map<String, Object> body = new HashMap<>();
         body.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /** 명시적 상태코드 예외(로그인 실패 401 등) → 해당 status + 사유 메시지 그대로 전달 */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException e) {
+        log.warn("요청 실패({}): {}", e.getStatusCode(), e.getReason());
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", e.getReason());
+        return ResponseEntity.status(e.getStatusCode()).body(body);
+    }
+
+    /** 그 외 예상치 못한 모든 예외(CODEF 통신 장애, DB 오류 등) → 500 */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleUnexpected(Exception e) {
+        log.error("예상치 못한 서버 오류: {}", e.getMessage(), e);
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }

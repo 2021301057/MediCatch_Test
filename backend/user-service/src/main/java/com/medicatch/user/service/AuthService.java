@@ -15,9 +15,11 @@ import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.Set;
@@ -170,12 +172,12 @@ public class AuthService {
         User user = userRepository.findByCodefId(request.getCodefId())
                 .orElseThrow(() -> {
                     log.warn("로그인 실패: 사용자 없음 - codefId: {}", request.getCodefId());
-                    return new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
+                    return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             log.warn("로그인 실패: 비밀번호 불일치 - codefId: {}", request.getCodefId());
-            throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
         log.info("로그인 성공 - userId: {}", user.getId());
@@ -202,19 +204,19 @@ public class AuthService {
         log.info("토큰 갱신 시작");
 
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            throw new IllegalArgumentException("Invalid refresh token");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요.");
         }
         String tokenType = jwtTokenProvider.getTokenType(refreshToken);
         if (!"refresh".equals(tokenType)) {
-            throw new IllegalArgumentException("Token is not a refresh token");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요.");
         }
         Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
         if (userId == null) {
-            throw new IllegalArgumentException("Invalid refresh token");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요.");
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요."));
 
         String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());

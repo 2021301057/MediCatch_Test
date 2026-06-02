@@ -17,12 +17,18 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+// 인증(로그인/회원가입/비밀번호 찾기/토큰 갱신) 요청은 401이 나도
+// 토큰 갱신 인터셉터를 타지 않고 에러를 그대로 컴포넌트에 전달한다.
+// (로그인 실패 401이 갱신 시도 → 실패 → /login 리다이렉트로 빠지는 것을 방지)
+const AUTH_PATHS = ['/auth/login', '/auth/signup', '/auth/forgot-pwd', '/auth/refresh'];
+
 // 401 → 자동 토큰 갱신
 api.interceptors.response.use(
   res => res.data,
   async err => {
     const originalRequest = err.config;
-    if (err.response?.status === 401 && !originalRequest._retry) {
+    const isAuthRequest = AUTH_PATHS.some(p => (originalRequest?.url || '').startsWith(p));
+    if (err.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       originalRequest._retry = true;
       try {
         const refresh = localStorage.getItem('refreshToken');
