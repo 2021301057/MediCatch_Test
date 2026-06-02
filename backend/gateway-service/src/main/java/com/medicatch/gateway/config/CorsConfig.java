@@ -21,7 +21,16 @@ public class CorsConfig {
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        // allowCredentials(true)에서는 "*" 불가 → origin을 명시적으로 등록.
+        // 패턴을 사용해 로컬 개발(localhost), 운영 도메인(http/https), 서버 IP를 모두 허용.
+        config.setAllowedOriginPatterns(List.of(
+                "http://localhost:3000",
+                "https://medicatch.site",
+                "https://www.medicatch.site",
+                "http://medicatch.site",
+                "http://www.medicatch.site",
+                "http://210.104.76.132"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization", "Content-Type"));
