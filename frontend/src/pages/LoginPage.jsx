@@ -21,7 +21,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [signupStep, setSignupStep] = useState(1); // 1 | 2 | 3
   const [signupInfoStep, setSignupInfoStep] = useState(1); // 1: 계정 정보 | 2: 본인인증 정보
-  const [forgotStep, setForgotStep] = useState(1); // 1 | 2 | 3
+  const [forgotStep, setForgotStep] = useState(1); // 1 | 2 | 3 | 4
   const [forgotTempPassword, setForgotTempPassword] = useState('');
   const [sessionKey, setSessionKey] = useState('');
 
@@ -68,6 +68,7 @@ export default function LoginPage() {
       setSessionKey('');
       setSmsAuthNo('');
       setForgotTempPassword('');
+      setForm((f) => ({ ...f, password: '', passwordConfirm: '' }));
     }
   }, [mode]);
 
@@ -116,13 +117,6 @@ export default function LoginPage() {
     setFieldErrors({});
 
     if (!form.id.trim()) { setFieldErrors({ id: '아이디를 입력해주세요.' }); return; }
-
-    const pw = form.password;
-    if (pw.length < 9 || pw.length > 20) { setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' }); return; }
-    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
-      setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' }); return;
-    }
-    if (pw !== form.passwordConfirm) { setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' }); return; }
     if (!form.phoneNo.trim()) { setFieldErrors({ phoneNo: '전화번호를 입력해주세요.' }); return; }
     const cleanIdentity = `${form.identityFront}${form.identityBack}`;
     if (cleanIdentity.length !== 13) { setFieldErrors({ identity: '주민등록번호 13자리를 입력해주세요.' }); return; }
@@ -135,8 +129,6 @@ export default function LoginPage() {
         telecom: form.telecom,
         phoneNo: form.phoneNo,
         authMethod: form.authMethod,
-        password: form.password,
-        passwordConfirm: form.passwordConfirm,
       });
       setSessionKey(data.sessionKey);
       setForgotStep(2);
@@ -191,10 +183,39 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await authAPI.forgotPwdStep3({ sessionKey, tempPassword: forgotTempPassword.trim() });
+      setForm((f) => ({ ...f, password: '', passwordConfirm: '' }));
+      setForgotStep(4);
+    } catch (err) {
+      setError(err.response?.data?.message || '임시비밀번호가 올바르지 않습니다. 다시 확인해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 비밀번호 찾기 Step4 ──────────────────────────────────────────
+  const handleForgotStep4 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setFieldErrors({});
+    const pw = form.password;
+    if (pw.length < 9 || pw.length > 20) { setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' }); return; }
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
+      setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' }); return;
+    }
+    if (pw !== form.passwordConfirm) { setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' }); return; }
+    setLoading(true);
+    try {
+      await authAPI.forgotPwdStep4({ sessionKey, password: pw, passwordConfirm: form.passwordConfirm });
       setSuccessMessage('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
       switchMode('login');
     } catch (err) {
-      setError(err.response?.data?.message || '임시비밀번호가 올바르지 않습니다. 다시 확인해주세요.');
+      const fe = err.response?.data?.fieldErrors;
+      if (fe && Object.keys(fe).length > 0) {
+        setFieldErrors(fe);
+        if (!fe.general) setError(err.response?.data?.message || '입력 정보를 확인해주세요.');
+      } else {
+        setError(err.response?.data?.message || '비밀번호 변경에 실패했습니다. 다시 시도해주세요.');
+      }
     } finally {
       setLoading(false);
     }
@@ -474,10 +495,12 @@ export default function LoginPage() {
                   ? '내보험다보여 아이디로 로그인하고 내 건강·보험 현황을 확인하세요.'
                   : isForgot
                   ? forgotStep === 1
-                    ? '아이디와 새 비밀번호, 본인인증 정보를 입력해주세요.'
+                    ? '아이디와 본인인증 정보를 입력해주세요.'
                     : forgotStep === 2
                     ? (form.authMethod === '0' ? 'SMS로 발송된 인증번호를 입력해주세요.' : 'PASS 앱에서 인증 요청을 수락해주세요.')
-                    : '휴대폰으로 발송된 임시비밀번호를 입력해주세요.'
+                    : forgotStep === 3
+                    ? '휴대폰으로 발송된 임시비밀번호를 입력해주세요.'
+                    : '사용하실 새 비밀번호를 입력해주세요.'
                   : signupStep === 1
                   ? signupInfoStep === 1
                     ? '아이디와 비밀번호, 이메일만 먼저 입력해주세요.'
@@ -532,14 +555,6 @@ export default function LoginPage() {
               <form onSubmit={handleForgotStep1} style={s.form}>
                 <Field label="아이디" error={fieldErrors.codefId || fieldErrors.id}>
                   <input name="id" value={form.id} onChange={handle} placeholder="아이디" style={{ ...s.input, ...(fieldErrors.codefId || fieldErrors.id ? s.inputError : {}) }} required />
-                </Field>
-                <Field label="새 비밀번호" error={fieldErrors.password}>
-                  <PasswordInput name="password" value={form.password} onChange={handle} placeholder="9자 이상, 영문+숫자+특수문자" style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }} required autoComplete="new-password" />
-                </Field>
-                <Field label="비밀번호 확인" error={fieldErrors.passwordConfirm}>
-                  <PasswordInput name="passwordConfirm" value={form.passwordConfirm} onChange={handle} placeholder="비밀번호 재입력"
-                    style={{ ...s.input, border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}` }}
-                    required autoComplete="new-password" />
                 </Field>
                 <div style={s.row2}>
                   <Field label="통신사" error={fieldErrors.telecom}>
@@ -619,7 +634,36 @@ export default function LoginPage() {
                 </Field>
                 {error && <div style={s.error}>{error}</div>}
                 <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
+                  {loading ? '처리 중...' : '다음 →'}
+                </button>
+                <button type="button" onClick={() => { setForgotStep(2); setForgotTempPassword(''); setError(''); }} style={s.backBtn}>
+                  ← 다시 입력하기
+                </button>
+              </form>
+            )}
+
+            {/* ── 비밀번호 찾기 Step4 (새 비밀번호 설정) ── */}
+            {isForgot && forgotStep === 4 && (
+              <form onSubmit={handleForgotStep4} style={s.form}>
+                <Field label="새 비밀번호" error={fieldErrors.password}>
+                  <PasswordInput name="password" value={form.password} onChange={handle}
+                    placeholder="9자 이상, 영문+숫자+특수문자"
+                    style={{ ...s.input, ...(fieldErrors.password ? s.inputError : {}) }}
+                    required autoComplete="new-password" autoFocus />
+                </Field>
+                <Field label="비밀번호 확인" error={fieldErrors.passwordConfirm}>
+                  <PasswordInput name="passwordConfirm" value={form.passwordConfirm} onChange={handle}
+                    placeholder="비밀번호 재입력"
+                    style={{ ...s.input, border: `1.5px solid ${pwMatch ? '#22c55e' : pwMismatch || fieldErrors.passwordConfirm ? '#ef4444' : '#e2e8f0'}` }}
+                    required autoComplete="new-password" />
+                </Field>
+                {fieldErrors.general && <div style={s.error}>{fieldErrors.general}</div>}
+                {error && <div style={s.error}>{error}</div>}
+                <button type="submit" disabled={loading} style={{ ...s.cta, opacity: loading ? 0.7 : 1 }}>
                   {loading ? '처리 중...' : '비밀번호 변경 →'}
+                </button>
+                <button type="button" onClick={() => { setForgotStep(3); setForgotTempPassword(''); setError(''); setFieldErrors({}); }} style={s.backBtn}>
+                  ← 다시 입력하기
                 </button>
               </form>
             )}

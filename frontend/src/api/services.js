@@ -100,6 +100,7 @@ export const authAPI = {
   forgotPwdStep1:   (data) => api.post('/auth/forgot-pwd/step1', data),
   forgotPwdStep2:   (data) => api.post('/auth/forgot-pwd/step2', data),
   forgotPwdStep3:   (data) => api.post('/auth/forgot-pwd/step3', data),
+  forgotPwdStep4:   (data) => api.post('/auth/forgot-pwd/step4', data),
 };
 
 // ── Health ────────────────────────────────────────

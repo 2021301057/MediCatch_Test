@@ -4,6 +4,7 @@ import com.medicatch.user.dto.AuthResponse;
 import com.medicatch.user.dto.ChangeEmailRequest;
 import com.medicatch.user.dto.ChangePwdRequest;
 import com.medicatch.user.dto.ForgotPwdStep1Request;
+import com.medicatch.user.dto.ForgotPwdStep4Request;
 import com.medicatch.user.dto.LoginRequest;
 import com.medicatch.user.dto.SignupRequest;
 import com.medicatch.user.dto.SignupStep1Response;
@@ -223,9 +224,9 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("needsStep3", false, "message", "비밀번호가 변경되었습니다."));
     }
 
-    /** 비밀번호 찾기 3차: 휴대폰 임시비번 확인 → CODEF 완료 + DB 갱신 */
+    /** 비밀번호 찾기 3차: 휴대폰 임시비번 확인 → step4(새 비밀번호 입력) 안내 */
     @PostMapping("/forgot-pwd/step3")
-    public ResponseEntity<Map<String, String>> forgotPwdStep3(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> forgotPwdStep3(@RequestBody Map<String, String> request) {
         log.info("POST /api/auth/forgot-pwd/step3");
         String sessionKey = request.get("sessionKey");
         String tempPassword = request.get("tempPassword");
@@ -233,6 +234,17 @@ public class AuthController {
             throw new IllegalArgumentException("sessionKey와 tempPassword가 필요합니다.");
         }
         authService.forgotPwdStep3(sessionKey, tempPassword);
+        return ResponseEntity.ok(Map.of(
+                "needsStep4", true,
+                "sessionKey", sessionKey,
+                "message", "임시비밀번호가 확인되었습니다. 새 비밀번호를 설정해주세요."));
+    }
+
+    /** 비밀번호 찾기 4차: 새 비밀번호 설정 → CODEF 최종 완료 + DB 갱신 */
+    @PostMapping("/forgot-pwd/step4")
+    public ResponseEntity<Map<String, String>> forgotPwdStep4(@Valid @RequestBody ForgotPwdStep4Request request) {
+        log.info("POST /api/auth/forgot-pwd/step4 - sessionKey: {}", request.getSessionKey());
+        authService.forgotPwdStep4(request);
         return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
     }
 

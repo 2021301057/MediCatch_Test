@@ -23,10 +23,4 @@ public class ForgotPwdStep1Request {
     private String phoneNo;
 
     private String authMethod; // "0"=SMS, "1"=PASS (default "0")
-
-    @NotBlank(message = "변경할 비밀번호를 입력해주세요.")
-    private String password;
-
-    @NotBlank(message = "비밀번호 확인을 입력해주세요.")
-    private String passwordConfirm;
 }
