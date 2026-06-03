@@ -22,6 +22,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -83,18 +86,35 @@ public class CodefSyncService {
         return t;
     });
 
+    // 예측 백그라운드 수집·저장 전용 스레드풀 (step2 사용자 응답을 막지 않음)
+    private final ExecutorService predictionCollectExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "codef-prediction-collect");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** 예측 백그라운드 수집 대기 한도(초). 예측 1차 응답이 90초 이상 걸릴 수 있어 여유 확보. */
+    private static final long PREDICTION_BG_TIMEOUT_SECONDS = 120;
+
+    /** 백그라운드 예측 저장용 독립 트랜잭션 템플릿 (REQUIRES_NEW) */
+    private final TransactionTemplate newTxTemplate;
+
     public CodefSyncService(ObjectMapper objectMapper,
                             MedicalRecordRepository medicalRecordRepo,
                             CheckupResultRepository checkupResultRepo,
                             MedicationDetailRepository medicationDetailRepo,
                             DiseasePredictionRepository diseasePredictionRepo,
-                            HealthAgeResultRepository healthAgeResultRepo) {
+                            HealthAgeResultRepository healthAgeResultRepo,
+                            PlatformTransactionManager transactionManager) {
         this.objectMapper = objectMapper;
         this.medicalRecordRepo = medicalRecordRepo;
         this.checkupResultRepo = checkupResultRepo;
         this.medicationDetailRepo = medicationDetailRepo;
         this.diseasePredictionRepo = diseasePredictionRepo;
         this.healthAgeResultRepo = healthAgeResultRepo;
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.newTxTemplate = tx;
     }
 
     // ── Step1: 1차 요청 (건강검진 + 진료정보 병렬 트리거) ──────────────────
@@ -562,47 +582,17 @@ public class CodefSyncService {
     public CheckupStep2Result syncCheckupStep2(String sessionKey) {
         CheckupMultiSession session = getValidCheckupMultiSession(sessionKey);
 
-        // 백그라운드 예측 futures 수집 (최대 70초 대기)
-        // 실서버에서 건강나이/뇌졸중/당뇨/심뇌혈관 응답이 호출당 40초 이상 걸릴 수 있고,
-        // 4개를 800ms 간격으로 발사하므로 마지막 응답까지 30초로는 부족 → 70초로 여유 확보.
-        List<CompletableFuture<CheckupApiContext>> pending = session.getPendingPredictionFutures();
-        if (pending != null && !pending.isEmpty()) {
-            try {
-                CompletableFuture.allOf(pending.toArray(new CompletableFuture[0])).get(70, TimeUnit.SECONDS);
-            } catch (TimeoutException te) {
-                log.warn("예측 백그라운드 future 일부 미완료 - 완료된 것만 수집");
-            } catch (Exception ignored) {}
-
-            for (CompletableFuture<CheckupApiContext> f : pending) {
-                if (!f.isDone()) continue;
-                try {
-                    CheckupApiContext ctx = f.join();
-                    if (ctx != null && ("CF-00000".equals(ctx.getFirstResponseCode())
-                            || "CF-03002".equals(ctx.getFirstResponseCode()))) {
-                        session.getApis().add(ctx);
-                    } else {
-                        String name = ctx != null ? ctx.getName() : "UNKNOWN";
-                        session.getFailedPredictionsAtStep1().add(name);
-                        log.warn("예측 1차 실패 - type: {}, code: {}", name,
-                                ctx != null ? ctx.getFirstResponseCode() : "null");
-                    }
-                } catch (Exception e) {
-                    session.getFailedPredictionsAtStep1().add("UNKNOWN");
-                }
-            }
-        }
-
-        // 건강검진 컨텍스트 우선 추출 + 인증/저장 (필수)
+        // 건강검진 컨텍스트 추출 (step1에서 이미 세션에 저장됨 → 예측을 기다릴 필요 없음)
         CheckupApiContext checkupCtx = null;
-        List<CheckupApiContext> predictionCtxs = new ArrayList<>();
         for (CheckupApiContext c : session.getApis()) {
-            if (API_CHECKUP.equals(c.getName())) checkupCtx = c;
-            else predictionCtxs.add(c);
+            if (API_CHECKUP.equals(c.getName())) { checkupCtx = c; break; }
         }
         if (checkupCtx == null) {
+            checkupMultiSessions.remove(sessionKey);
             throw new RuntimeException("세션에 건강검진 정보가 없습니다. 처음부터 다시 시도해주세요.");
         }
 
+        // 1) 건강검진 2차 인증 + 저장 (필수 — 즉시 처리, 실패 시 전체 실패/롤백)
         int savedCheckups;
         try {
             String checkupResult = certifyOrUseRaw(checkupCtx);
@@ -616,7 +606,6 @@ public class CodefSyncService {
             }
             savedCheckups = saveCheckupResults(session.getUserId(), checkupResult);
         } catch (RuntimeException e) {
-            // 건강검진 실패 → 전체 실패 (트랜잭션 롤백)
             checkupMultiSessions.remove(sessionKey);
             throw e;
         } catch (Exception e) {
@@ -625,33 +614,79 @@ public class CodefSyncService {
             throw new RuntimeException("건강검진 인증 중 오류: " + e.getMessage(), e);
         }
 
-        // 예측 4개 개별 처리 (부분 실패 허용)
-        int savedPredictions = 0;
-        List<String> failedPredictions = new ArrayList<>(session.getFailedPredictionsAtStep1());
+        // 2) 예측 4개 → 백그라운드로 분리 (사용자 응답을 막지 않음)
+        //    예측 1차 응답이 90초 이상 걸리고 부가 데이터라, 건강검진 응답을 막지 않도록 비동기 처리.
+        Long userId = session.getUserId();
+        List<CompletableFuture<CheckupApiContext>> pending = session.getPendingPredictionFutures();
+        List<String> failedAtStep1 = new ArrayList<>(session.getFailedPredictionsAtStep1());
+        checkupMultiSessions.remove(sessionKey);
+        processPredictionsInBackground(userId, pending, failedAtStep1);
 
-        for (CheckupApiContext pCtx : predictionCtxs) {
+        log.info("건강검진 동기화 완료(즉시 반환) - userId: {}, checkups: {}, 예측은 백그라운드 처리", userId, savedCheckups);
+        return new CheckupStep2Result(savedCheckups, 0, Collections.emptyList());
+    }
+
+    /**
+     * 예측 4개를 백그라운드에서 수집·2차 인증·저장 (best-effort).
+     * 각 예측 저장은 독립 트랜잭션(REQUIRES_NEW)으로 처리해 부분 실패가 서로 영향 주지 않게 함.
+     */
+    private void processPredictionsInBackground(Long userId,
+                                                List<CompletableFuture<CheckupApiContext>> pending,
+                                                List<String> failedAtStep1) {
+        if (pending == null || pending.isEmpty()) return;
+        predictionCollectExecutor.submit(() -> {
             try {
-                String predResult = certifyOrUseRaw(pCtx);
-                Map<String, Object> respMap = objectMapper.readValue(predResult, Map.class);
-                Map<String, Object> resultField = toMap(respMap.get("result"));
-                String code = (String) resultField.get("code");
-                if (!"CF-00000".equals(code)) {
-                    log.warn("[{}] 2차 비정상 응답 - code: {}", pCtx.getName(), code);
-                    failedPredictions.add(pCtx.getName());
+                CompletableFuture.allOf(pending.toArray(new CompletableFuture[0]))
+                        .get(PREDICTION_BG_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            } catch (TimeoutException te) {
+                log.warn("[예측 백그라운드] 일부 미완료 - 완료된 것만 처리 (userId: {})", userId);
+            } catch (Exception ignored) {}
+
+            int saved = 0;
+            List<String> failed = new ArrayList<>(failedAtStep1);
+            for (CompletableFuture<CheckupApiContext> f : pending) {
+                if (!f.isDone()) { failed.add("PENDING"); continue; }
+                CheckupApiContext ctx;
+                try {
+                    ctx = f.join();
+                } catch (Exception e) {
+                    failed.add("UNKNOWN");
                     continue;
                 }
-                savePredictionResult(session.getUserId(), pCtx.getName(), predResult);
-                savedPredictions++;
-            } catch (Exception e) {
-                log.warn("[{}] 2차 예외 - 건너뜀: {}", pCtx.getName(), e.getMessage());
-                failedPredictions.add(pCtx.getName());
+                if (ctx == null || !("CF-00000".equals(ctx.getFirstResponseCode())
+                        || "CF-03002".equals(ctx.getFirstResponseCode()))) {
+                    String name = ctx != null ? ctx.getName() : "UNKNOWN";
+                    failed.add(name);
+                    log.warn("[예측 백그라운드] 1차 실패 - type: {}, code: {}", name,
+                            ctx != null ? ctx.getFirstResponseCode() : "null");
+                    continue;
+                }
+                final CheckupApiContext fctx = ctx;
+                try {
+                    String predResult = certifyOrUseRaw(fctx);
+                    Map<String, Object> respMap = objectMapper.readValue(predResult, Map.class);
+                    Map<String, Object> resultField = toMap(respMap.get("result"));
+                    String code = (String) resultField.get("code");
+                    if (!"CF-00000".equals(code)) {
+                        log.warn("[예측 백그라운드][{}] 2차 비정상 응답 - code: {}", fctx.getName(), code);
+                        failed.add(fctx.getName());
+                        continue;
+                    }
+                    newTxTemplate.executeWithoutResult(status -> {
+                        try {
+                            savePredictionResult(userId, fctx.getName(), predResult);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+                    saved++;
+                } catch (Exception e) {
+                    log.warn("[예측 백그라운드][{}] 처리 실패 - {}", fctx.getName(), e.getMessage());
+                    failed.add(fctx.getName());
+                }
             }
-        }
-
-        checkupMultiSessions.remove(sessionKey);
-        log.info("건강검진+예측 동기화 완료 - userId: {}, checkups: {}, predictions: {}, failed: {}",
-                session.getUserId(), savedCheckups, savedPredictions, failedPredictions);
-        return new CheckupStep2Result(savedCheckups, savedPredictions, failedPredictions);
+            log.info("[예측 백그라운드] 완료 - userId: {}, saved: {}, failed: {}", userId, saved, failed);
+        });
     }
 
     /** CF-00000이면 rawResult 그대로, CF-03002면 requestCertification 호출 */
