@@ -129,10 +129,11 @@ export default function AccountPage() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   const [activeAction, setActiveAction] = useState('password'); // 'password' | 'email'
-  const [step, setStep] = useState(1); // 1=입력/인증요청, 2=인증번호 확인, 3=이메일 임시비번(비번변경 전용)
+  const [step, setStep] = useState(1); // 1=입력/인증요청, 2=인증번호 확인, 3=이메일임시비번(비번)/이메일인증번호(이메일)
   const [sessionKey, setSessionKey] = useState('');
   const [smsCode, setSmsCode] = useState('');
   const [tempPassword, setTempPassword] = useState('');
+  const [emailAuthNo, setEmailAuthNo] = useState('');
   const [form, setForm] = useState({
     email: '', password: '', passwordConfirm: '',
     identityFront: '', identityBack: '', telecom: '0',
@@ -157,6 +158,7 @@ export default function AccountPage() {
     setSessionKey('');
     setSmsCode('');
     setTempPassword('');
+    setEmailAuthNo('');
     setMessage('');
     setForm({ email: '', password: '', passwordConfirm: '',
       identityFront: '', identityBack: '', telecom: '0',
@@ -207,13 +209,20 @@ export default function AccountPage() {
     try {
       const payload = { sessionKey, smsAuthNo: isPass ? '' : smsCode.trim() };
       if (activeAction === 'email') {
-        await authAPI.changeEmailStep2(payload);
-        const nextEmail = form.email.trim();
-        localStorage.setItem('email', nextEmail);
-        setUser({ ...currentUser, email: nextEmail });
-        setMessage('이메일이 변경되었습니다.');
-        setStep(1); setSessionKey(''); setSmsCode('');
-        setForm((f) => ({ ...f, email: '', identityFront: '', identityBack: '' }));
+        const res = await authAPI.changeEmailStep2(payload);
+        if (res?.needsStep3) {
+          // 새 이메일로 인증번호 발송됨 → step3(이메일 인증번호)으로 이동 (세션키 유지)
+          setStep(3);
+          setEmailAuthNo('');
+          setMessage(res.message || '변경할 이메일 주소로 인증번호를 발송했습니다. 메일을 확인 후 입력해주세요.');
+        } else {
+          const nextEmail = form.email.trim();
+          localStorage.setItem('email', nextEmail);
+          setUser({ ...currentUser, email: nextEmail });
+          setMessage('이메일이 변경되었습니다.');
+          setStep(1); setSessionKey(''); setSmsCode('');
+          setForm((f) => ({ ...f, email: '', identityFront: '', identityBack: '' }));
+        }
       } else {
         const res = await authAPI.changePwdStep2(payload);
         if (res?.needsStep3) {
@@ -245,6 +254,25 @@ export default function AccountPage() {
       setForm((f) => ({ ...f, password: '', passwordConfirm: '', identityFront: '', identityBack: '' }));
     } catch (e) {
       setMessage(errMessage(e, '임시비밀번호가 올바르지 않습니다. 휴대폰 문자를 다시 확인해주세요.'));
+    } finally {
+      setLoading('');
+    }
+  };
+
+  // ── Step3(이메일): 새 이메일로 받은 인증번호 확인 → 최종 이메일 변경 완료 ──
+  const handleEmailConfirmStep3 = async () => {
+    if (!emailAuthNo.trim()) { setMessage('이메일로 받은 인증번호를 입력해주세요.'); return; }
+    setLoading('step3');
+    try {
+      await authAPI.changeEmailStep3({ sessionKey, emailAuthNo: emailAuthNo.trim() });
+      const nextEmail = form.email.trim();
+      localStorage.setItem('email', nextEmail);
+      setUser({ ...currentUser, email: nextEmail });
+      setMessage('이메일이 변경되었습니다.');
+      setStep(1); setSessionKey(''); setSmsCode(''); setEmailAuthNo('');
+      setForm((f) => ({ ...f, email: '', identityFront: '', identityBack: '' }));
+    } catch (e) {
+      setMessage(errMessage(e, '인증번호가 올바르지 않습니다. 메일을 다시 확인해주세요.'));
     } finally {
       setLoading('');
     }
@@ -395,6 +423,14 @@ export default function AccountPage() {
                       placeholder="휴대폰으로 받은 임시비밀번호 입력" autoComplete="off" />
                   </div>
                 )}
+                {step === 3 && activeAction === 'email' && (
+                  <div>
+                    <label className="mc-account-label">이메일 인증번호</label>
+                    <input className="mc-input" value={emailAuthNo} inputMode="numeric"
+                      onChange={(e) => { setEmailAuthNo(e.target.value); setMessage(''); }}
+                      placeholder="새 이메일로 받은 인증번호 입력" autoComplete="off" />
+                  </div>
+                )}
               </div>
 
               <div className="mc-account-actions split">
@@ -410,7 +446,7 @@ export default function AccountPage() {
                       onClick={() => resetActionState(activeAction)} disabled={loading === 'confirm'}>취소</button>
                     <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
                       onClick={handleConfirm} disabled={loading === 'confirm'}>
-                      {loading === 'confirm' ? '처리 중…' : (activeAction === 'email' ? '이메일 변경' : '확인')}
+                      {loading === 'confirm' ? '처리 중…' : '확인'}
                     </button>
                   </>
                 )}
@@ -421,6 +457,16 @@ export default function AccountPage() {
                     <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
                       onClick={handleConfirmStep3} disabled={loading === 'step3'}>
                       {loading === 'step3' ? '처리 중…' : '비밀번호 변경'}
+                    </button>
+                  </>
+                )}
+                {step === 3 && activeAction === 'email' && (
+                  <>
+                    <button className="mc-btn mc-account-ghost-btn" type="button"
+                      onClick={() => resetActionState(activeAction)} disabled={loading === 'step3'}>취소</button>
+                    <button className="mc-btn mc-btn-primary mc-account-submit" type="button"
+                      onClick={handleEmailConfirmStep3} disabled={loading === 'step3'}>
+                      {loading === 'step3' ? '처리 중…' : '이메일 변경'}
                     </button>
                   </>
                 )}

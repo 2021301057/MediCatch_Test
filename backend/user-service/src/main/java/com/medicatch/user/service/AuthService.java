@@ -16,9 +16,11 @@ import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.Set;
@@ -171,12 +173,12 @@ public class AuthService {
         User user = userRepository.findByCodefId(request.getCodefId())
                 .orElseThrow(() -> {
                     log.warn("로그인 실패: 사용자 없음 - codefId: {}", request.getCodefId());
-                    return new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
+                    return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
                 });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             log.warn("로그인 실패: 비밀번호 불일치 - codefId: {}", request.getCodefId());
-            throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
         log.info("로그인 성공 - userId: {}", user.getId());
@@ -203,19 +205,19 @@ public class AuthService {
         log.info("토큰 갱신 시작");
 
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            throw new IllegalArgumentException("Invalid refresh token");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요.");
         }
         String tokenType = jwtTokenProvider.getTokenType(refreshToken);
         if (!"refresh".equals(tokenType)) {
-            throw new IllegalArgumentException("Token is not a refresh token");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요.");
         }
         Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
         if (userId == null) {
-            throw new IllegalArgumentException("Invalid refresh token");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요.");
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다. 다시 로그인해주세요."));
 
         String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
@@ -264,10 +266,16 @@ public class AuthService {
                 request.getEmail());
     }
 
-    /** 이메일 변경 2차: CODEF 인증 확인 성공 시 로컬 DB 이메일 갱신 */
-    public void changeEmailStep2(Long userId, SignupStep2Request request) {
+    /** 이메일 변경 2차: SMS 인증 확인 → 이메일 인증번호 입력(step3) 필요 여부 반환 */
+    public boolean changeEmailStep2(Long userId, SignupStep2Request request) {
+        getUserById(userId);  // 사용자 존재 확인
+        return codefService.changeEmailStep2(request.getSessionKey(), request.getSmsAuthNo());
+    }
+
+    /** 이메일 변경 3차: 새 이메일로 받은 인증번호 확인 → CODEF 완료 + 로컬 DB 갱신 */
+    public void changeEmailStep3(Long userId, String sessionKey, String emailAuthNo) {
         User user = getUserById(userId);
-        String newEmail = codefService.changeEmailStep2(request.getSessionKey(), request.getSmsAuthNo());
+        String newEmail = codefService.changeEmailStep3(sessionKey, emailAuthNo);
 
         // CODEF 성공 후 로컬 DB 갱신 (경쟁 상황 대비 유니크 재확인)
         if (userRepository.existsByEmail(newEmail)) {
@@ -275,7 +283,7 @@ public class AuthService {
         }
         user.setEmail(newEmail);
         userRepository.save(user);
-        log.info("이메일 변경 완료 - userId: {}", userId);
+        log.info("이메일 변경 완료 (step3) - userId: {}", userId);
     }
 
     // ── 비밀번호 변경 (CODEF 내보험다보여 + 로컬 DB 동시 갱신) ───────────
