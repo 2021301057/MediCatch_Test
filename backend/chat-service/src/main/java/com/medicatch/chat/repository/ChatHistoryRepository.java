@@ -20,4 +20,6 @@ public interface ChatHistoryRepository extends JpaRepository<ChatHistory, Long> 
     List<ChatHistory> findByUserIdAndCreatedAtAfter(Long userId, LocalDateTime dateTime);
 
     void deleteByUserIdAndCreatedAtBefore(Long userId, LocalDateTime dateTime);
+
+    void deleteByUserId(Long userId);
 }

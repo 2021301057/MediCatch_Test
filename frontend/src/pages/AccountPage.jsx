@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import ProfileAvatar from '../components/common/ProfileAvatar';
@@ -116,7 +117,8 @@ const errMessage = (e, fallback) =>
   || fallback;
 
 export default function AccountPage() {
-  const { user, setUser } = useAuthStore();
+  const navigate = useNavigate();
+  const { user, setUser, logout } = useAuthStore();
   const currentUser = useMemo(() => ({
     userId: user?.userId || Number(localStorage.getItem('userId') || 0),
     codefId: user?.codefId || localStorage.getItem('codefId') || '',
@@ -279,6 +281,36 @@ export default function AccountPage() {
   };
 
   const step2Locked = step === 2 || step === 3;
+
+  // ── 회원 탈퇴 상태 ──
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawPassword, setWithdrawPassword] = useState('');
+  const [withdrawAgreed, setWithdrawAgreed] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawMessage, setWithdrawMessage] = useState('');
+
+  const handleWithdraw = async () => {
+    if (!withdrawPassword) { setWithdrawMessage('비밀번호를 입력해주세요.'); return; }
+    if (!withdrawAgreed) { setWithdrawMessage('탈퇴 동의 체크박스를 선택해주세요.'); return; }
+    setWithdrawLoading(true);
+    setWithdrawMessage('');
+    try {
+      await authAPI.withdraw({ password: withdrawPassword });
+      logout();
+      navigate('/login', { replace: true });
+    } catch (e) {
+      setWithdrawMessage(errMessage(e, '탈퇴 처리 중 오류가 발생했습니다. 다시 시도해주세요.'));
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
+
+  const closeWithdrawModal = () => {
+    setShowWithdrawModal(false);
+    setWithdrawPassword('');
+    setWithdrawAgreed(false);
+    setWithdrawMessage('');
+  };
 
   return (
     <div className="mc-page mc-account-page fade-in">
@@ -477,6 +509,81 @@ export default function AccountPage() {
           </div>
         </section>
       </div>
+
+      {/* ── Danger Zone ── */}
+      <section className="mc-card mc-danger-zone-card">
+        <div className="mc-card-body">
+          <h2 className="mc-account-section-title mc-danger-title">회원 탈퇴</h2>
+          <p className="mc-danger-desc">
+            탈퇴하시면 모든 건강·보험·분석·채팅 데이터가 영구 삭제되며 복구할 수 없습니다.
+          </p>
+          <button
+            type="button"
+            className="mc-btn mc-btn-danger"
+            onClick={() => setShowWithdrawModal(true)}
+          >
+            회원 탈퇴
+          </button>
+        </div>
+      </section>
+
+      {/* ── 탈퇴 확인 모달 ── */}
+      {showWithdrawModal && (
+        <div className="mc-modal-overlay" onClick={closeWithdrawModal}>
+          <div className="mc-modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mc-modal-title">정말 탈퇴하시겠습니까?</h3>
+            <p className="mc-modal-desc">
+              탈퇴 즉시 <strong>모든 데이터</strong>가 영구 삭제됩니다.<br />
+              건강 기록, 보험 정보, AI 분석 결과, 채팅 내역이 모두 사라집니다.
+            </p>
+
+            <div className="mc-modal-field">
+              <label className="mc-account-label">현재 비밀번호</label>
+              <PasswordInput
+                className="mc-input"
+                value={withdrawPassword}
+                onChange={(e) => { setWithdrawPassword(e.target.value); setWithdrawMessage(''); }}
+                placeholder="비밀번호 입력"
+                disabled={withdrawLoading}
+                autoComplete="current-password"
+              />
+            </div>
+
+            <label className="mc-modal-agree">
+              <input
+                type="checkbox"
+                checked={withdrawAgreed}
+                onChange={(e) => { setWithdrawAgreed(e.target.checked); setWithdrawMessage(''); }}
+                disabled={withdrawLoading}
+              />
+              <span>위 내용을 확인했으며 탈퇴에 동의합니다.</span>
+            </label>
+
+            {withdrawMessage && (
+              <div className="mc-account-message mc-account-message-error">{withdrawMessage}</div>
+            )}
+
+            <div className="mc-modal-actions">
+              <button
+                type="button"
+                className="mc-btn mc-account-ghost-btn"
+                onClick={closeWithdrawModal}
+                disabled={withdrawLoading}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="mc-btn mc-btn-danger"
+                onClick={handleWithdraw}
+                disabled={withdrawLoading || !withdrawAgreed}
+              >
+                {withdrawLoading ? '탈퇴 처리 중…' : '탈퇴 확인'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

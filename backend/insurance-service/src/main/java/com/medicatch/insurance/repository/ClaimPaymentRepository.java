@@ -11,4 +11,6 @@ public interface ClaimPaymentRepository extends JpaRepository<ClaimPayment, Long
 
     List<ClaimPayment> findByUserId(Long userId);
     void deleteByCodefId(String codefId);
+
+    void deleteByUserId(Long userId);
 }

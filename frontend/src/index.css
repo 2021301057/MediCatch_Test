@@ -2999,3 +2999,109 @@ body::before {
 .mc-account-card-wide {
   grid-column: 1 / -1;
 }
+
+/* ── 회원 탈퇴 Danger Zone ───────────────────────────────── */
+.mc-danger-zone-card {
+  margin-top: 24px;
+  border: 1.5px solid #fca5a5;
+  background: #fff9f9;
+}
+
+.mc-danger-title {
+  color: #dc2626;
+}
+
+.mc-danger-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 8px 0 18px;
+  line-height: 1.6;
+}
+
+.mc-btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.mc-btn-danger:hover:not(:disabled) { background: #b91c1c; }
+.mc-btn-danger:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── 탈퇴 확인 모달 ─────────────────────────────────────── */
+.mc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+}
+
+.mc-modal-box {
+  background: #fff;
+  border-radius: 18px;
+  padding: 32px 28px 24px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mc-modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #dc2626;
+  margin: 0;
+}
+
+.mc-modal-desc {
+  font-size: 13.5px;
+  color: #475569;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.mc-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mc-modal-agree {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.mc-modal-agree input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #dc2626;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.mc-account-message-error {
+  color: #dc2626;
+  background: #fff5f5;
+  border-color: #fca5a5;
+}
+
+.mc-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}

@@ -16,5 +16,7 @@ public interface PolicyRepository extends JpaRepository<Policy, Long> {
     List<Policy> findByCodefIdAndIsActive(String codefId, boolean isActive);
     void deleteByCodefId(String codefId);
 
+    void deleteByUserId(Long userId);
+
     Optional<Policy> findByPolicyNumber(String policyNumber);
 }

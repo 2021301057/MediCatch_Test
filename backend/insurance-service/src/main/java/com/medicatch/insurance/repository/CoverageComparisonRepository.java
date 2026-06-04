@@ -10,4 +10,6 @@ public interface CoverageComparisonRepository extends JpaRepository<CoverageComp
     List<CoverageComparison> findByUserId(Long userId);
 
     void deleteByCodefId(String codefId);
+
+    void deleteByUserId(Long userId);
 }

@@ -102,6 +102,8 @@ export const authAPI = {
   forgotPwdStep2:   (data) => api.post('/auth/forgot-pwd/step2', data),
   forgotPwdStep3:   (data) => api.post('/auth/forgot-pwd/step3', data),
   forgotPwdStep4:   (data) => api.post('/auth/forgot-pwd/step4', data),
+  // 회원 탈퇴
+  withdraw:         (data) => api.delete('/auth/withdraw', { data }),
 };
 
 // ── Health ────────────────────────────────────────

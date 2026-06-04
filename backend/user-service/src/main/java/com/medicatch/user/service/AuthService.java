@@ -40,13 +40,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final CodefService codefService;
+    private final InternalDeleteClient internalDeleteClient;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       JwtTokenProvider jwtTokenProvider, CodefService codefService) {
+                       JwtTokenProvider jwtTokenProvider, CodefService codefService,
+                       InternalDeleteClient internalDeleteClient) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.codefService = codefService;
+        this.internalDeleteClient = internalDeleteClient;
     }
 
     /**
@@ -383,6 +386,30 @@ public class AuthService {
         user.setPasswordHash(bcryptHash);
         userRepository.save(user);
         log.info("비밀번호 찾기 완료 (step4) - userId: {}", userId);
+    }
+
+    // ── 회원 탈퇴 ─────────────────────────────────────────────────────
+
+    public void withdraw(Long userId, String password) {
+        User user = getUserById(userId);
+
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "비밀번호가 올바르지 않습니다.");
+        }
+
+        try {
+            codefService.unregisterCodef(user.getCodefId(), password);
+        } catch (Exception e) {
+            log.warn("CODEF 탈퇴 실패 (DB 삭제는 계속 진행) - userId: {}, error: {}", userId, e.getMessage());
+        }
+
+        internalDeleteClient.deleteHealthData(userId);
+        internalDeleteClient.deleteInsuranceData(userId);
+        internalDeleteClient.deleteAnalysisData(userId);
+        internalDeleteClient.deleteChatData(userId);
+
+        userRepository.delete(user);
+        log.info("회원 탈퇴 완료 - userId: {}", userId);
     }
 
     // ── 유효성 검증 ───────────────────────────────────────────────────

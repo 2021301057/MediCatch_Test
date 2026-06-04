@@ -12,6 +12,7 @@ import com.medicatch.user.dto.SignupStep2Request;
 import com.medicatch.user.dto.SignupStep3Request;
 import com.medicatch.user.dto.SignupStep4Request;
 import com.medicatch.user.dto.UserProfileResponse;
+import com.medicatch.user.dto.WithdrawRequest;
 import com.medicatch.user.entity.User;
 import com.medicatch.user.exception.SignupFieldException;
 import com.medicatch.user.service.AuthService;
@@ -215,6 +216,17 @@ public class AuthController {
         }
         authService.changePwdStep3(userId, sessionKey, tempPassword);
         return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
+    }
+
+    // ── 회원 탈퇴 ─────────────────────────────────────────────────────
+
+    /** 회원 탈퇴: 비밀번호 확인 → CODEF 탈퇴 → 전체 데이터 삭제 */
+    @DeleteMapping("/withdraw")
+    public ResponseEntity<Map<String, String>> withdraw(@Valid @RequestBody WithdrawRequest request) {
+        Long userId = currentUserId();
+        log.info("DELETE /api/auth/withdraw - userId: {}", userId);
+        authService.withdraw(userId, request.getPassword());
+        return ResponseEntity.ok(Map.of("message", "회원 탈퇴가 완료되었습니다."));
     }
 
     // ── 비밀번호 찾기 (비인증) ─────────────────────────────────────────

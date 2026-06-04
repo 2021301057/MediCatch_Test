@@ -47,6 +47,7 @@ public class CodefService {
     private static final String STATUS_URL       = "/v1/kr/insurance/0001/credit4u/registration-status";
     private static final String CHANGE_EMAIL_URL = "/v1/kr/insurance/0001/credit4u/change-email";
     private static final String CHANGE_PWD_URL   = "/v1/kr/insurance/0001/credit4u/change-pwd";
+    private static final String UNREGISTER_URL   = "/v1/kr/insurance/0001/credit4u/unregister";
     private static final int SESSION_TIMEOUT_MINUTES = 10;
 
     private final ObjectMapper objectMapper;
@@ -646,6 +647,57 @@ public class CodefService {
         } catch (Exception e) {
             log.error("CODEF 비밀번호 찾기 4차 실패: {}", e.getMessage(), e);
             throw new SignupFieldException("password", "비밀번호 설정 중 오류가 발생했습니다. 다시 시도해주세요.");
+        }
+    }
+
+    // ── 내보험다보여 탈퇴 ──────────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    public void unregisterCodef(String codefId, String rawPassword) {
+        try {
+            if (publicKey == null || publicKey.isBlank()) {
+                throw new RuntimeException("CODEF 공개키가 설정되지 않았습니다.");
+            }
+            String rsaPassword = EasyCodefUtil.encryptRSA(rawPassword, publicKey);
+            EasyCodef codef = createCodef();
+
+            HashMap<String, Object> paramMap = new HashMap<>();
+            paramMap.put("organization", "0001");
+            paramMap.put("id", codefId);
+            paramMap.put("password", rsaPassword);
+
+            log.info("CODEF 내보험다보여 탈퇴 1차 요청 - codefId: {}", codefId);
+            String result = codef.requestProduct(UNREGISTER_URL, serviceType(), paramMap);
+
+            Map<String, Object> responseMap = objectMapper.readValue(result, Map.class);
+            Map<String, Object> resultField = toMap(responseMap.get("result"));
+            String code = (String) resultField.get("code");
+
+            if ("CF-03002".equals(code)) {
+                Map<String, Object> data = toMap(responseMap.get("data"));
+                HashMap<String, Object> reqCertMap = new HashMap<>(paramMap);
+                reqCertMap.put("twoWayInfo", buildTwoWayInfo(data));
+                reqCertMap.put("is2Way", true);
+
+                log.info("CODEF 내보험다보여 탈퇴 2차 요청 (2-way) - codefId: {}", codefId);
+                result = codef.requestCertification(UNREGISTER_URL, serviceType(), reqCertMap);
+                responseMap = objectMapper.readValue(result, Map.class);
+                resultField = toMap(responseMap.get("result"));
+                code = (String) resultField.get("code");
+            }
+
+            if (!"CF-00000".equals(code)) {
+                String msg = buildErrorMessage(resultField);
+                log.warn("CODEF 탈퇴 실패 - code: {}, message: {}", code, msg);
+                throw new RuntimeException("CODEF 탈퇴 처리에 실패했습니다: " + msg);
+            }
+
+            log.info("CODEF 내보험다보여 탈퇴 완료 - codefId: {}", codefId);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("CODEF 탈퇴 요청 오류: {}", e.getMessage(), e);
+            throw new RuntimeException("CODEF 탈퇴 처리 중 오류가 발생했습니다.", e);
         }
     }
 

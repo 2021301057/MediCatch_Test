@@ -10,4 +10,6 @@ import java.util.List;
 public interface PreTreatmentSearchRepository extends JpaRepository<PreTreatmentSearch, Long> {
 
     List<PreTreatmentSearch> findByUserIdOrderBySearchDateDesc(Long userId);
+
+    void deleteByUserId(Long userId);
 }
