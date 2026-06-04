@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/forgot-pwd/step1").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/forgot-pwd/step2").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/forgot-pwd/step3").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/forgot-pwd/step4").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         // Protected endpoints
                         .requestMatchers(HttpMethod.GET, "/api/auth/profile").authenticated()
