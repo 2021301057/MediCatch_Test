@@ -13,6 +13,7 @@ const Icon = ({ children, size = 13 }) => (
 
 const P = {
   arrow:  (<path d="M3 8h10M9 4l4 4-4 4" />),
+  check:  (<path d="m3 8 4 4 6-7" />),
   plus:   (<path d="M8 3v10M3 8h10" />),
   search: (<><circle cx="7" cy="7" r="4" /><path d="m10 10 3 3" /></>),
   clip:   (<><rect x="3" y="2" width="10" height="12" rx="1.5" /><path d="M6 2v2h4V2" /><path d="M5.5 8h5M5.5 10.5h3" /></>),
@@ -44,6 +45,14 @@ const GAP_STYLE = {
   lo:  { lc: '#A8B8BB', tc: '#405A7A', tb: '#ECF0F2', label: '확인' },
 };
 
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  const parsed = Number(String(value).replace(/[^\d.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatWon = (amount) => `${new Intl.NumberFormat('ko-KR').format(Math.round(amount || 0))}원`;
+
 export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -54,6 +63,7 @@ export default function Dashboard() {
   const [totalVisits, setTotalVisits] = useState(0);
   const [topDept, setTopDept]         = useState('-');
   const [nextCheckup, setNextCheckup] = useState(null);
+  const [premium, setPremium]         = useState({ total: 0, insurers: 0 });
 
   useEffect(() => {
     // 대시보드는 최근 12개월 기준으로 집계
@@ -161,6 +171,18 @@ export default function Dashboard() {
         setGaps(gapItems);
       })
       .catch(() => {});
+
+    // 월 보험료 합계 + 보험사 수
+    insuranceAPI.getPolicies()
+      .then((rows) => {
+        if (!Array.isArray(rows)) return;
+        const total = rows.reduce((sum, p) => sum + toNumber(p.monthlyPremium ?? p.monthly_premium), 0);
+        const insurers = new Set(
+          rows.map((p) => p.companyName ?? p.insurer_name).filter(Boolean)
+        ).size;
+        setPremium({ total, insurers });
+      })
+      .catch(() => {});
   }, []);
 
   const topRisk = risks.length > 0
@@ -170,10 +192,12 @@ export default function Dashboard() {
   const RISK_META = { '나쁨': '위험 구간 · 관리 필요', '보통': '평균 수준', '좋음': '양호한 상태' };
 
   const stats = [
+    { lbl: '월 보험료 합계', val: premium.total > 0 ? formatWon(premium.total) : '정보 없음',
+      meta: premium.insurers > 0 ? `${premium.insurers}개 보험사 통합` : '보험 동기화 필요', blue: false },
     { lbl: '최근 진료 기록', val: `${totalVisits}건`,            meta: '최근 12개월 기준',           blue: true  },
-    { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-', meta: topRisk ? `${topRisk.name} · ${RISK_META[topRisk.level] || ''}` : '데이터 없음' },
+    { lbl: '건강 위험도',    val: topRisk ? topRisk.level : '-', meta: topRisk ? `${topRisk.name} · ${RISK_META[topRisk.level] || ''}` : '데이터 없음', blue: false },
     { lbl: '보험 공백',      val: gaps.length > 0 ? `${gaps.length}개 항목` : '확인 필요',
-      meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인' },
+      meta: gaps.length > 0 ? '즉시 개선 권장' : '보험 공백 페이지 확인', blue: false },
   ];
 
   return (
@@ -196,7 +220,9 @@ export default function Dashboard() {
           <div className="mc-stat-cell" key={i}>
             <div className="mc-stat-lbl">{s.lbl}</div>
             <div className={`mc-stat-val${s.blue ? ' blue' : ''}`}>{s.val}</div>
-            <div className="mc-stat-meta">{s.meta}</div>
+            {s.pill
+              ? <span className="mc-stat-pill">{s.pill}</span>
+              : <div className="mc-stat-meta">{s.meta}</div>}
           </div>
         ))}
       </div>
@@ -213,9 +239,9 @@ export default function Dashboard() {
           <table className="mc-tbl">
             <thead>
               <tr>
-                <th>병원</th>
+                <th>병원 / 내역</th>
                 <th>날짜</th>
-                <th>병명 / 진료 내역</th>
+                <th>구분</th>
               </tr>
             </thead>
             <tbody>
@@ -223,10 +249,10 @@ export default function Dashboard() {
                 <tr key={i} onClick={() => navigate('/medical-records')} style={{ cursor: 'pointer' }}>
                   <td>
                     <div className="mc-tbl-hospital">{c.hospital}</div>
-                    {c.dept !== '-' && <div className="mc-tbl-detail">{c.dept}</div>}
+                    {c.diagnosis !== '-' && <div className="mc-tbl-detail">{c.diagnosis}</div>}
                   </td>
                   <td><span className="mc-tbl-date">{c.date}</span></td>
-                  <td style={{ color: 'var(--text-1)', fontSize: 13 }}>{c.diagnosis}</td>
+                  <td><span className="mc-tbl-tag">{c.type}</span></td>
                 </tr>
               )) : (
                 <tr>
@@ -275,7 +301,11 @@ export default function Dashboard() {
             )}
           </div>
           <div className="mc-ai-strip" onClick={() => navigate('/chat')}>
-            <strong>AI 인사이트</strong> — 내 건강 이력 기반 맞춤 보험·보건 어드바이스 →
+            <div>
+              <strong>AI 인사이트</strong>
+              <span>건강 이력 기반 맞춤 보험·보건 어드바이스</span>
+            </div>
+            <em>→</em>
           </div>
         </div>
       </div>
