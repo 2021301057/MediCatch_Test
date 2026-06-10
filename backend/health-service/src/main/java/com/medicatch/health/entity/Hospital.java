@@ -18,18 +18,19 @@ public class Hospital {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "siDoCd", nullable = false)
+    // 따옴표(backtick) 없이 쓰면 기본 네이밍 전략이 si_do_cd 등 snake_case로 변환해버림
+    @Column(name = "`siDoCd`", nullable = false)
     private Integer siDoCd;
 
-    @Column(name = "siGunGuCd", nullable = false)
+    @Column(name = "`siGunGuCd`", nullable = false)
     private Integer siGunGuCd;
 
-    @Column(name = "hmcNm", nullable = false, length = 200)
+    @Column(name = "`hmcNm`", nullable = false, length = 200)
     private String hmcNm;
 
-    @Column(name = "locAddr", length = 300)
+    @Column(name = "`locAddr`", length = 300)
     private String locAddr;
 
-    @Column(name = "hmcTelNo", length = 50)
+    @Column(name = "`hmcTelNo`", length = 50)
     private String hmcTelNo;
 }
