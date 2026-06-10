@@ -10,8 +10,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medicatch.health.entity.HealthAgeResult;
 import com.medicatch.health.entity.MedicationDetail;
+import com.medicatch.health.entity.Hospital;
 import com.medicatch.health.repository.DiseasePredictionRepository;
 import com.medicatch.health.repository.HealthAgeResultRepository;
+import com.medicatch.health.repository.HospitalRepository;
 import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
 import lombok.extern.slf4j.Slf4j;
@@ -34,17 +36,20 @@ public class HealthController {
     private final CodefSyncService codefSyncService;
     private final DiseasePredictionRepository diseasePredictionRepo;
     private final HealthAgeResultRepository healthAgeResultRepo;
+    private final HospitalRepository hospitalRepository;
     private final ObjectMapper objectMapper;
 
     public HealthController(HealthService healthService,
                             CodefSyncService codefSyncService,
                             DiseasePredictionRepository diseasePredictionRepo,
                             HealthAgeResultRepository healthAgeResultRepo,
+                            HospitalRepository hospitalRepository,
                             ObjectMapper objectMapper) {
         this.healthService = healthService;
         this.codefSyncService = codefSyncService;
         this.diseasePredictionRepo = diseasePredictionRepo;
         this.healthAgeResultRepo = healthAgeResultRepo;
+        this.hospitalRepository = hospitalRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -390,6 +395,25 @@ public class HealthController {
             return ResponseEntity.ok(m);
         } catch (Exception e) {
             log.error("Error getting health age: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Get hospitals by siDoCd (and optionally siGunGuCd)
+     */
+    @GetMapping("/hospitals")
+    public ResponseEntity<List<Hospital>> getHospitals(
+            @RequestParam Integer siDoCd,
+            @RequestParam(required = false) Integer siGunGuCd) {
+        log.info("GET /api/health/hospitals - siDoCd: {}, siGunGuCd: {}", siDoCd, siGunGuCd);
+        try {
+            List<Hospital> hospitals = siGunGuCd != null
+                    ? hospitalRepository.findBySiDoCdAndSiGunGuCdOrderByHmcNm(siDoCd, siGunGuCd)
+                    : hospitalRepository.findBySiDoCdOrderByHmcNm(siDoCd);
+            return ResponseEntity.ok(hospitals);
+        } catch (Exception e) {
+            log.error("Error getting hospitals: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }

@@ -3105,3 +3105,180 @@ body::before {
   gap: 10px;
   margin-top: 4px;
 }
+
+/* ── NATIONAL CHECKUP HOSPITAL FINDER MODAL ───────────── */
+.mc-reservation-modal {
+  max-width: 920px;
+  border-radius: 14px;
+}
+.mc-reservation-sub {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.mc-reservation-body,
+.mc-reservation-region-body {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 18px;
+}
+.mc-reservation-map {
+  padding: 16px;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fbff, #ecfdf5);
+}
+.mc-reservation-map-title {
+  display: inline-block;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.84);
+  border: 1px solid #dbeafe;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 850;
+}
+.mc-region-chip {
+  min-width: 44px;
+  padding: 7px 11px;
+  border: 1px solid #cfe0ff;
+  border-radius: 999px;
+  background: rgba(255,255,255,.86);
+  color: #31517a;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform .14s ease, border-color .14s ease, background .14s ease;
+}
+.mc-region-chip:hover {
+  transform: translateY(-1px);
+  border-color: #60a5fa;
+}
+.mc-region-chip.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+  box-shadow: 0 10px 20px rgba(37,99,235,.20);
+}
+.mc-region-helper {
+  padding: 10px 12px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.78);
+  border: 1px solid #dbeafe;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.mc-reservation-region-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.mc-region-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px solid #dbeafe;
+  border-radius: 15px;
+  background: linear-gradient(180deg, #fff, #f8fbff);
+}
+.mc-region-panel-kicker {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+}
+.mc-region-panel-title {
+  margin-top: 3px;
+  color: var(--text-1);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+}
+.mc-region-panel-head > span {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.mc-city-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mc-city-chip-row button {
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mc-city-chip-row button.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+.mc-reservation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+.mc-reservation-hospital {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+}
+.mc-reservation-num {
+  width: 28px; height: 28px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 900;
+  font-size: 12px;
+}
+.mc-reservation-name {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 850;
+}
+.mc-reservation-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 650;
+}
+.mc-reservation-empty {
+  padding: 22px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+@media (max-width: 860px) {
+  .mc-reservation-body,
+  .mc-reservation-region-body { grid-template-columns: 1fr; }
+}
