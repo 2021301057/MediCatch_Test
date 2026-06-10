@@ -554,7 +554,7 @@ export default function PreTreatmentSearch() {
                 <div className="mc-card-head">
                   <div>
                     <div className="mc-card-title">분류 결과</div>
-                    <div className="mc-card-sub">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</div>
+                    {/*<div className="mc-card-sub">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</div>*/}
                   </div>
                 </div>
                 <div className="mc-card-body">
@@ -571,10 +571,10 @@ export default function PreTreatmentSearch() {
                       <span className="mc-kv-key">급여 여부</span>
                       <span className="mc-kv-val">{labelOf(BENEFIT_TYPE_LABELS, result.classification?.benefitType)}</span>
                     </div>
-                    <div className="mc-kv">
-                      <span className="mc-kv-key">매칭 출처</span>
-                      <span className="mc-kv-val">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</span>
-                    </div>
+                    {/*<div className="mc-kv">*/}
+                    {/*  <span className="mc-kv-key">매칭 출처</span>*/}
+                    {/*  <span className="mc-kv-val">{MATCH_SOURCE_LABELS[result.matchSource] || result.matchSource}</span>*/}
+                    {/*</div>*/}
                   </div>
                 </div>
               </div>

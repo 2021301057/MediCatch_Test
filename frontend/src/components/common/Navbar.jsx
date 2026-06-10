@@ -7,10 +7,10 @@ import ProfileAvatar from './ProfileAvatar';
 const NAV_ITEMS = [
   { path: '/',                 label: '대시보드',      end: true },
   { path: '/pre-treatment',    label: '진료 전 검색' },
-  { path: '/checkup',          label: '건강 검진 기록' },
-  { path: '/insurance',        label: '내 보험 조회' },
   { path: '/medical-records',  label: '진료 기록' },
+  { path: '/insurance',        label: '내 보험 조회' },
   { path: '/insurance-plan',   label: '보험 공백' },
+  { path: '/checkup',          label: '건강 검진 기록' },
   { path: '/health-report',    label: '건강 통합 리포트' },
 ];
 
