@@ -622,7 +622,7 @@ export default function Dashboard() {
             </div>
             <div className="mc-modal-foot">
               <button className="mc-btn" type="button" onClick={() => setShowReservationModal(false)}>닫기</button>
-              <button className="mc-btn mc-btn-primary" type="button" onClick={() => navigate('/checkup')}>검진 기록 보기</button>
+              {/*<button className="mc-btn mc-btn-primary" type="button" onClick={() => navigate('/checkup')}>검진 기록 보기</button>*/}
             </div>
           </div>
         </div>
