@@ -18,18 +18,18 @@ public class Hospital {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "siDoCd", nullable = false)
     private Integer siDoCd;
 
-    @Column(nullable = false)
+    @Column(name = "siGunGuCd", nullable = false)
     private Integer siGunGuCd;
 
-    @Column(nullable = false, length = 200)
+    @Column(name = "hmcNm", nullable = false, length = 200)
     private String hmcNm;
 
-    @Column(length = 300)
+    @Column(name = "locAddr", length = 300)
     private String locAddr;
 
-    @Column(length = 50)
+    @Column(name = "hmcTelNo", length = 50)
     private String hmcTelNo;
 }
