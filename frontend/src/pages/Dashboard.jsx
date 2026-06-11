@@ -571,18 +571,16 @@ export default function Dashboard() {
                     <option key={region.province} value={region.province}>{region.province}</option>
                   ))}
                 </select>
-                <div className="mc-city-chip-row mc-city-chip-scroll">
+                <select
+                  className="mc-province-select mc-city-select"
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value)}
+                  aria-label="시/군/구 선택"
+                >
                   {selectedRegion.cities.map((city) => (
-                    <button
-                      key={city.name}
-                      type="button"
-                      className={selectedCity === city.name ? 'active' : ''}
-                      onClick={() => setSelectedCity(city.name)}
-                    >
-                      {city.name}
-                    </button>
+                    <option key={city.name} value={city.name}>{city.name}</option>
                   ))}
-                </div>
+                </select>
                 <span className="mc-reservation-count">{hospitalsLoading ? '...' : `${reservationHospitals.length}곳`}</span>
               </div>
               <div className="mc-reservation-split">

@@ -3143,17 +3143,14 @@ body::before {
   outline: none;
 }
 .mc-province-select:focus { border-color: #2563eb; }
-.mc-city-chip-scroll {
-  flex: 1;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  min-width: 0;
+.mc-city-select {
+  min-width: 140px;
+  border-color: #dbeafe;
+  background: #fff;
+  color: var(--text-1);
+  font-weight: 700;
 }
-.mc-city-chip-scroll button {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+.mc-city-select:focus { border-color: #93c5fd; }
 .mc-reservation-count {
   flex-shrink: 0;
   padding: 6px 10px;
