@@ -3262,11 +3262,12 @@ body::before {
 .mc-kmarker::after {
   content: '';
   position: absolute;
-  left: 50%; bottom: -7px;
+  left: 50%; bottom: -8px;
   transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top: 7px solid #2563eb;
+  border: 6px solid transparent;
+  border-top: 9px solid #2563eb;
   border-bottom: 0;
+  filter: drop-shadow(0 2px 2px rgba(37,99,235,.3));
 }
 .mc-kmarker.active {
   width: 34px; height: 34px;
