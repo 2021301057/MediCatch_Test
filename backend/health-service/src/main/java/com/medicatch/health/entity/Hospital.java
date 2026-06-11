@@ -33,4 +33,10 @@ public class Hospital {
 
     @Column(name = "`hmcTelNo`", length = 50)
     private String hmcTelNo;
+
+    @Column(name = "`cxVl`")
+    private Double cxVl; // 경도
+
+    @Column(name = "`cyVl`")
+    private Double cyVl; // 위도
 }

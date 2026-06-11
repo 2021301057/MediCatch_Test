@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { healthAPI, insuranceAPI } from '../api/services';
+import KakaoHospitalMap from '../components/KakaoHospitalMap';
 
 const Icon = ({ children, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -186,11 +187,13 @@ export default function Dashboard() {
   const [selectedCity, setSelectedCity]         = useState('전체');
   const [reservationHospitals, setReservationHospitals] = useState([]);
   const [hospitalsLoading, setHospitalsLoading] = useState(false);
+  const [selectedHospitalId, setSelectedHospitalId] = useState(null);
 
   const selectedRegion = REGION_GROUPS.find((r) => r.province === selectedProvince) || REGION_GROUPS[0];
 
   const fetchHospitals = useCallback((region, cityName) => {
     setHospitalsLoading(true);
+    setSelectedHospitalId(null);
     const city = region.cities.find((c) => c.name === cityName);
     const requests = (!city || city.name === '전체')
       ? region.siDoCds.map((cd) => healthAPI.getHospitals(cd))
@@ -601,22 +604,33 @@ export default function Dashboard() {
                     </button>
                   ))}
                 </div>
-                <div className="mc-reservation-list">
-                  {hospitalsLoading ? (
-                    <div className="mc-reservation-empty">병원 정보를 불러오는 중...</div>
-                  ) : reservationHospitals.length > 0 ? reservationHospitals.map((h, i) => (
-                    <div className="mc-reservation-hospital" key={h.id ?? `${h.hmcNm}-${i}`}>
-                      <div className="mc-reservation-num">{i + 1}</div>
-                      <div className="mc-reservation-info">
-                        <div className="mc-reservation-name">{h.hmcNm}</div>
-                        {h.locAddr && <div className="mc-reservation-meta"><Icon size={11}>{P.mapPin}</Icon>{h.locAddr}</div>}
-                        {h.hmcTelNo && <div className="mc-reservation-meta"><Icon size={11}>{P.phone}</Icon>{h.hmcTelNo}</div>}
+                <div className="mc-reservation-split">
+                  <div className="mc-reservation-list">
+                    {hospitalsLoading ? (
+                      <div className="mc-reservation-empty">병원 정보를 불러오는 중...</div>
+                    ) : reservationHospitals.length > 0 ? reservationHospitals.map((h, i) => (
+                      <div
+                        className={`mc-reservation-hospital ${selectedHospitalId === h.id ? 'active' : ''}`}
+                        key={h.id ?? `${h.hmcNm}-${i}`}
+                        onClick={() => setSelectedHospitalId(h.id)}
+                      >
+                        <div className="mc-reservation-num">{i + 1}</div>
+                        <div className="mc-reservation-info">
+                          <div className="mc-reservation-name">{h.hmcNm}</div>
+                          {h.locAddr && <div className="mc-reservation-meta"><Icon size={11}>{P.mapPin}</Icon>{h.locAddr}</div>}
+                          {h.hmcTelNo && <div className="mc-reservation-meta"><Icon size={11}>{P.phone}</Icon>{h.hmcTelNo}</div>}
+                        </div>
+                        <span className="mc-tag mc-tag-success">검진 가능</span>
                       </div>
-                      <span className="mc-tag mc-tag-success">검진 가능</span>
-                    </div>
-                  )) : (
-                    <div className="mc-reservation-empty">해당 지역의 검진 병원 정보가 없어요.</div>
-                  )}
+                    )) : (
+                      <div className="mc-reservation-empty">해당 지역의 검진 병원 정보가 없어요.</div>
+                    )}
+                  </div>
+                  <KakaoHospitalMap
+                    hospitals={reservationHospitals}
+                    selectedId={selectedHospitalId}
+                    onSelect={setSelectedHospitalId}
+                  />
                 </div>
               </div>
             </div>
