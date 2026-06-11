@@ -519,7 +519,7 @@ export default function Dashboard() {
               style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
               onClick={() => setShowReservationModal(true)}
             >
-              예약하기
+              병원 조회하기
             </button>
           </div>
           <div className="mc-widget mc-widget-tight">
