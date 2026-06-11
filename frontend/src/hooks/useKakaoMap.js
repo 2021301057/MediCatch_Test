@@ -31,7 +31,7 @@ export default function useKakaoMap() {
 
     const script = document.createElement('script');
     script.id = SDK_ID;
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${APP_KEY}&autoload=false`;
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${APP_KEY}&autoload=false&libraries=clusterer`;
     script.async = true;
     script.addEventListener('load', onSdkReady);
     script.addEventListener('error', () => setError('카카오지도 SDK 로드에 실패했습니다.'));

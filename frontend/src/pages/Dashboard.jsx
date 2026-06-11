@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { healthAPI, insuranceAPI } from '../api/services';
@@ -188,8 +188,16 @@ export default function Dashboard() {
   const [reservationHospitals, setReservationHospitals] = useState([]);
   const [hospitalsLoading, setHospitalsLoading] = useState(false);
   const [selectedHospitalId, setSelectedHospitalId] = useState(null);
+  const hospitalListRef = useRef(null);
 
   const selectedRegion = REGION_GROUPS.find((r) => r.province === selectedProvince) || REGION_GROUPS[0];
+
+  // 지도 마커 클릭 시 목록에서 해당 병원이 보이도록 스크롤
+  useEffect(() => {
+    if (selectedHospitalId == null || !hospitalListRef.current) return;
+    const el = hospitalListRef.current.querySelector(`[data-hid="${selectedHospitalId}"]`);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedHospitalId]);
 
   const fetchHospitals = useCallback((region, cityName) => {
     setHospitalsLoading(true);
@@ -551,48 +559,19 @@ export default function Dashboard() {
                 <Icon size={15}>{P.x}</Icon>
               </button>
             </div>
-            <div className="mc-modal-body mc-reservation-body mc-reservation-region-body">
-              <div className="mc-reservation-map mc-korea-region-map">
-                <div className="mc-reservation-map-title">전국 지역 선택</div>
-                <div className="mc-korea-map-shape" aria-label="남한 지역 선택 지도">
-                  <svg className="mc-korea-silhouette" viewBox="0 0 220 330" role="img" aria-label="한반도 중 남한 강조 지도">
-                    <defs>
-                      <linearGradient id="koreaSouthGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stopColor="#dbeafe" />
-                        <stop offset="1" stopColor="#bbf7d0" />
-                      </linearGradient>
-                      <filter id="koreaSoftShadow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="#2563eb" floodOpacity="0.12" />
-                      </filter>
-                    </defs>
-                    <path className="mc-korea-north" d="M92 2 C67 18 55 42 58 68 C61 93 47 111 40 132 C34 151 44 169 60 176 C79 184 96 173 105 154 C112 137 128 127 141 112 C156 94 158 70 146 49 C135 29 116 10 92 2Z" />
-                    <path className="mc-korea-south" filter="url(#koreaSoftShadow)" d="M105 131 C87 137 73 149 65 166 C56 187 64 207 77 222 C86 232 85 248 75 263 C65 278 70 297 86 309 C102 322 126 318 137 300 C148 282 157 267 178 259 C199 251 210 229 202 208 C195 188 176 181 163 166 C151 151 133 124 105 131Z" />
-                    <path className="mc-korea-jeju" d="M83 305 C96 297 119 298 130 307 C119 319 96 320 83 305Z" />
-                    <path className="mc-korea-sea-line" d="M132 93 C122 121 118 148 124 173 C130 199 124 223 111 247" />
-                  </svg>
-                  {REGION_GROUPS.map((region, i) => (
-                    <button
-                      key={region.province}
-                      type="button"
-                      className={`mc-region-chip mc-region-${i} ${selectedProvince === region.province ? 'active' : ''}`}
-                      onClick={() => { setSelectedProvince(region.province); setSelectedCity('전체'); }}
-                    >
-                      {region.short}
-                    </button>
+            <div className="mc-modal-body mc-reservation-body2">
+              <div className="mc-reservation-filterbar">
+                <select
+                  className="mc-province-select"
+                  value={selectedProvince}
+                  onChange={(e) => { setSelectedProvince(e.target.value); setSelectedCity('전체'); }}
+                  aria-label="시/도 선택"
+                >
+                  {REGION_GROUPS.map((region) => (
+                    <option key={region.province} value={region.province}>{region.province}</option>
                   ))}
-                </div>
-                <div className="mc-region-helper">먼저 시/도를 선택한 뒤 세부 지역을 고르면 오른쪽 병원 목록이 바뀝니다.</div>
-              </div>
-
-              <div className="mc-reservation-region-panel">
-                <div className="mc-region-panel-head">
-                  <div>
-                    <div className="mc-region-panel-kicker">선택 지역</div>
-                    <div className="mc-region-panel-title">{selectedRegion.province}</div>
-                  </div>
-                  <span>{hospitalsLoading ? '...' : `${reservationHospitals.length}곳`}</span>
-                </div>
-                <div className="mc-city-chip-row">
+                </select>
+                <div className="mc-city-chip-row mc-city-chip-scroll">
                   {selectedRegion.cities.map((city) => (
                     <button
                       key={city.name}
@@ -604,34 +583,41 @@ export default function Dashboard() {
                     </button>
                   ))}
                 </div>
-                <div className="mc-reservation-split">
-                  <div className="mc-reservation-list">
-                    {hospitalsLoading ? (
-                      <div className="mc-reservation-empty">병원 정보를 불러오는 중...</div>
-                    ) : reservationHospitals.length > 0 ? reservationHospitals.map((h, i) => (
-                      <div
-                        className={`mc-reservation-hospital ${selectedHospitalId === h.id ? 'active' : ''}`}
-                        key={h.id ?? `${h.hmcNm}-${i}`}
-                        onClick={() => setSelectedHospitalId(h.id)}
-                      >
-                        <div className="mc-reservation-num">{i + 1}</div>
-                        <div className="mc-reservation-info">
-                          <div className="mc-reservation-name">{h.hmcNm}</div>
-                          {h.locAddr && <div className="mc-reservation-meta"><Icon size={11}>{P.mapPin}</Icon>{h.locAddr}</div>}
-                          {h.hmcTelNo && <div className="mc-reservation-meta"><Icon size={11}>{P.phone}</Icon>{h.hmcTelNo}</div>}
-                        </div>
-                        <span className="mc-tag mc-tag-success">검진 가능</span>
+                <span className="mc-reservation-count">{hospitalsLoading ? '...' : `${reservationHospitals.length}곳`}</span>
+              </div>
+              <div className="mc-reservation-split">
+                <div className="mc-reservation-list" ref={hospitalListRef}>
+                  {hospitalsLoading ? (
+                    <div className="mc-reservation-empty">병원 정보를 불러오는 중...</div>
+                  ) : reservationHospitals.length > 0 ? reservationHospitals.map((h, i) => (
+                    <div
+                      className={`mc-reservation-hospital ${selectedHospitalId === h.id ? 'active' : ''}`}
+                      key={h.id ?? `${h.hmcNm}-${i}`}
+                      data-hid={h.id}
+                      onClick={() => setSelectedHospitalId(h.id)}
+                    >
+                      <div className="mc-reservation-num">{i + 1}</div>
+                      <div className="mc-reservation-info">
+                        <div className="mc-reservation-name">{h.hmcNm}</div>
+                        {h.locAddr && <div className="mc-reservation-meta"><Icon size={11}>{P.mapPin}</Icon>{h.locAddr}</div>}
+                        {h.hmcTelNo && (
+                          <div className="mc-reservation-meta">
+                            <Icon size={11}>{P.phone}</Icon>
+                            <a className="mc-reservation-tel" href={`tel:${h.hmcTelNo}`} onClick={(e) => e.stopPropagation()}>{h.hmcTelNo}</a>
+                          </div>
+                        )}
                       </div>
-                    )) : (
-                      <div className="mc-reservation-empty">해당 지역의 검진 병원 정보가 없어요.</div>
-                    )}
-                  </div>
-                  <KakaoHospitalMap
-                    hospitals={reservationHospitals}
-                    selectedId={selectedHospitalId}
-                    onSelect={setSelectedHospitalId}
-                  />
+                      <span className="mc-tag mc-tag-success">검진 가능</span>
+                    </div>
+                  )) : (
+                    <div className="mc-reservation-empty">해당 지역의 검진 병원 정보가 없어요.</div>
+                  )}
                 </div>
+                <KakaoHospitalMap
+                  hospitals={reservationHospitals}
+                  selectedId={selectedHospitalId}
+                  onSelect={setSelectedHospitalId}
+                />
               </div>
             </div>
             <div className="mc-modal-foot">

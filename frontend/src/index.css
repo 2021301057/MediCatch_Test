@@ -3118,65 +3118,51 @@ body::before {
   font-size: 12.5px;
   font-weight: 600;
 }
-.mc-reservation-body {
-  display: grid;
-  grid-template-columns: 1fr 1.05fr;
-  gap: 18px;
+.mc-reservation-modal .mc-modal-title { color: #2563eb; }
+.mc-reservation-body2 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
 }
-.mc-reservation-map {
-  position: relative;
-  min-height: 390px;
-  border: 1px solid #dbeafe;
-  border-radius: 16px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 55% 45%, rgba(47,111,232,.13), transparent 26%),
-    linear-gradient(135deg, #f8fbff, #ecfdf5);
+.mc-reservation-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.mc-reservation-map::before {
-  content: '';
-  position: absolute;
-  inset: 36px 28px 28px;
-  border-radius: 46% 54% 42% 58% / 38% 47% 53% 62%;
-  border: 2px solid rgba(47,111,232,.18);
-  background: rgba(255,255,255,.35);
-  transform: rotate(-10deg);
+.mc-province-select {
+  flex-shrink: 0;
+  padding: 9px 12px;
+  border: 1.5px solid #93c5fd;
+  border-radius: 11px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+  outline: none;
 }
-.mc-reservation-map::after {
-  content: '';
-  position: absolute;
-  left: 49%; top: 24%; width: 2px; height: 56%;
-  background: rgba(47,111,232,.13);
-  transform: rotate(18deg);
+.mc-province-select:focus { border-color: #2563eb; }
+.mc-city-chip-scroll {
+  flex: 1;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  min-width: 0;
 }
-.mc-reservation-map-title {
-  position: absolute;
-  left: 16px; top: 14px;
-  z-index: 2;
-  padding: 6px 9px;
+.mc-city-chip-scroll button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mc-reservation-count {
+  flex-shrink: 0;
+  padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,.84);
-  border: 1px solid #dbeafe;
+  background: #eff6ff;
   color: #2563eb;
   font-size: 12px;
-  font-weight: 850;
-}
-.mc-map-marker {
-  position: absolute;
-  z-index: 3;
-  width: 27px; height: 27px;
-  border-radius: 999px 999px 999px 3px;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  border: 2px solid #fff;
-  background: #2563eb;
-  color: #fff;
-  box-shadow: 0 10px 18px rgba(37,99,235,.22);
-  cursor: pointer;
   font-weight: 900;
-  font-size: 11px;
 }
-.mc-map-marker::first-letter { transform: rotate(45deg); }
-.mc-map-marker { line-height: 23px; }
 .mc-reservation-list {
   display: flex;
   flex-direction: column;
@@ -3217,22 +3203,17 @@ body::before {
   font-size: 12px;
   font-weight: 650;
 }
-@media (max-width: 760px) {
-  .mc-reservation-body { grid-template-columns: 1fr; }
-  .mc-reservation-map { min-height: 280px; }
-}
-
 /* ── 병원 목록 + 카카오지도 분할 ───────────────────── */
 .mc-reservation-modal { max-width: 1100px; }
 .mc-reservation-split {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 12px;
   min-height: 0;
   flex: 1;
 }
 .mc-reservation-split .mc-reservation-list {
-  max-height: 390px;
+  max-height: 520px;
   overflow: auto;
 }
 .mc-reservation-split .mc-reservation-hospital {
@@ -3248,11 +3229,69 @@ body::before {
 }
 .mc-kakao-map {
   position: relative;
-  min-height: 390px;
+  min-height: 520px;
   border: 1px solid #dbeafe;
   border-radius: 13px;
   overflow: hidden;
   background: #f8fbff;
+}
+.mc-reservation-tel {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 700;
+}
+.mc-reservation-tel:hover { text-decoration: underline; }
+/* 지도 위 숫자 마커 (CustomOverlay) */
+.mc-kmarker {
+  position: relative;
+  width: 28px; height: 28px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(37,99,235,.35);
+  margin-bottom: 6px; /* 꼬리 높이만큼 좌표에서 띄움 */
+}
+.mc-kmarker::after {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: -7px;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top: 7px solid #2563eb;
+  border-bottom: 0;
+}
+.mc-kmarker.active {
+  width: 34px; height: 34px;
+  font-size: 13px;
+  background: #1d4ed8;
+  box-shadow: 0 6px 16px rgba(29,78,216,.45);
+}
+.mc-kmarker.active::after { border-top-color: #1d4ed8; }
+/* 지도 위 정보창 (CustomOverlay) */
+.mc-kinfo {
+  max-width: 230px;
+  padding: 10px 13px;
+  border-radius: 11px;
+  background: #fff;
+  border: 1px solid #dbeafe;
+  box-shadow: 0 8px 22px rgba(15,23,42,.16);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+}
+.mc-kinfo strong {
+  display: block;
+  color: #111827;
+  font-size: 13px;
+  margin-bottom: 2px;
 }
 .mc-kakao-map-loading,
 .mc-kakao-map-error {
@@ -3270,137 +3309,6 @@ body::before {
   .mc-kakao-map { min-height: 240px; }
 }
 
-/* ── RESERVATION REGION SELECTOR ───────────────────── */
-.mc-reservation-region-body {
-  grid-template-columns: 1.05fr 1fr;
-  align-items: stretch;
-}
-.mc-korea-region-map {
-  min-height: 420px;
-  background:
-    radial-gradient(circle at 50% 30%, rgba(219,234,254,.72), transparent 34%),
-    linear-gradient(180deg, #f8fbff, #ecfdf5);
-}
-.mc-korea-region-map::before,
-.mc-korea-region-map::after {
-  display: none;
-}
-.mc-korea-map-shape {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 300px;
-  height: 370px;
-  transform: translate(-50%, -50%);
-}
-.mc-korea-silhouette {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.mc-korea-north {
-  fill: #e5e7eb;
-  stroke: #cbd5e1;
-  stroke-width: 1.4;
-  opacity: .55;
-}
-.mc-korea-south,
-.mc-korea-jeju {
-  fill: url(#koreaSouthGradient);
-  stroke: #60a5fa;
-  stroke-width: 2.2;
-}
-.mc-korea-sea-line {
-  fill: none;
-  stroke: rgba(37,99,235,.18);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-.mc-region-chip {
-  position: absolute;
-  min-width: 48px;
-  padding: 8px 9px;
-  border: 1px solid #cfe0ff;
-  border-radius: 999px;
-  background: rgba(255,255,255,.86);
-  color: #31517a;
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-  box-shadow: 0 8px 18px rgba(15,23,42,.07);
-  transition: transform .14s ease, border-color .14s ease, background .14s ease;
-}
-.mc-region-chip:hover {
-  transform: translateY(-1px);
-  border-color: #60a5fa;
-}
-.mc-region-chip.active {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
-  box-shadow: 0 14px 26px rgba(37,99,235,.22);
-}
-.mc-region-0 { left: 66px; top: 130px; }
-.mc-region-1 { left: 104px; top: 161px; }
-.mc-region-2 { left: 64px; top: 176px; }
-.mc-region-3 { left: 125px; top: 104px; }
-.mc-region-4 { left: 101px; top: 220px; }
-.mc-region-5 { left: 75px; top: 273px; }
-.mc-region-6 { left: 154px; top: 238px; }
-.mc-region-7 { left: 160px; top: 278px; }
-.mc-region-8 { left: 90px; top: 324px; }
-.mc-region-helper {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 16px;
-  padding: 11px 12px;
-  border-radius: 13px;
-  background: rgba(255,255,255,.78);
-  border: 1px solid #dbeafe;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-.mc-reservation-region-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-.mc-region-panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 15px;
-  border: 1px solid #dbeafe;
-  border-radius: 15px;
-  background: linear-gradient(180deg, #fff, #f8fbff);
-}
-.mc-region-panel-kicker {
-  color: #2563eb;
-  font-size: 11px;
-  font-weight: 900;
-}
-.mc-region-panel-title {
-  margin-top: 3px;
-  color: var(--text-1);
-  font-size: 18px;
-  font-weight: 950;
-  letter-spacing: -.03em;
-}
-.mc-region-panel-head > span {
-  padding: 6px 9px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
-  font-size: 12px;
-  font-weight: 900;
-}
 .mc-city-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -3432,6 +3340,5 @@ body::before {
   text-align: center;
 }
 @media (max-width: 860px) {
-  .mc-reservation-region-body { grid-template-columns: 1fr; }
-  .mc-korea-region-map { min-height: 380px; }
+  .mc-reservation-filterbar { flex-wrap: wrap; }
 }
