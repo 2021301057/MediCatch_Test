@@ -34,13 +34,13 @@ export default function KakaoHospitalMap({ hospitals, selectedId, onSelect }) {
         averageCenter: true,
         minLevel: 7,
         minClusterSize: 3,
-        // 개별 핀(파란 핀)과 구분되도록 남색 원 + 반투명 링(halo)
+        // 개별 핀과 구분되도록 원형 + 반투명 링(halo), 색은 핀과 동일한 파란색 유지
         styles: [{
           width: '42px', height: '42px',
-          background: '#1e3a8a',
+          background: 'rgba(37, 99, 235, .9)',
           border: '2px solid #fff',
           borderRadius: '50%',
-          boxShadow: '0 0 0 7px rgba(30, 58, 138, .22), 0 4px 12px rgba(15, 23, 42, .3)',
+          boxShadow: '0 0 0 7px rgba(37, 99, 235, .22), 0 4px 12px rgba(15, 23, 42, .25)',
           color: '#fff',
           fontWeight: '800', fontSize: '14px',
           textAlign: 'center', lineHeight: '40px',
