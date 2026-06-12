@@ -323,4 +323,15 @@ INSERT INTO checkup_results (user_id, checkup_date, checkup_type, height, weight
 VALUES (1, '2024-03-10', 'REGULAR', 175, 75, 110, 200, 120, 80)
 ON DUPLICATE KEY UPDATE checkup_date=VALUES(checkup_date);
 
+CREATE TABLE IF NOT EXISTS hospitals (
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    siDoCd     INT         NOT NULL,
+    siGunGuCd  INT         NOT NULL,
+    hmcNm      VARCHAR(200) NOT NULL,
+    locAddr    VARCHAR(300),
+    hmcTelNo   VARCHAR(50),
+    cxVl       DOUBLE,
+    cyVl       DOUBLE
+);
+
 COMMIT;
