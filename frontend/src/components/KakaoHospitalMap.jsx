@@ -112,6 +112,7 @@ export default function KakaoHospitalMap({ hospitals, selectedId, onSelect }) {
     info.appendChild(name);
     if (hospital.locAddr) {
       const addr = document.createElement('div');
+      addr.className = 'mc-kinfo-addr';
       addr.textContent = hospital.locAddr;
       info.appendChild(addr);
     }
