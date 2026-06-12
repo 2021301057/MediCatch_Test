@@ -92,8 +92,7 @@ const loadAvatar = () => {
 
 const validatePasswordPolicy = (password, codefId = '') => {
   if (password.length < 9 || password.length > 20) return '비밀번호는 9자 이상 20자 이하여야 합니다.';
-  if (/[+\-]/.test(password)) return "비밀번호에 '+', '-' 문자는 사용할 수 없습니다.";
-  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*?_~[\]='|(){}:;"<>,/]/.test(password)) {
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\-]/.test(password)) {
     return '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.';
   }
   for (let i = 0; i < password.length - 2; i += 1) {

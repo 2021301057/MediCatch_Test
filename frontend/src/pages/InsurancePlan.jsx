@@ -160,10 +160,7 @@ const InsurancePlan = () => {
       </div>
 
       <div className="mc-two-col" style={{ gridTemplateColumns: '360px 1fr' }}>
-        <div className="mc-card mc-card-body" style={{
-          background: 'linear-gradient(135deg, #1E55C4 0%, #2F6FE8 100%)',
-          color: '#fff', borderColor: 'transparent',
-        }}>
+        <div className="mc-card mc-card-body mc-insurance-score-card">
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
@@ -181,8 +178,8 @@ const InsurancePlan = () => {
           <div style={{ fontSize: 12.5, marginTop: 8, opacity: 0.9 }}>
             평균그룹 비교 항목 기준 · 확인 필요 {gapCount}개
           </div>
-          <div className="mc-pbar" style={{ marginTop: 14, background: 'rgba(255,255,255,0.2)' }}>
-            <div className="mc-pbar-fill" style={{ width: `${coverageScore}%`, background: '#fff' }}/>
+          <div className="mc-pbar mc-insurance-score-bar" style={{ marginTop: 14 }}>
+            <div className="mc-pbar-fill" style={{ width: `${coverageScore}%` }}/>
           </div>
         </div>
 

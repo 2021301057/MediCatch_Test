@@ -229,6 +229,119 @@ const Metric = ({ label, value, sub, tone }) => (
   </div>
 );
 
+const HEALTH_MBTI_QUESTIONS = [
+  {
+    key: 'meal',
+    title: '평소 식사는 어떤 편인가요?',
+    options: [
+      { value: 'fresh', label: '균형 있게 챙겨요', desc: '채소, 단백질, 탄수화물을 비교적 고르게 먹어요.' },
+      { value: 'quick', label: '간편식이 잦아요', desc: '바쁠 때 외식이나 간편식으로 해결하는 편이에요.' },
+      { value: 'skip', label: '끼니를 자주 놓쳐요', desc: '식사 시간이 불규칙하고 거르는 날이 있어요.' },
+    ],
+  },
+  {
+    key: 'protein',
+    title: '단백질 섭취는 충분한 편인가요?',
+    options: [
+      { value: 'protein_ok', label: '매끼 조금씩 챙겨요', desc: '달걀, 생선, 두부, 고기, 콩류를 자주 먹어요.' },
+      { value: 'protein_low', label: '탄수화물 위주가 많아요', desc: '밥, 면, 빵으로 때우는 날이 잦아요.' },
+      { value: 'protein_unsure', label: '잘 모르겠어요', desc: '특별히 계산해서 먹지는 않아요.' },
+    ],
+  },
+  {
+    key: 'activity',
+    title: '활동량은 어느 쪽에 가까운가요?',
+    options: [
+      { value: 'active', label: '주 3회 이상 움직여요', desc: '운동이나 걷기를 의식적으로 해요.' },
+      { value: 'light', label: '가벼운 산책 정도예요', desc: '꾸준하진 않지만 움직이려고 해요.' },
+      { value: 'still', label: '앉아있는 시간이 길어요', desc: '하루 대부분을 책상 앞에서 보내요.' },
+    ],
+  },
+  {
+    key: 'sleep',
+    title: '수면 리듬은 어떤가요?',
+    options: [
+      { value: 'regular', label: '비교적 규칙적이에요', desc: '자는 시간과 일어나는 시간이 안정적이에요.' },
+      { value: 'late', label: '늦게 자는 편이에요', desc: '야간 활동이나 작업이 많은 편이에요.' },
+      { value: 'short', label: '수면 시간이 부족해요', desc: '피로가 누적되는 날이 많아요.' },
+    ],
+  },
+  {
+    key: 'stress',
+    title: '스트레스 관리는 어떤 편인가요?',
+    options: [
+      { value: 'release', label: '해소 루틴이 있어요', desc: '산책, 취미, 휴식으로 풀어요.' },
+      { value: 'hold', label: '참다가 한 번에 풀어요', desc: '쌓인 뒤에야 쉬는 편이에요.' },
+      { value: 'high', label: '요즘 계속 높은 편이에요', desc: '긴장 상태가 오래 이어져요.' },
+    ],
+  },
+  {
+    key: 'mood',
+    title: '최근 2주간 마음 상태는 어떤가요?',
+    options: [
+      { value: 'mood_ok', label: '대체로 괜찮아요', desc: '기분이 크게 무너지지는 않아요.' },
+      { value: 'anxious', label: '걱정과 긴장이 많아요', desc: '생각이 많고 쉽게 쉬지 못해요.' },
+      { value: 'down', label: '의욕이 낮은 날이 많아요', desc: '흥미가 줄거나 무기력한 날이 많아요.' },
+    ],
+  },
+];
+
+const getHealthMbtiResult = (answers) => {
+  const values = Object.values(answers);
+  const routineScore = ['fresh', 'regular', 'release'].filter((v) => values.includes(v)).length;
+  const activeScore = ['active', 'light'].includes(answers.activity) ? 1 : 0;
+  const nourishScore = ['fresh', 'protein_ok'].filter((v) => values.includes(v)).length;
+  const pressureScore = ['quick', 'skip', 'protein_low', 'late', 'short', 'hold', 'high', 'anxious', 'down'].filter((v) => values.includes(v)).length;
+  const type = `${routineScore >= 2 ? 'R' : 'F'}${activeScore ? 'A' : 'S'}${nourishScore >= 2 ? 'N' : 'T'}${pressureScore >= 3 ? 'P' : 'B'}`;
+
+  const nutrients = [];
+  if (['protein_low', 'protein_unsure'].includes(answers.protein) || ['quick', 'skip'].includes(answers.meal)) {
+    nutrients.push({ name: '단백질', reason: '식사가 불규칙하거나 탄수화물 위주일 때 부족해지기 쉬워요.', supplement: '두부, 달걀, 생선, 단백질 보충식' });
+  }
+  if (['high', 'hold'].includes(answers.stress) || ['short', 'late'].includes(answers.sleep)) {
+    nutrients.push({ name: '마그네슘', reason: '긴장과 수면 부족이 반복될 때 관리 후보가 될 수 있어요.', supplement: '견과류, 녹색 채소, 마그네슘' });
+  }
+  if (answers.activity === 'still') {
+    nutrients.push({ name: '비타민 D', reason: '활동량과 야외 노출이 줄면 부족 신호가 생기기 쉬워요.', supplement: '낮 시간 산책, 비타민 D' });
+  }
+  if (nutrients.length === 0) {
+    nutrients.push({ name: '기본 균형 유지', reason: '현재 응답상 큰 결핍 신호는 적어요.', supplement: '수분, 단백질, 채소 섭취 유지' });
+  }
+
+  const needsRecovery = type.endsWith('P');
+  const isStill = type[1] === 'S';
+  const isBalanced = type.includes('R') && type.includes('A') && type.includes('N') && type.includes('B');
+  const base = isBalanced ? {
+    title: '루틴 밸런서형',
+    tone: 'blue',
+    summary: '식사, 활동, 휴식의 기본 루틴이 안정적인 편이에요.',
+    tips: ['정기 검진 수치를 계속 추적해보세요.', '근력 운동을 조금 더하면 균형이 좋아져요.', '무리한 관리보다 지속 가능한 습관을 유지하세요.'],
+  } : needsRecovery ? {
+    title: '회복 우선형',
+    tone: 'amber',
+    summary: '건강 관리보다 피로와 스트레스 회복이 먼저 필요한 타입이에요.',
+    tips: ['수면 시간을 먼저 고정해보세요.', '카페인 시간을 조금 앞당겨보세요.', '하루 10분 산책처럼 작은 회복 루틴부터 시작하세요.'],
+  } : isStill ? {
+    title: '저활동 보완형',
+    tone: 'green',
+    summary: '식습관은 괜찮아도 활동량이 부족해지기 쉬운 타입이에요.',
+    tips: ['식후 10분 걷기를 붙여보세요.', '엘리베이터 대신 계단 1층부터 시작해보세요.', '주 2회 가벼운 근력 루틴을 추천해요.'],
+  } : {
+    title: '습관 리빌드형',
+    tone: 'violet',
+    summary: '좋은 습관과 흔들리는 습관이 섞여 있어 재정비 효과가 큰 타입이에요.',
+    tips: ['식사, 수면, 활동 중 하나만 먼저 고정해보세요.', '주간 목표를 작게 잡으면 성공률이 높아요.', '건강 리포트의 변화를 한 달 단위로 확인해보세요.'],
+  };
+
+  const mindHealth = answers.mood === 'down'
+    ? '우울감이나 무기력이 2주 이상 이어진다면 혼자 버티기보다 상담센터나 전문가 상담을 권장해요. 이 결과는 진단이 아니라 도움 신호예요.'
+    : answers.mood === 'anxious'
+      ? '걱정과 긴장이 오래 지속된다면 짧은 안정 루틴을 만들고, 일상 기능이 흔들리면 상담을 받아보는 것이 좋아요.'
+      : '마음 건강 신호는 비교적 안정적으로 보여요. 지금의 회복 루틴을 유지해보세요.';
+
+  return { type, ...base, nutrients: nutrients.slice(0, 3), mindHealth };
+};
+
 const HealthReport = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -250,6 +363,10 @@ const HealthReport = () => {
   const [loadWarning, setLoadWarning] = useState('');
   const [expandedRisk, setExpandedRisk] = useState(null);
   const [healthAgeOpen, setHealthAgeOpen] = useState(false);
+  const [showMbtiModal, setShowMbtiModal] = useState(false);
+  const [mbtiStep, setMbtiStep] = useState(0);
+  const [mbtiAnswers, setMbtiAnswers] = useState({});
+  const [mbtiResult, setMbtiResult] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -427,6 +544,32 @@ const HealthReport = () => {
     : null;
 
   const healthAgeFactors = Array.isArray(healthAge?.factors) ? healthAge.factors : [];
+  const currentMbtiQuestion = HEALTH_MBTI_QUESTIONS[mbtiStep];
+  const mbtiProgress = Math.round(((mbtiStep + 1) / HEALTH_MBTI_QUESTIONS.length) * 100);
+
+  const openMbtiSurvey = () => {
+    if (!mbtiResult) {
+      setMbtiStep(0);
+      setMbtiAnswers({});
+    }
+    setShowMbtiModal(true);
+  };
+
+  const selectMbtiAnswer = (value) => {
+    const nextAnswers = { ...mbtiAnswers, [currentMbtiQuestion.key]: value };
+    setMbtiAnswers(nextAnswers);
+    if (mbtiStep < HEALTH_MBTI_QUESTIONS.length - 1) {
+      setMbtiStep((step) => step + 1);
+      return;
+    }
+    setMbtiResult(getHealthMbtiResult(nextAnswers));
+  };
+
+  const resetMbtiSurvey = () => {
+    setMbtiResult(null);
+    setMbtiAnswers({});
+    setMbtiStep(0);
+  };
 
   return (
     <div className="mc-page fade-in">
@@ -434,6 +577,11 @@ const HealthReport = () => {
         <div>
           <div className="mc-page-title">12개월 건강 리포트</div>
           <div className="mc-page-subtitle">최근 1년간의 진료, 검진, 보험 점검 흐름을 한 곳에서 확인하세요.</div>
+        </div>
+        <div className="mc-page-top-right">
+          <button className="mc-btn mc-health-mbti-top-btn" type="button" onClick={openMbtiSurvey}>
+            건강 MBTI
+          </button>
         </div>
       </div>
 
@@ -739,6 +887,25 @@ const HealthReport = () => {
             </div>
           </section>
 
+          <section className="mc-print-hide">
+            <div className="mc-sec-head">
+              <span className="mc-sec-title">건강 MBTI</span>
+            </div>
+            <div className="mc-card mc-health-mbti-card">
+              <div className="mc-health-mbti-orb">{mbtiResult ? mbtiResult.type : 'MBTI'}</div>
+              <div className="mc-health-mbti-body">
+                <div className="mc-health-mbti-copy">
+                  <div className="mc-health-mbti-kicker">생활습관 설문</div>
+                  <div className="mc-health-mbti-title">나의 건강 타입</div>
+                  <p>{mbtiResult ? `${mbtiResult.title} · ${mbtiResult.summary}` : '식습관, 활동량, 수면 리듬을 선택하고 나의 건강 타입을 확인해보세요.'}</p>
+                </div>
+                <button className="mc-btn mc-btn-primary" type="button" onClick={openMbtiSurvey}>
+                  {mbtiResult ? '결과 다시 보기' : '설문 시작하기'}
+                </button>
+              </div>
+            </div>
+          </section>
+
           <section>
             <div className="mc-sec-head">
               <span className="mc-sec-title">월별 활동 흐름</span>
@@ -838,6 +1005,69 @@ const HealthReport = () => {
               ))}
             </div>
           </section>
+        </div>
+      )}
+
+      {showMbtiModal && (
+        <div className="mc-modal-backdrop mc-print-hide" onClick={() => setShowMbtiModal(false)}>
+          <div className="mc-modal mc-health-mbti-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="mc-modal-head">
+              <div>
+                <div className="mc-modal-title">건강 MBTI</div>
+                <div className="mc-health-mbti-modal-sub">생활습관 선택으로 보는 나의 건강 관리 타입</div>
+              </div>
+              <button className="mc-modal-close" type="button" onClick={() => setShowMbtiModal(false)} aria-label="닫기">×</button>
+            </div>
+            <div className="mc-modal-body">
+              {!mbtiResult ? (
+                <div className="mc-health-mbti-survey">
+                  <div className="mc-health-mbti-progress-row">
+                    <span>{mbtiStep + 1}/{HEALTH_MBTI_QUESTIONS.length}</span>
+                    <b>{mbtiProgress}%</b>
+                  </div>
+                  <div className="mc-health-mbti-progress"><i style={{ width: `${mbtiProgress}%` }} /></div>
+                  <div className="mc-health-mbti-question">{currentMbtiQuestion.title}</div>
+                  <div className="mc-health-mbti-options">
+                    {currentMbtiQuestion.options.map((option) => (
+                      <button key={option.value} type="button" onClick={() => selectMbtiAnswer(option.value)}>
+                        <span>{option.label}</span>
+                        <small>{option.desc}</small>
+                      </button>
+                    ))}
+                  </div>
+                  {mbtiStep > 0 && (
+                    <button className="mc-health-mbti-back" type="button" onClick={() => setMbtiStep((step) => Math.max(0, step - 1))}>이전 질문</button>
+                  )}
+                </div>
+              ) : (
+                <div className={`mc-health-mbti-result ${mbtiResult.tone}`}>
+                  <div className="mc-health-mbti-result-type">{mbtiResult.type}</div>
+                  <div className="mc-health-mbti-result-title">{mbtiResult.title}</div>
+                  <p>{mbtiResult.summary}</p>
+                  <div className="mc-health-mbti-tip-list">
+                    {mbtiResult.tips.map((tip) => <div key={tip}>{tip}</div>)}
+                  </div>
+                  <div className="mc-health-mbti-section-title">부족 가능 영양 · 추천</div>
+                  <div className="mc-health-mbti-nutrient-list">
+                    {mbtiResult.nutrients.map((item) => (
+                      <div key={item.name} className="mc-health-mbti-nutrient-card">
+                        <b>{item.name}</b>
+                        <span>{item.reason}</span>
+                        <small>추천: {item.supplement}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mc-health-mbti-section-title">마음 건강 체크</div>
+                  <div className={`mc-health-mbti-mind-note ${mbtiAnswers.mood === 'down' ? 'warning' : ''}`}>{mbtiResult.mindHealth}</div>
+                  <div className="mc-health-mbti-disclaimer">영양제 추천은 생활습관 기반 참고용이며, 질환·복용약이 있으면 전문가와 먼저 상의해주세요.</div>
+                  <div className="mc-health-mbti-result-actions">
+                    <button className="mc-btn" type="button" onClick={resetMbtiSurvey}>다시 하기</button>
+                    <button className="mc-btn mc-btn-primary" type="button" onClick={() => setShowMbtiModal(false)}>확인</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
