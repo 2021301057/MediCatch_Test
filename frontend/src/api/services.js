@@ -119,6 +119,11 @@ export const healthAPI = {
   syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
   syncMedicalStep1: (data) => api.post('/health/sync/medical/step1', withSyncRequestAliases(data), { timeout: 120000 }),
   syncMedicalStep2: (data) => api.post('/health/sync/medical/step2', data, { timeout: 120000 }),
+  getHospitals: (siDoCd, siGunGuCd) => {
+    const params = { siDoCd };
+    if (siGunGuCd != null) params.siGunGuCd = siGunGuCd;
+    return api.get('/health/hospitals', { params });
+  },
 };
 
 // ── Insurance ─────────────────────────────────────
