@@ -22,13 +22,23 @@ import java.sql.SQLException;
 
 public class ApiToMysqlSaver {
 
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/medicatch_health"
+    // DB 접속 정보는 환경변수로 덮어쓸 수 있다 (비밀번호를 코드에 적지 않기 위함)
+    // 예: DB_HOST=127.0.0.1 DB_PORT=3307 DB_PASSWORD=실제비밀번호 java ... ApiToMysqlSaver
+    private static final String DB_HOST = env("DB_HOST", "localhost");
+    private static final String DB_PORT = env("DB_PORT", "3306");
+    private static final String DB_NAME = env("DB_NAME", "medicatch_health");
+    private static final String DB_URL = "jdbc:mysql://" + DB_HOST + ":" + DB_PORT + "/" + DB_NAME
             + "?useSSL=false"
             + "&serverTimezone=UTC"
             + "&allowPublicKeyRetrieval=true"
             + "&rewriteBatchedStatements=true";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "1234";
+    private static final String DB_USER = env("DB_USER", "root");
+    private static final String DB_PASSWORD = env("DB_PASSWORD", "1234");
+
+    private static String env(String key, String defaultValue) {
+        String value = System.getenv(key);
+        return (value == null || value.isBlank()) ? defaultValue : value;
+    }
 
     private static final String API_BASE_URL = "https://apis.data.go.kr/B550928/HmcSearchService/getRegnHmcList";
     private static final String SERVICE_KEY = "f661ec9068cbd10944c02c9b08505e3b6531c05959ca3e915db2b4b54939d9dd";
