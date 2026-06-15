@@ -589,6 +589,11 @@ const HealthReport = () => {
   const healthAgeDiff = healthAge && healthAge.biologicalAge != null && healthAge.chronologicalAge != null
     ? Number(healthAge.biologicalAge) - Number(healthAge.chronologicalAge)
     : null;
+  const healthAgeGuidance = healthAgeDiff == null
+    ? ''
+    : healthAgeDiff <= 0
+      ? '좋은 흐름이에요. 지금처럼 식사, 활동, 수면 리듬을 꾸준히 유지해보세요.'
+      : '건강 관리 신호가 보여요. 혈압, 혈당, 체중 지표부터 차분히 점검해보세요.';
 
   const healthAgeFactors = Array.isArray(healthAge?.factors) ? healthAge.factors : [];
   const currentMbtiQuestion = HEALTH_MBTI_QUESTIONS[mbtiStep];
@@ -746,40 +751,55 @@ const HealthReport = () => {
                 <div className="mc-card mc-card-body mc-report-panel mc-report-info-card mc-report-health-age-card">
                   <div className="mc-report-health-age-inner">
                     <div className="mc-report-health-age-main">
-                      <div className="mc-field-label">건강나이</div>
                       {healthAge && healthAge.biologicalAge != null ? (
                         <>
-                          <div className="mc-report-health-age-value">
-                            <span>
-                              {healthAge.biologicalAge}세
-                            </span>
-                            {healthAgeDiff != null && (
-                              <b className={healthAgeDiff > 0 ? 'warn' : 'good'}>
-                                {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '실제 나이와 동일'}
-                              </b>
+                          <div className="mc-report-health-age-primary">
+                            <div className="mc-field-label">건강나이</div>
+                            <div className="mc-report-health-age-value">
+                              <span>
+                                {healthAge.biologicalAge}세
+                              </span>
+                              {healthAgeDiff != null && (
+                                <b className={healthAgeDiff > 0 ? 'warn' : 'good'}>
+                                  {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '동일'}
+                                </b>
+                              )}
+                            </div>
+                            {healthAge.summaryNote && (
+                              <div className="mc-report-health-age-note">
+                                {healthAge.summaryNote}
+                              </div>
+                            )}
+                            {healthAgeGuidance && (
+                              <div className={`mc-report-health-age-guidance ${healthAgeDiff > 0 ? 'warn' : 'good'}`}>
+                                {healthAgeGuidance}
+                              </div>
                             )}
                           </div>
-                          {healthAge.summaryNote && (
-                            <div className="mc-report-health-age-note">
-                              {healthAge.summaryNote}
-                            </div>
-                          )}
-                          {healthAge.chronologicalAge != null && (
+                          <div className="mc-report-health-age-side">
+                            {healthAge.chronologicalAge != null && (
+                              <div className="mc-report-health-age-meta">
+                                <span>실제 나이</span>
+                                <strong>{healthAge.chronologicalAge}세</strong>
+                              </div>
+                            )}
                             <div className="mc-report-health-age-meta">
-                              <span>실제 나이</span>
-                              <strong>{healthAge.chronologicalAge}세</strong>
+                              <span>나이 차이</span>
+                              <strong className={healthAgeDiff > 0 ? 'warn' : 'good'}>
+                                {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '0세'}
+                              </strong>
                             </div>
-                          )}
-                          {(healthAge.detailMessage || healthAge.changeAfterMessage || healthAgeFactors.length > 0) && (
-                            <button
-                              type="button"
-                              onClick={() => setShowHealthAgeModal(true)}
-                              className="mc-report-health-age-link"
-                            >
-                              건강나이 이유 보기
-                              <Ic d={P.arrow} size={11}/>
-                            </button>
-                          )}
+                            {(healthAge.detailMessage || healthAge.changeAfterMessage || healthAgeFactors.length > 0) && (
+                              <button
+                                type="button"
+                                onClick={() => setShowHealthAgeModal(true)}
+                                className="mc-report-health-age-link"
+                              >
+                                건강나이 이유 보기
+                                <Ic d={P.arrow} size={11}/>
+                              </button>
+                            )}
+                          </div>
                         </>
                       ) : (
                         <div className="mc-card-sub" style={{ marginTop: 12 }}>건강나이 데이터가 없어요.</div>

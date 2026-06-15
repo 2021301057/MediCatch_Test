@@ -1392,7 +1392,7 @@ body::before {
 .mc-report-health-age-card {
   position: relative;
   overflow: hidden;
-  padding: 22px 24px;
+  padding: 18px 22px;
 }
 
 .mc-report-health-age-card::before {
@@ -1404,24 +1404,50 @@ body::before {
 }
 
 .mc-report-health-age-inner {
-  min-height: 180px;
+  min-height: 174px;
   display: flex;
+  align-items: flex-start;
+}
+
+.mc-report-health-age-main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(164px, 198px);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.mc-report-health-age-primary {
+  display: flex;
+  min-width: 0;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 18px;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+
+.mc-report-health-age-primary .mc-field-label {
+  font-size: 12px;
+}
+
+.mc-report-health-age-side {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding-left: 16px;
+  border-left: 1px solid rgba(215, 226, 239, .82);
 }
 
 .mc-report-health-age-value {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
 .mc-report-health-age-value span {
   color: #3a7a62;
-  font-size: 36px;
-  font-weight: 760;
+  font-size: 38px;
+  font-weight: 740;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -1445,18 +1471,40 @@ body::before {
 }
 
 .mc-report-health-age-note {
-  margin-top: 12px;
+  max-width: 360px;
+  margin-top: 17px;
   color: #7b8798;
   font-size: 13px;
-  font-weight: 560;
-  line-height: 1.55;
+  font-weight: 540;
+  line-height: 1.45;
   word-break: keep-all;
 }
 
-.mc-report-health-age-meta {
-  width: fit-content;
-  min-width: 156px;
+.mc-report-health-age-guidance {
+  margin-top: 21px;
   padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.mc-report-health-age-guidance.good {
+  border: 1px solid rgba(112,174,152,.28);
+  background: rgba(241,248,245,.78);
+  color: #3a7a62;
+}
+
+.mc-report-health-age-guidance.warn {
+  border: 1px solid rgba(193,160,82,.3);
+  background: rgba(255,250,239,.82);
+  color: #8a7040;
+}
+
+.mc-report-health-age-meta {
+  min-width: 0;
+  padding: 10px 11px;
   border: 1px solid #e1eadf;
   border-radius: 8px;
   background: rgba(248,252,250,.82);
@@ -1480,18 +1528,28 @@ body::before {
   font-weight: 720;
 }
 
+.mc-report-health-age-meta strong.good {
+  color: #3a7a62;
+}
+
+.mc-report-health-age-meta strong.warn {
+  color: #8a7040;
+}
+
 .mc-report-health-age-link {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  width: fit-content;
-  border: none;
-  background: transparent;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid rgba(47,111,232,.22);
+  border-radius: 8px;
+  background: rgba(47,111,232,.06);
   color: var(--blue);
   font-size: 13px;
-  font-weight: 720;
+  font-weight: 700;
   cursor: pointer;
-  padding: 0;
+  padding: 0 12px;
 }
 
 .mc-report-risk-grid {
