@@ -138,6 +138,12 @@ export const insuranceAPI = {
       self_coverage_amount: 'selfCoverageAmount',
       avg_group_coverage_amount: 'avgGroupCoverageAmount',
     })) : rows),
+  getPeerPremiumBenchmark: (params) => api.get('/insurance/peer-premium-benchmark', { params })
+    .then((row) => withAliases(row, {
+      age_group_label: 'ageGroupLabel',
+      average_monthly_premium: 'averageMonthlyPremium',
+      user_monthly_premium: 'userMonthlyPremium',
+    })),
   getSummary:    () => api.get('/insurance/summary'),
   sync:          (data) => api.post('/insurance/sync', withSyncRequestAliases(data), { timeout: 60000 }),
 };

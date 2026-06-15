@@ -112,6 +112,7 @@ const MedicalRecords = () => {
 
   // ── 통계 ────────────────────────────────────────────────────────────
   const hospitalCount = new Set(records.map((r) => r.hospitalName).filter(Boolean)).size;
+  const pharmacyCount = records.filter((r) => r.treatmentType === '약국').length;
 
   const isFiltered =
     searchQuery.trim() !== '' ||
@@ -153,6 +154,11 @@ const MedicalRecords = () => {
           <div className="mc-stat-label">{topType[0]} 진료</div>
           <div className="mc-stat-value">{topType[1]}건</div>
           <div className="mc-stat-sub">가장 많은 유형</div>
+        </div>
+        <div className="mc-stat">
+          <div className="mc-stat-label">약국 기록</div>
+          <div className="mc-stat-value">{pharmacyCount}건</div>
+          <div className="mc-stat-sub">처방·조제 기록</div>
         </div>
       </div>
 
