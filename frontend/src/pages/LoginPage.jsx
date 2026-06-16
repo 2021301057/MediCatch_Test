@@ -50,6 +50,10 @@ export default function LoginPage() {
 
   const { login } = useAuthStore();
   const navigate = useNavigate();
+  const [isMobileView, setIsMobileView] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 760;
+  });
 
   useEffect(() => {
     setError('');
@@ -71,6 +75,13 @@ export default function LoginPage() {
       setForm((f) => ({ ...f, password: '', passwordConfirm: '' }));
     }
   }, [mode]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobileView(window.innerWidth <= 760);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const handle = (e) => {
     const { name, value, type, checked } = e.target;
@@ -476,32 +487,36 @@ export default function LoginPage() {
       <div style={s.bgDecoLeft} />
       <div style={s.bgDecoRight} />
 
-      <div style={s.split}>
+      <div style={{ ...s.split, ...(isMobileView ? s.splitMobile : {}) }}>
         {/* ── LEFT ─────────────────────────── */}
-        <section style={s.left}>
-          <div style={s.brand}>
+        <section style={{ ...s.left, ...(isMobileView ? s.leftMobile : {}) }}>
+          <div style={{ ...s.brand, ...(isMobileView ? s.brandMobile : {}) }}>
             <span style={s.brandDot} />
             <span style={s.brandText}>MediCatch</span>
           </div>
-          <h1 style={s.headline}>
-            <span style={{ color: '#10233f' }}>내 건강 데이터로 찾는,</span>
+          <h1 style={{ ...s.headline, ...(isMobileView ? s.headlineMobile : {}) }}>
+            <span style={{ color: '#10233f' }}>내 건강 데이터로 찾는{isMobileView ? '' : ','}</span>
             <br />
-            <span style={{ color: '#1d4ed8' }}>나에게 딱 맞는 보험.</span>
+            <span style={{ color: '#1d4ed8' }}>나에게 딱 맞는 보험{isMobileView ? '' : '.'}</span>
           </h1>
-          <p style={s.subcopy}>
-            건강보험공단·보험사 데이터를 한 곳에서 안전하게 연동하고,
-            <br />
-            내 상태에 맞는 보장과 건강 위험 신호를 자동으로 찾아드립니다.
-          </p>
-          <div style={s.featureList}>
-            <FeatureCard iconBg="#dbeafe" iconColor="#1d4ed8" title="개인정보는 암호화 우선" desc="건강·보험 데이터는 256-bit AES 암호화로 안전하게 보관됩니다." />
-            <FeatureCard iconBg="#d1fae5" iconColor="#059669" title="원클릭 데이터 연동" desc="CODEF 기반 본인인증 한 번으로 내 보험·진료 내역을 한 번에 불러옵니다." />
-          </div>
+          {!isMobileView && (
+            <p style={s.subcopy}>
+              건강보험공단·보험사 데이터를 한 곳에서 안전하게 연동하고,
+              <br />
+              내 상태에 맞는 보장과 건강 위험 신호를 자동으로 찾아드립니다.
+            </p>
+          )}
+          {!isMobileView && (
+            <div style={s.featureList}>
+              <FeatureCard iconBg="#dbeafe" iconColor="#1d4ed8" title="개인정보는 암호화 우선" desc="건강·보험 데이터는 256-bit AES 암호화로 안전하게 보관됩니다." />
+              <FeatureCard iconBg="#d1fae5" iconColor="#059669" title="원클릭 데이터 연동" desc="CODEF 기반 본인인증 한 번으로 내 보험·진료 내역을 한 번에 불러옵니다." />
+            </div>
+          )}
         </section>
 
         {/* ── RIGHT ────────────────────────── */}
-        <section style={s.right}>
-          <div style={s.formCard}>
+        <section style={{ ...s.right, ...(isMobileView ? s.rightMobile : {}) }}>
+          <div style={{ ...s.formCard, ...(isMobileView ? s.formCardMobile : {}) }}>
             <header style={s.formHead}>
               <h2 style={s.formTitle}>
                 {isLogin ? '다시 오신 것을 환영합니다'
@@ -576,7 +591,7 @@ export default function LoginPage() {
                 <Field label="아이디" error={fieldErrors.codefId || fieldErrors.id}>
                   <input name="id" value={form.id} onChange={handle} placeholder="아이디" style={{ ...s.input, ...(fieldErrors.codefId || fieldErrors.id ? s.inputError : {}) }} required />
                 </Field>
-                <div style={s.row2}>
+                <div style={{ ...s.row2, ...(isMobileView ? s.row2Mobile : {}) }}>
                   <Field label="통신사" error={fieldErrors.telecom}>
                     <select name="telecom" value={form.telecom} onChange={handle} style={s.input}>
                       <option value="0">SKT</option>
@@ -734,7 +749,7 @@ export default function LoginPage() {
                   <input name="name" value={form.name} onChange={handle} placeholder="홍길동" style={{ ...s.input, ...(fieldErrors.name ? s.inputError : {}) }} required />
                 </Field>
 
-                <div style={s.row2}>
+                <div style={{ ...s.row2, ...(isMobileView ? s.row2Mobile : {}) }}>
                   <Field label="통신사" error={fieldErrors.telecom}>
                     <select name="telecom" value={form.telecom} onChange={handle} style={s.input}>
                       <option value="0">SKT</option>
@@ -890,6 +905,11 @@ export default function LoginPage() {
             <span>🛡</span>
             <span>CODEF API · 256-bit AES 암호화 전송</span>
           </div>
+          {isMobileView && (
+            <p style={s.mobileSubcopy}>
+              건강·보험 데이터를 안전하게 연결해 내 상태를 한눈에 확인하세요.
+            </p>
+          )}
         </section>
       </div>
     </div>
@@ -946,13 +966,13 @@ function PasswordInput({ style, onChange, ...props }) {
   );
 }
 
-function FeatureCard({ icon, iconBg, iconColor, title, desc }) {
+function FeatureCard({ icon, iconBg, iconColor, title, desc, compact = false }) {
   return (
-    <div style={s.feature}>
-      <div style={{ ...s.featureIcon, background: iconBg, color: iconColor }}>{icon}</div>
+    <div style={{ ...s.feature, ...(compact ? s.featureMobile : {}) }}>
+      <div style={{ ...s.featureIcon, ...(compact ? s.featureIconMobile : {}), background: iconBg, color: iconColor }}>{icon}</div>
       <div>
-        <div style={s.featureTitle}>{title}</div>
-        <div style={s.featureDesc}>{desc}</div>
+        <div style={{ ...s.featureTitle, ...(compact ? s.featureTitleMobile : {}) }}>{title}</div>
+        <div style={{ ...s.featureDesc, ...(compact ? s.featureDescMobile : {}) }}>{desc}</div>
       </div>
     </div>
   );
@@ -984,27 +1004,80 @@ const s = {
     display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between',
     gap: 40, padding: '60px 32px',
   },
+  splitMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    gap: 22,
+    minHeight: 'auto',
+    padding: '28px 18px 36px',
+    boxSizing: 'border-box',
+    overflowX: 'hidden',
+  },
 
   // LEFT
   left: { flex: '1 1 440px', maxWidth: 560, minWidth: 300 },
+  leftMobile: { flex: 'none', maxWidth: 'none', minWidth: 0, width: '100%' },
   brand: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 48 },
+  brandMobile: { marginBottom: 24 },
   brandDot: { display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: 'linear-gradient(135deg, #2F6FE8, #22b8cf)' },
   brandText: { fontSize: 20, fontWeight: 800, color: '#2563eb', letterSpacing: -0.3 },
   headline: { fontSize: 40, fontWeight: 800, lineHeight: 1.2, margin: 0, letterSpacing: -0.8, textShadow: '0 1px 0 rgba(255,255,255,.5)' },
+  headlineMobile: {
+    fontSize: 28,
+    lineHeight: 1.28,
+    letterSpacing: 0,
+    wordBreak: 'keep-all',
+    overflowWrap: 'break-word',
+  },
   subcopy: { fontSize: 15, color: '#475569', lineHeight: 1.7, marginTop: 16, marginBottom: 32 },
+  subcopyMobile: {
+    fontSize: 13.5,
+    lineHeight: 1.62,
+    marginTop: 12,
+    marginBottom: 20,
+    wordBreak: 'keep-all',
+    overflowWrap: 'break-word',
+  },
+  mobileSubcopy: {
+    margin: '4px 4px 0',
+    color: '#64748b',
+    fontSize: 12.5,
+    lineHeight: 1.55,
+    textAlign: 'center',
+    wordBreak: 'keep-all',
+  },
   featureList: { display: 'flex', flexDirection: 'column', gap: 12 },
+  featureListMobile: { gap: 8 },
   feature: {
     display: 'flex', gap: 14, alignItems: 'flex-start',
     background: 'rgba(255,255,255,.7)', border: '1px solid #e2e8f0',
     borderRadius: 14, padding: '14px 16px', backdropFilter: 'blur(6px)',
   },
+  featureMobile: {
+    gap: 10,
+    padding: '10px 12px',
+    borderRadius: 12,
+  },
   featureIcon: { flexShrink: 0, width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 },
+  featureIconMobile: { width: 32, height: 32, borderRadius: 9, fontSize: 14 },
   featureTitle: { fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 2 },
+  featureTitleMobile: { fontSize: 12.5, marginBottom: 1 },
   featureDesc: { fontSize: 12.5, color: '#64748b', lineHeight: 1.55 },
+  featureDescMobile: { fontSize: 11.5, lineHeight: 1.45 },
 
   // RIGHT
   right: { flex: '0 1 460px', minWidth: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 },
+  rightMobile: { flex: 'none', minWidth: 0, width: '100%', alignItems: 'stretch' },
   formCard: { width: '100%', background: '#fff', borderRadius: 20, padding: '32px 30px', boxShadow: '0 10px 40px rgba(15,23,42,.08)', border: '1px solid #eef2f7' },
+  formCardMobile: {
+    padding: '24px 18px',
+    borderRadius: 18,
+    boxSizing: 'border-box',
+    boxShadow: '0 10px 28px rgba(15,23,42,.075)',
+  },
   formHead: { marginBottom: 20 },
   formTitle: { fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: -0.3 },
   formSub: { fontSize: 13, color: '#64748b', marginTop: 6, marginBottom: 0 },
@@ -1044,6 +1117,7 @@ const s = {
   identityInput: { padding: '11px 14px', textAlign: 'center', letterSpacing: 0.5 },
   identityDash: { color: '#94a3b8', fontWeight: 700, fontSize: 16 },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  row2Mobile: { gridTemplateColumns: '1fr' },
   hintError: { fontSize: 12, color: '#dc2626', marginTop: -4 },
   agree: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: '#475569', lineHeight: 1.5, marginTop: 4 },
   link: { color: '#1d4ed8', fontWeight: 600, textDecoration: 'none' },
