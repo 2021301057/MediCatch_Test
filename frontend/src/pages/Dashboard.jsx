@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { healthAPI, insuranceAPI } from '../api/services';
 import KakaoHospitalMap from '../components/KakaoHospitalMap';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Icon = ({ children, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -364,6 +365,8 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <MobileNavMenu />
+
       {/* Stats strip */}
       <div className="mc-stats-strip">
         {stats.map((s, i) => (
@@ -386,7 +389,7 @@ export default function Dashboard() {
               전체 보기 <Icon>{P.arrow}</Icon>
             </button>
           </div>
-          <table className="mc-tbl">
+          <table className="mc-tbl mc-dashboard-record-table">
             <thead>
               <tr>
                 <th>병원 / 내역</th>

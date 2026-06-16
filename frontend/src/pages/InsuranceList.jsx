@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { insuranceAPI } from '../api/services';
 import useAuthStore from '../store/authStore';
 import CodefSyncModal from '../components/CodefSyncModal';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -202,6 +203,8 @@ const InsuranceList = () => {
           <div className="mc-page-subtitle">가입된 보험 상품과 보장 내역을 한곳에서 관리하세요.</div>
         </div>
       </div>
+
+      <MobileNavMenu />
 
       <div className="mc-stats-strip mc-stats-strip-3">
         <div className="mc-stat">

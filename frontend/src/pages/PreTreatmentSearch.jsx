@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { analysisAPI } from '../api/services';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
     <svg
@@ -472,6 +473,8 @@ export default function PreTreatmentSearch() {
             </button>
           </div>
         </div>
+
+        <MobileNavMenu />
 
         <div className="mc-card mc-card-body mc-section-tight">
           <div className="mc-input-with-icon">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { healthAPI, insuranceAPI } from '../api/services';
 import { openPrintPopup } from '../utils/printPage';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -371,6 +372,8 @@ const CheckupRecords = () => {
           </button>
         </div>
       </div>
+
+      <MobileNavMenu />
 
       {/* 건강나이 카드 + 주요 지표 요약 */}
       <div className="mc-two-col" style={{ gridTemplateColumns: '360px 1fr' }}>
