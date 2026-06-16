@@ -100,10 +100,7 @@ public class HealthController {
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/checkup-results - userId: {}", userId);
         try {
-            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(3);
-            LocalDate end = endDate != null ? endDate : LocalDate.now();
-
-            List<CheckupResultDto> results = healthService.getCheckupResults(userId, start, end)
+            List<CheckupResultDto> results = healthService.getCheckupResults(userId, startDate, endDate)
                     .stream().map(CheckupResultDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(results);
         } catch (Exception e) {
