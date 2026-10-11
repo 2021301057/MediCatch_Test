@@ -56,43 +56,44 @@ const buildCheckupAttention = (c) => {
   if (!c) return [];
   const alerts = [];
   const add = (label, tone = 'warning') => alerts.push({ label, tone });
-  const sys = Number(c.bloodPressureSystolic);
-  const dia = Number(c.bloodPressureDiastolic);
+  const sys = c.bloodPressureSystolic == null || c.bloodPressureSystolic === '' ? NaN : Number(c.bloodPressureSystolic);
+  const dia = c.bloodPressureDiastolic == null || c.bloodPressureDiastolic === '' ? NaN : Number(c.bloodPressureDiastolic);
   if (Number.isFinite(sys) || Number.isFinite(dia)) {
     if (sys >= 140 || dia >= 90) add('고혈압 주의', 'danger');
     else if (sys < 90 || dia < 60) add('저혈압 주의');
     else if (sys >= 120 || dia >= 80) add('경계성 혈압');
   }
-  const glucose = Number(c.glucose);
+  const glucose = c.glucose == null || c.glucose === '' ? NaN : Number(c.glucose);
   if (Number.isFinite(glucose)) {
-    if (glucose >= 126) add('당뇨 의심', 'danger');
+    if (glucose >= 126) add('혈당 의료진 확인 권고', 'danger');
     else if (glucose >= 100) add('혈당 주의');
     else if (glucose < 70) add('저혈당 주의');
   }
-  const cholesterol = Number(c.totalCholesterol);
+  const cholesterol = c.totalCholesterol == null || c.totalCholesterol === '' ? NaN : Number(c.totalCholesterol);
   if (Number.isFinite(cholesterol)) {
     if (cholesterol >= 240) add('고콜레스테롤 주의', 'danger');
     else if (cholesterol >= 200) add('콜레스테롤 관리');
   }
-  const ldl = Number(c.ldlCholesterol);
+  const ldl = c.ldlCholesterol == null || c.ldlCholesterol === '' ? NaN : Number(c.ldlCholesterol);
   if (Number.isFinite(ldl)) {
     if (ldl >= 160) add('LDL 높음', 'danger');
     else if (ldl >= 130) add('LDL 경계');
   }
-  const hdl = Number(c.hdlCholesterol);
+  const hdl = c.hdlCholesterol == null || c.hdlCholesterol === '' ? NaN : Number(c.hdlCholesterol);
   if (Number.isFinite(hdl) && hdl < 40) add('HDL 낮음');
-  const triglyceride = Number(c.triglyceride);
+  const triglyceride = c.triglycerides == null && c.triglyceride == null
+    ? NaN : Number(c.triglycerides ?? c.triglyceride);
   if (Number.isFinite(triglyceride)) {
     if (triglyceride >= 200) add('중성지방 높음', 'danger');
     else if (triglyceride >= 150) add('중성지방 주의');
   }
-  const bmi = Number(c.bmi);
+  const bmi = c.bmi == null || c.bmi === '' ? NaN : Number(c.bmi);
   if (Number.isFinite(bmi)) {
     if (bmi >= 30) add('비만 주의', 'danger');
     else if (bmi >= 25) add('과체중 경향');
     else if (bmi < 18.5) add('저체중 주의');
   }
-  const waist = Number(c.waist);
+  const waist = c.waist == null || c.waist === '' ? NaN : Number(c.waist);
   if (Number.isFinite(waist) && waist >= 85) add('복부비만 주의');
   return alerts;
 };
@@ -146,12 +147,13 @@ const buildResultsTable = (c) => {
       tooltip: CHECKUP_AVERAGE_INFO.ldlCholesterol,
     });
   }
-  if (c.triglyceride != null) {
+  const triglyceride = c.triglycerides ?? c.triglyceride;
+  if (triglyceride != null) {
     rows.push({
       category: '중성지방',
-      value: `${c.triglyceride} mg/dL`,
+      value: `${triglyceride} mg/dL`,
       normal: '150 미만',
-      status: judgeStatus(c.triglyceride, 150, 200),
+      status: judgeStatus(triglyceride, 150, 200),
       tooltip: CHECKUP_AVERAGE_INFO.triglyceride,
     });
   }

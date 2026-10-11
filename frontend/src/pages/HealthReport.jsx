@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { healthAPI, insuranceAPI } from '../api/services';
 import { openPrintPopup } from '../utils/printPage';
@@ -199,20 +199,42 @@ const healthAgeFactorLine = (factor) => (
   )
 );
 
-const compactDate = (date) => String(date || '').slice(0, 10);
-
-const buildCheckupTrend = (checkups) => (
-  [...checkups]
-    .filter((item) => item.checkupDate)
-    .sort((a, b) => String(a.checkupDate).localeCompare(String(b.checkupDate)))
-    .slice(-3)
-    .map((item) => ({
-      date: compactDate(item.checkupDate),
-      bloodPressure: parseNumber(item.bloodPressureSystolic) || 0,
-      glucose: parseNumber(item.glucose) || 0,
-      cholesterol: parseNumber(item.totalCholesterol) || 0,
-    }))
-);
+const buildCheckupTrend = (checkups, hba1cResults) => {
+  const dates = [...new Set([
+    ...checkups.map((item) => item.checkupDate),
+    ...hba1cResults.map((item) => item.testDate),
+  ].filter(Boolean))]
+    .sort((a, b) => String(b).localeCompare(String(a)))
+    .slice(0, 6);
+  const rows = [
+    { key: 'glucose', label: '공복혈당', unit: 'mg/dL', reference: '100 미만', value: (item) => item?.glucose },
+    { key: 'hba1c', label: '당화혈색소', unit: '%', reference: '5.7 미만 참고', value: (item) => item?.hba1c },
+    { key: 'bloodPressure', label: '혈압', unit: 'mmHg', reference: '120/80 미만 참고', value: (item) => (
+      item?.bloodPressureSystolic == null && item?.bloodPressureDiastolic == null
+        ? null
+        : `${item.bloodPressureSystolic ?? '-'}/${item.bloodPressureDiastolic ?? '-'}`
+    ) },
+    { key: 'bmi', label: 'BMI', unit: 'kg/m²', reference: '개인별 기준 확인', value: (item) => item?.bmi },
+    { key: 'waist', label: '허리둘레', unit: 'cm', reference: '남 90 / 여 85 미만 참고', value: (item) => item?.waist },
+    { key: 'triglycerides', label: '중성지방', unit: 'mg/dL', reference: '150 미만 참고', value: (item) => item?.triglycerides },
+    { key: 'hdl', label: 'HDL 콜레스테롤', unit: 'mg/dL', reference: '남 40 / 여 50 이상 참고', value: (item) => item?.hdlCholesterol },
+  ].map((row) => {
+    const values = dates.map((date) => {
+      if (row.key === 'hba1c') {
+        const result = hba1cResults.find((item) => item.testDate === date);
+        return result?.value ?? null;
+      }
+      const checkup = checkups.find((item) => item.checkupDate === date);
+      return row.value(checkup) ?? null;
+    });
+    const numericValues = values.filter((value) => value != null && Number.isFinite(Number(value)));
+    const change = numericValues.length >= 2
+      ? Number(numericValues[0]) - Number(numericValues[1])
+      : null;
+    return { ...row, values, change };
+  }).filter((row) => row.values.some((value) => value != null));
+  return { dates, rows };
+};
 
 const RISK_TREND_KEY = {
   STROKE: 'stroke',
@@ -390,7 +412,7 @@ const HealthReport = () => {
   const [deptPattern, setDeptPattern] = useState([]);
   const [diagKeywords, setDiagKeywords] = useState([]);
   const [predictions, setPredictions] = useState([]);
-  const [checkupTrend, setCheckupTrend] = useState([]);
+  const [checkupTrend, setCheckupTrend] = useState({ dates: [], rows: [] });
   const [riskTrend, setRiskTrend] = useState([]);
   const [healthAge, setHealthAge] = useState(null);
   const [insights, setInsights] = useState([]);
@@ -407,7 +429,7 @@ const HealthReport = () => {
       setLoading(true);
       setLoadWarning('');
       try {
-        const [records, checkups, preds, hAge, comparisons] = await Promise.all([
+        const [records, checkups, preds, hAge, comparisons, hba1cResults] = await Promise.all([
           healthAPI.getMedicalRecords().catch(() => {
             setLoadWarning('일부 건강 데이터를 불러오지 못했습니다.');
             return [];
@@ -416,6 +438,7 @@ const HealthReport = () => {
           healthAPI.getDiseasePredictions().catch(() => []),
           healthAPI.getHealthAge().catch(() => null),
           insuranceAPI.getCoverageComparison().catch(() => []),
+          healthAPI.getHba1cResults().catch(() => []),
         ]);
 
         const cutoff = new Date();
@@ -511,7 +534,7 @@ const HealthReport = () => {
         });
         const predictionList = Object.values(latestPredictions);
         setPredictions(predictionList);
-        setCheckupTrend(buildCheckupTrend(checkups));
+        setCheckupTrend(buildCheckupTrend(checkups, hba1cResults));
         setRiskTrend(buildRiskTrend(predictionList));
         setHealthAge(hAge);
 
@@ -532,14 +555,20 @@ const HealthReport = () => {
             path: '/insurance-plan',
           });
         }
-        if (!latestCheckup?.checkupDate || (Date.now() - new Date(latestCheckup.checkupDate)) / 86400000 > 365) {
+        if (!latestCheckup?.checkupDate) {
           next.push({
             icon: P.calendar,
             title: '건강검진 기록 확인',
-            text: '최근 검진 데이터가 부족하거나 1년 이상 지난 상태일 수 있습니다.',
+            text: '검진 기록을 연결하면 수치 변화와 건강 지표를 더 정확히 확인할 수 있습니다.',
             path: '/checkup',
           });
         }
+        next.push({
+          icon: P.check,
+          title: '매일 건강 습관 기록하기',
+          text: '검진 사이에도 식사와 운동을 기록하고 오늘의 건강 미션을 이어가세요.',
+          path: '/health-management',
+        });
         if (next.length === 0) {
           next.push({
             icon: P.check,
@@ -718,72 +747,49 @@ const HealthReport = () => {
               <span className="mc-card-sub">건강검진 기록에서 가져온 변화 흐름입니다.</span>
             </div>
 
-            <div className="mc-card mc-card-body mc-chart-rise mc-report-chart-card">
-              {checkupTrend.length < 2 ? (
-                  <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '72px 0', fontSize: 13 }}>
-                    추이 분석을 위한 검진 데이터가 부족합니다.
-                  </div>
+            <div className="mc-card mc-card-body mc-report-chart-card">
+              {checkupTrend.dates.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '48px 12px', fontSize: 13 }}>
+                  건강검진 또는 당화혈색소 기록을 등록하면 날짜별 추이를 볼 수 있습니다.
+                </div>
               ) : (
-                  <div className="mc-chart-wrap mc-chart-wrap-lg">
-                    <ResponsiveContainer width="100%" height={390}>
-                      <LineChart
-                          data={checkupTrend}
-                          margin={{ top: 14, right: 18, left: 2, bottom: 4 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
-
-                        <XAxis
-                            dataKey="date"
-                            tick={{ fill: '#4A5568', fontSize: 12 }}
-                            axisLine={{ stroke: '#DDE1EA' }}
-                        />
-
-                        <YAxis
-                            tick={{ fill: '#9AA3B2', fontSize: 12 }}
-                            axisLine={{ stroke: '#DDE1EA' }}
-                        />
-
-                        <Tooltip
-                            contentStyle={{
-                              background: '#fff',
-                              border: '1px solid #DDE1EA',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              color: '#0D1520',
-                            }}
-                        />
-
-                        <Legend wrapperStyle={{ fontSize: 12, color: '#4A5568' }}/>
-
-                        <Line
-                            type="monotone"
-                            dataKey="bloodPressure"
-                            stroke="#B95F72"
-                            name="수축기혈압"
-                            strokeWidth={2.4}
-                            dot={{ r: 3.5 }}
-                        />
-
-                        <Line
-                            type="monotone"
-                            dataKey="glucose"
-                            stroke="#3FA79A"
-                            name="공복혈당"
-                            strokeWidth={2.4}
-                            dot={{ r: 3.5 }}
-                        />
-
-                        <Line
-                            type="monotone"
-                            dataKey="cholesterol"
-                            stroke="#2F8ED8"
-                            name="총콜레스테롤"
-                            strokeWidth={2.4}
-                            dot={{ r: 3.5 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                <>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="mc-tbl" style={{ minWidth: 760 }}>
+                      <thead>
+                        <tr>
+                          <th>항목</th>
+                          <th>단위</th>
+                          <th>참고 범위</th>
+                          {checkupTrend.dates.map((date) => <th key={date}>{date}</th>)}
+                          <th>최근 변화</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {checkupTrend.rows.map((row) => (
+                          <tr key={row.key}>
+                            <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{row.label}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{row.unit}</td>
+                            <td style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{row.reference}</td>
+                            {row.values.map((value, index) => (
+                              <td key={`${row.key}-${checkupTrend.dates[index]}`}>
+                                {value == null ? '-' : Number.isFinite(Number(value)) ? Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) : value}
+                              </td>
+                            ))}
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {row.change == null ? '-'
+                                : `${row.change > 0 ? '+' : ''}${row.change.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+                  <div className="mc-card-sub" style={{ marginTop: 12 }}>
+                    최근 6개 검사일 기준입니다. 참고 범위는 일반적인 안내이며 개인별 결과 해석은 의료진과 상담하세요.
+                    <LinkBtn onClick={() => navigate('/health-management')}>혈당 관리 보기 →</LinkBtn>
+                  </div>
+                </>
               )}
             </div>
           </section>

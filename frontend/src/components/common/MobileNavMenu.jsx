@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/insurance-plan', label: '보험공백', icon: 'shield' },
   { path: '/checkup', label: '검진기록', icon: 'checkup' },
   { path: '/health-report', label: '건강리포트', icon: 'report' },
+  { path: '/health-management', label: '건강관리', icon: 'checkup' },
   { path: '/health-report?mbti=1', label: '건강MBTI', icon: 'mbti', mbti: true },
 ];
 

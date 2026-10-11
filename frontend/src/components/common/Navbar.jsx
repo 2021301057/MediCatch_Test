@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: '/insurance-plan',   label: '보험 공백' },
   { path: '/checkup',          label: '건강 검진 기록' },
   { path: '/health-report',    label: '건강 통합 리포트' },
+  { path: '/health-management', label: '오늘의 건강 관리' },
 ];
 
 const DEFAULT_AVATAR = { key: 'bot' };

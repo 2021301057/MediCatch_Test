@@ -31,7 +31,8 @@ const P = {
 const QUICK_ACTS = [
   { icon: 'search', title: '진료 전 보장 확인',  sub: '병원 가기 전에',  path: '/pre-treatment' },
   { icon: 'clip',   title: '최근 진료 기록',     sub: '방문 내역 확인', path: '/medical-records' },
-  { icon: 'chart',  title: '12개월 건강 리포트', sub: '최신 분석',      path: '/health-report' },
+  { icon: 'chart',  title: '건강 통합 리포트',   sub: '검진·진료 흐름',  path: '/health-report' },
+  { icon: 'check',  title: '오늘의 건강 관리',   sub: '미션·기록·혈당',  path: '/health-management' },
   { icon: 'chat',   title: 'AI 건강 상담',       sub: '지금 채팅',      path: '/chat' },
 ];
 
@@ -186,7 +187,7 @@ export default function Dashboard() {
   const [gaps, setGaps]               = useState([]);
   const [totalVisits, setTotalVisits] = useState(0);
   const [topDept, setTopDept]         = useState('-');
-  const [nextCheckup, setNextCheckup] = useState(null);
+  const [latestCheckupDate, setLatestCheckupDate] = useState(null);
   const [premium, setPremium]         = useState({ total: 0, insurers: 0 });
 
   // 국가건강검진 예약 모달
@@ -288,16 +289,7 @@ export default function Dashboard() {
       .then((rows) => {
         if (!Array.isArray(rows) || rows.length === 0) return;
         const latest = rows.reduce((a, b) => (a.checkupDate > b.checkupDate ? a : b));
-        const lastDate = new Date(latest.checkupDate);
-        const nextDate = new Date(lastDate);
-        nextDate.setFullYear(nextDate.getFullYear() + 1);
-        const now = new Date();
-        const diffDays = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
-        setNextCheckup({
-          lastDate: latest.checkupDate,
-          nextDate: nextDate.toISOString().slice(0, 10),
-          dday: diffDays,
-        });
+        setLatestCheckupDate(latest.checkupDate);
       })
       .catch(() => {});
 
@@ -541,19 +533,14 @@ export default function Dashboard() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="mc-sec-head">
-            <span className="mc-sec-title">다가오는 검진</span>
+            <span className="mc-sec-title">건강검진 기록</span>
           </div>
           <div className="mc-widget">
-            <div className="mc-widget-title">국가건강검진</div>
-            {nextCheckup ? (
-              <>
-                <div className="mc-widget-sub">
-                  최근 검진 {nextCheckup.lastDate} · 다음 예정 {nextCheckup.nextDate}
-                </div>
-                <div style={{ fontSize: 12, color: nextCheckup.dday <= 30 ? '#9A6060' : 'var(--text-2)', marginBottom: 8 }}>
-                  {nextCheckup.dday > 0 ? `D-${nextCheckup.dday}` : nextCheckup.dday === 0 ? 'D-day' : `D+${Math.abs(nextCheckup.dday)} 초과`}
-                </div>
-              </>
+            <div className="mc-widget-title">최근 검진</div>
+            {latestCheckupDate ? (
+              <div className="mc-widget-sub" style={{ marginBottom: 8 }}>
+                마지막 기록 {latestCheckupDate}
+              </div>
             ) : (
               <div className="mc-widget-sub">검진 기록이 없어요</div>
             )}
