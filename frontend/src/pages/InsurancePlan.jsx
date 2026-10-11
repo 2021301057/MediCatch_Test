@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { healthAPI, insuranceAPI } from '../api/services';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -192,6 +193,8 @@ const InsurancePlan = () => {
           </button>
         </div>
       </div>
+
+      <MobileNavMenu />
 
       <div className="mc-insurance-overview-grid">
         <div className="mc-card mc-card-body mc-insurance-score-card">

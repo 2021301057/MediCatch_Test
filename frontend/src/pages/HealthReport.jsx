@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { healthAPI, insuranceAPI } from '../api/services';
 import { openPrintPopup } from '../utils/printPage';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -374,6 +375,7 @@ const getHealthMbtiResult = (answers) => {
 
 const HealthReport = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     visits: 0,
@@ -623,6 +625,12 @@ const HealthReport = () => {
     setMbtiStep(0);
   };
 
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('mbti') === '1') {
+      openMbtiSurvey();
+    }
+  }, [location.search]);
+
   const handlePDFDownload = () => {
     openPrintPopup('MediCatch 건강 리포트');
   };
@@ -644,6 +652,8 @@ const HealthReport = () => {
           </button>
         </div>
       </div>
+
+      <MobileNavMenu />
 
       {loading ? (
         <div className="mc-alert mc-alert-blue" style={{ marginTop: 8 }}>
@@ -854,7 +864,7 @@ const HealthReport = () => {
             </div>
           </section>
 
-          <section className="mc-print-hide">
+          <section className="mc-print-hide mc-health-mbti-section">
             <div className="mc-sec-head">
               <span className="mc-sec-title">건강 MBTI</span>
               <span className="mc-card-sub">생활습관 기반 건강 타입을 확인하세요.</span>

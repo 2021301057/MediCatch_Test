@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { healthAPI } from '../api/services';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -137,6 +138,8 @@ const MedicalRecords = () => {
           <div className="mc-page-subtitle">병원 방문 내역과 진료 구분을 한 곳에서 확인하세요.</div>
         </div>
       </div>
+
+      <MobileNavMenu />
 
       {/* 통계: 전체 데이터 기준 */}
       <div className="mc-stats-strip">
