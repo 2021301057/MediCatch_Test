@@ -717,36 +717,73 @@ const HealthReport = () => {
               <span className="mc-sec-title">검진 수치 추이</span>
               <span className="mc-card-sub">건강검진 기록에서 가져온 변화 흐름입니다.</span>
             </div>
+
             <div className="mc-card mc-card-body mc-chart-rise mc-report-chart-card">
               {checkupTrend.length < 2 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '72px 0', fontSize: 13 }}>
-                  추이 분석을 위한 검진 데이터가 부족합니다.
-                </div>
+                  <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '72px 0', fontSize: 13 }}>
+                    추이 분석을 위한 검진 데이터가 부족합니다.
+                  </div>
               ) : (
-                <div className="mc-chart-wrap mc-chart-wrap-lg">
-                  <ResponsiveContainer width="100%" height={390}>
-                    <BarChart
-                      data={checkupTrend}
-                      margin={{ top: 14, right: 18, left: 2, bottom: 4 }}
-                      barGap={7}
-                      barCategoryGap="26%"
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
-                      <XAxis dataKey="date" tick={{ fill: '#4A5568', fontSize: 12 }} axisLine={{ stroke: '#DDE1EA' }}/>
-                      <YAxis tick={{ fill: '#9AA3B2', fontSize: 12 }} axisLine={{ stroke: '#DDE1EA' }}/>
-                      <Tooltip
-                        contentStyle={{
-                          background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
-                          fontSize: 12, color: '#0D1520',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 12, color: '#4A5568' }}/>
-                      <Bar dataKey="bloodPressure" fill="#B95F72" fillOpacity={0.92} name="수축기혈압" barSize={38} radius={[4, 4, 0, 0]}/>
-                      <Bar dataKey="glucose" fill="#3FA79A" fillOpacity={0.92} name="공복혈당" barSize={38} radius={[4, 4, 0, 0]}/>
-                      <Bar dataKey="cholesterol" fill="#2F8ED8" fillOpacity={0.94} name="총콜레스테롤" barSize={38} radius={[4, 4, 0, 0]}/>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                  <div className="mc-chart-wrap mc-chart-wrap-lg">
+                    <ResponsiveContainer width="100%" height={390}>
+                      <LineChart
+                          data={checkupTrend}
+                          margin={{ top: 14, right: 18, left: 2, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
+
+                        <XAxis
+                            dataKey="date"
+                            tick={{ fill: '#4A5568', fontSize: 12 }}
+                            axisLine={{ stroke: '#DDE1EA' }}
+                        />
+
+                        <YAxis
+                            tick={{ fill: '#9AA3B2', fontSize: 12 }}
+                            axisLine={{ stroke: '#DDE1EA' }}
+                        />
+
+                        <Tooltip
+                            contentStyle={{
+                              background: '#fff',
+                              border: '1px solid #DDE1EA',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              color: '#0D1520',
+                            }}
+                        />
+
+                        <Legend wrapperStyle={{ fontSize: 12, color: '#4A5568' }}/>
+
+                        <Line
+                            type="monotone"
+                            dataKey="bloodPressure"
+                            stroke="#B95F72"
+                            name="수축기혈압"
+                            strokeWidth={2.4}
+                            dot={{ r: 3.5 }}
+                        />
+
+                        <Line
+                            type="monotone"
+                            dataKey="glucose"
+                            stroke="#3FA79A"
+                            name="공복혈당"
+                            strokeWidth={2.4}
+                            dot={{ r: 3.5 }}
+                        />
+
+                        <Line
+                            type="monotone"
+                            dataKey="cholesterol"
+                            stroke="#2F8ED8"
+                            name="총콜레스테롤"
+                            strokeWidth={2.4}
+                            dot={{ r: 3.5 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
               )}
             </div>
           </section>
