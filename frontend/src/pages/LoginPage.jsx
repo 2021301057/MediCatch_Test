@@ -199,8 +199,24 @@ export default function LoginPage() {
     setFieldErrors({});
     const pw = form.password;
     if (pw.length < 9 || pw.length > 20) { setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' }); return; }
-    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
+    if (/[+\-]/.test(pw)) {
+      setFieldErrors({ password: "비밀번호에 '+', '-' 문자는 사용할 수 없습니다." }); return;
+    }
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]='|(){}:;"<>,/\\]/.test(pw)) {
       setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' }); return;
+    }
+    for (let i = 0; i < pw.length - 2; i++) {
+      if (pw[i] === pw[i+1] && pw[i] === pw[i+2]) {
+        setFieldErrors({ password: '동일한 문자/숫자를 3자 이상 연속 사용할 수 없습니다.' }); return;
+      }
+      const d1 = pw.charCodeAt(i+1) - pw.charCodeAt(i);
+      const d2 = pw.charCodeAt(i+2) - pw.charCodeAt(i+1);
+      if ((d1 === 1 && d2 === 1) || (d1 === -1 && d2 === -1)) {
+        setFieldErrors({ password: '연속되는 문자/숫자를 3자 이상 사용할 수 없습니다.' }); return;
+      }
+    }
+    if (form.id && pw.toLowerCase().includes(form.id.toLowerCase())) {
+      setFieldErrors({ password: '비밀번호에 아이디를 포함할 수 없습니다.' }); return;
     }
     if (pw !== form.passwordConfirm) { setFieldErrors({ passwordConfirm: '비밀번호가 일치하지 않습니다.' }); return; }
     setLoading(true);
@@ -260,7 +276,11 @@ export default function LoginPage() {
       setFieldErrors({ password: '비밀번호는 9자 이상 20자 이하여야 합니다.' });
       return false;
     }
-    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]+='|(){}:;"<>,/\\-]/.test(pw)) {
+    if (/[+\-]/.test(pw)) {
+      setFieldErrors({ password: "비밀번호에 '+', '-' 문자는 사용할 수 없습니다." });
+      return false;
+    }
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*?_~[\]='|(){}:;"<>,/\\]/.test(pw)) {
       setFieldErrors({ password: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' });
       return false;
     }

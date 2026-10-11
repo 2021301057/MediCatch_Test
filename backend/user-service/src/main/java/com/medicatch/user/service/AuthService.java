@@ -439,7 +439,11 @@ public class AuthService {
         if (!password.matches(".*[0-9].*")) {
             throw new SignupFieldException("password", "비밀번호에 숫자가 포함되어야 합니다.");
         }
-        if (!password.matches(".*[!@#$%^&*?_~\\[\\]+='|(){}:;\"<>,/\\\\-].*")) {
+        // '+', '-' 문자 사용 금지
+        if (password.contains("+") || password.contains("-")) {
+            throw new SignupFieldException("password", "비밀번호에 '+', '-' 문자는 사용할 수 없습니다.");
+        }
+        if (!password.matches(".*[!@#$%^&*?_~\\[\\]='|(){}:;\"<>,/\\\\].*")) {
             throw new SignupFieldException("password",
                     "비밀번호에 특수문자(!@#$%^&*?_~ 등)가 포함되어야 합니다.");
         }

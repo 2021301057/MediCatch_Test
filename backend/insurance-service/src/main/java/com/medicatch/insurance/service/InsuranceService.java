@@ -1,5 +1,6 @@
 package com.medicatch.insurance.service;
 
+import com.medicatch.insurance.dto.PeerPremiumBenchmarkDto;
 import com.medicatch.insurance.entity.CoverageItem;
 import com.medicatch.insurance.entity.Policy;
 import com.medicatch.insurance.repository.CoverageItemRepository;
@@ -17,6 +18,19 @@ import java.util.Map;
 @Service
 @Transactional
 public class InsuranceService {
+
+    private static final List<AgePremiumBenchmark> PEER_PREMIUM_BENCHMARKS = List.of(
+            new AgePremiumBenchmark(0, 9, "10대 이하", 110000.0),
+            new AgePremiumBenchmark(10, 19, "10대", 135000.0),
+            new AgePremiumBenchmark(20, 29, "20대", 185650.0),
+            new AgePremiumBenchmark(30, 39, "30대", 278935.0),
+            new AgePremiumBenchmark(40, 49, "40대", 395661.0),
+            new AgePremiumBenchmark(50, 59, "50대", 481036.0),
+            new AgePremiumBenchmark(60, 69, "60대", 356019.0),
+            new AgePremiumBenchmark(70, 79, "70대", 310000.0),
+            new AgePremiumBenchmark(80, 89, "80대", 260000.0),
+            new AgePremiumBenchmark(90, 99, "90대", 210000.0)
+    );
 
     private final PolicyRepository policyRepository;
     private final CoverageItemRepository coverageItemRepository;
@@ -155,5 +169,64 @@ public class InsuranceService {
         }
 
         return summary;
+    }
+
+    @Transactional(readOnly = true)
+    public PeerPremiumBenchmarkDto getPeerPremiumBenchmark(Long userId, Integer age) {
+        log.info("Getting peer premium benchmark for userId: {}, age: {}", userId, age);
+
+        List<Policy> activePolicies = getActivePolicies(userId);
+        double userMonthlyPremium = activePolicies.stream()
+                .map(Policy::getMonthlyPremium)
+                .filter(value -> value != null && value > 0)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        AgePremiumBenchmark benchmark = findPeerPremiumBenchmark(age);
+        double difference = userMonthlyPremium - benchmark.averageMonthlyPremium();
+        int percentage = benchmark.averageMonthlyPremium() > 0 && userMonthlyPremium > 0
+                ? (int) Math.round((userMonthlyPremium / benchmark.averageMonthlyPremium()) * 100)
+                : 0;
+
+        String status;
+        if (userMonthlyPremium <= 0) {
+            status = "확인 필요";
+        } else if (difference > 0) {
+            status = "또래보다 높음";
+        } else {
+            status = "또래보다 낮음";
+        }
+
+        return PeerPremiumBenchmarkDto.builder()
+                .age(age)
+                .ageGroupLabel(benchmark.label())
+                .averageMonthlyPremium(benchmark.averageMonthlyPremium())
+                .userMonthlyPremium(userMonthlyPremium)
+                .difference(difference)
+                .percentage(percentage)
+                .status(status)
+                .estimated(isEstimatedAgeGroup(age, benchmark))
+                .source("INTERNAL_AGE_GROUP_PREMIUM_BENCHMARK_V1")
+                .build();
+    }
+
+    private AgePremiumBenchmark findPeerPremiumBenchmark(Integer age) {
+        if (age == null) {
+            return PEER_PREMIUM_BENCHMARKS.get(2);
+        }
+
+        return PEER_PREMIUM_BENCHMARKS.stream()
+                .filter(item -> age >= item.minAge() && age <= item.maxAge())
+                .findFirst()
+                .orElse(age < PEER_PREMIUM_BENCHMARKS.get(0).minAge()
+                        ? PEER_PREMIUM_BENCHMARKS.get(0)
+                        : PEER_PREMIUM_BENCHMARKS.get(PEER_PREMIUM_BENCHMARKS.size() - 1));
+    }
+
+    private boolean isEstimatedAgeGroup(Integer age, AgePremiumBenchmark benchmark) {
+        return age == null || age < benchmark.minAge() || age > benchmark.maxAge();
+    }
+
+    private record AgePremiumBenchmark(int minAge, int maxAge, String label, double averageMonthlyPremium) {
     }
 }

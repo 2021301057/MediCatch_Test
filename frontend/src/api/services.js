@@ -119,6 +119,11 @@ export const healthAPI = {
   syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
   syncMedicalStep1: (data) => api.post('/health/sync/medical/step1', withSyncRequestAliases(data), { timeout: 120000 }),
   syncMedicalStep2: (data) => api.post('/health/sync/medical/step2', data, { timeout: 120000 }),
+  getHospitals: (siDoCd, siGunGuCd) => {
+    const params = { siDoCd };
+    if (siGunGuCd != null) params.siGunGuCd = siGunGuCd;
+    return api.get('/health/hospitals', { params });
+  },
 };
 
 // ── Insurance ─────────────────────────────────────
@@ -133,6 +138,12 @@ export const insuranceAPI = {
       self_coverage_amount: 'selfCoverageAmount',
       avg_group_coverage_amount: 'avgGroupCoverageAmount',
     })) : rows),
+  getPeerPremiumBenchmark: (params) => api.get('/insurance/peer-premium-benchmark', { params })
+    .then((row) => withAliases(row, {
+      age_group_label: 'ageGroupLabel',
+      average_monthly_premium: 'averageMonthlyPremium',
+      user_monthly_premium: 'userMonthlyPremium',
+    })),
   getSummary:    () => api.get('/insurance/summary'),
   sync:          (data) => api.post('/insurance/sync', withSyncRequestAliases(data), { timeout: 60000 }),
 };

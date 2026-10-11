@@ -12,6 +12,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+      naming:
+        physical-strategy: com.medicatch.health.config.QuotedAwarePhysicalNamingStrategy
     show-sql: false
     properties:
       hibernate:

@@ -189,6 +189,8 @@ services:
     <<: *common
     build:
       context: ./frontend
+      args:
+        REACT_APP_KAKAO_MAP_KEY: ${REACT_APP_KAKAO_MAP_KEY:?REACT_APP_KAKAO_MAP_KEY must be set in .env (카카오 JavaScript 키)}
     container_name: medicatch-frontend
     ports:
       - "127.0.0.1:8080:3000"

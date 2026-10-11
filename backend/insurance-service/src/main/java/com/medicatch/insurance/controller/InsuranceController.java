@@ -1,6 +1,7 @@
 package com.medicatch.insurance.controller;
 
 import com.medicatch.insurance.dto.CoverageComparisonDto;
+import com.medicatch.insurance.dto.PeerPremiumBenchmarkDto;
 import com.medicatch.insurance.dto.PolicyDto;
 import com.medicatch.insurance.entity.ClaimPayment;
 import com.medicatch.insurance.entity.CoverageItem;
@@ -168,6 +169,28 @@ public class InsuranceController {
             return ResponseEntity.ok(comparisons);
         } catch (Exception e) {
             log.error("Error getting coverage comparison: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Get age-group peer premium benchmark for user
+     */
+    @GetMapping("/peer-premium-benchmark")
+    public ResponseEntity<PeerPremiumBenchmarkDto> getPeerPremiumBenchmark(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestParam(value = "userId", required = false) String userIdParam,
+            @RequestParam(value = "age", required = false) Integer age) {
+        String raw = userIdHeader != null ? userIdHeader : userIdParam;
+        if (raw == null || raw.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Long userId = Long.parseLong(raw);
+        log.info("GET /api/insurance/peer-premium-benchmark - userId: {}, age: {}", userId, age);
+        try {
+            return ResponseEntity.ok(insuranceService.getPeerPremiumBenchmark(userId, age));
+        } catch (Exception e) {
+            log.error("Error getting peer premium benchmark: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }
