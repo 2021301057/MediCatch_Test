@@ -160,81 +160,44 @@ export default function HealthManagement() {
         <div className="mc-alert mc-alert-blue"><div><div className="mc-alert-title">건강 정보를 불러오는 중</div></div></div>
       ) : (
         <>
-          <section>
-            <div className="mc-sec-head">
-              <span className="mc-sec-title">당뇨 위험 참고 안내</span>
-              <span className={`mc-tag ${level.tone}`}>{level.label}</span>
-            </div>
-            <div className="mc-card mc-card-body">
-              <div style={{ fontWeight: 700, lineHeight: 1.6 }}>{assessment?.guidance}</div>
-              {assessment?.recommendHba1c && (
-                <div className="mc-alert mc-alert-blue" style={{ marginTop: 12 }}>
-                  최근 검진 수치를 바탕으로 당화혈색소(HbA1c) 검사를 의료기관과 상담해보세요.
-                </div>
-              )}
-              {assessment?.signals?.length > 0 && (
-                <ul style={{ margin: '12px 0 0', paddingLeft: 20, color: 'var(--text-2)', lineHeight: 1.8 }}>
-                  {assessment.signals.map((signal, index) => (
-                    <li key={`${signal.name}-${index}`}>
-                      <strong>{signal.name}</strong>: {signal.detail}{signal.date ? ` (${signal.date})` : ''}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="mc-card-sub" style={{ marginTop: 12 }}>{assessment?.disclaimer}</div>
-              {assessment?.actions?.length > 0 && (
-                <ul style={{ margin: '12px 0 0', paddingLeft: 20, lineHeight: 1.8 }}>
-                  {assessment.actions.map((action) => <li key={action}>{action}</li>)}
-                </ul>
-              )}
-              <div className="mc-form-row" style={{ marginTop: 16, alignItems: 'end' }}>
-                <label className="mc-form-field" style={{ maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span className="mc-field-label">당뇨 가족력 (선택)</span>
-                  <select className="mc-select" value={familyHistory} onChange={(event) => setFamilyHistory(event.target.value)}>
-                    <option value="">응답하지 않음</option>
-                    <option value="true">있음</option>
-                    <option value="false">없음</option>
-                  </select>
-                </label>
-                <button className="mc-btn mc-btn-primary" type="button" onClick={saveRiskProfile}>저장</button>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <div className="mc-sec-head" style={{ marginTop: 20 }}>
+          <div className="health-management-daily-grid">
+            <section className="health-management-section">
+              <div className="mc-sec-head">
               <span className="mc-sec-title">오늘의 건강 미션</span>
               <span className="mc-card-sub">{today}</span>
-            </div>
-            <div className="mc-grid-2">
-              {missions.map((mission) => (
-                <article className="mc-card mc-card-body" key={mission.id}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'start' }}>
-                    <div>
-                      <div className="mc-field-label">{mission.category === 'ACTIVITY' ? '운동' : '식사'}</div>
-                      <h3 style={{ margin: '6px 0', fontSize: 17 }}>{mission.title}</h3>
+              </div>
+              <div className="mc-grid-2 health-management-missions">
+                {missions.length === 0 ? (
+                  <div className="mc-card mc-card-body mc-card-sub">오늘 등록된 건강 미션이 없습니다.</div>
+                ) : missions.map((mission) => (
+                  <article className="mc-card mc-card-body" key={mission.id}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'start' }}>
+                      <div>
+                        <div className="mc-field-label">{mission.category === 'ACTIVITY' ? '운동' : '식사'}</div>
+                        <h3 style={{ margin: '6px 0', fontSize: 17 }}>{mission.title}</h3>
+                      </div>
+                      <span className={`mc-tag ${mission.status === 'COMPLETED' ? 'mc-tag-success' : 'mc-tag-warning'}`}>
+                        {mission.status === 'COMPLETED' ? '완료' : '진행 전'}
+                      </span>
                     </div>
-                    <span className={`mc-tag ${mission.status === 'COMPLETED' ? 'mc-tag-success' : 'mc-tag-warning'}`}>
-                      {mission.status === 'COMPLETED' ? '완료' : '진행 전'}
-                    </span>
-                  </div>
-                  <div className="mc-card-sub" style={{ lineHeight: 1.6 }}>{mission.description}</div>
-                  <div className="mc-card-sub" style={{ marginTop: 8 }}>추천 이유: {mission.reason}</div>
-                  {mission.status !== 'COMPLETED' && (
-                    <button className="mc-btn mc-btn-primary" type="button" style={{ marginTop: 14 }} onClick={() => completeMission(mission.id)}>
-                      미션 완료
-                    </button>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
+                    <div className="mc-card-sub" style={{ lineHeight: 1.6 }}>{mission.description}</div>
+                    <div className="mc-card-sub" style={{ marginTop: 8 }}>추천 이유: {mission.reason}</div>
+                    {mission.status !== 'COMPLETED' && (
+                      <button className="mc-btn mc-btn-primary" type="button" style={{ marginTop: 14 }} onClick={() => completeMission(mission.id)}>
+                        미션 완료
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
 
-          <section>
-            <div className="mc-sec-head" style={{ marginTop: 20 }}>
-              <span className="mc-sec-title">오늘의 식사·운동 기록</span>
-            </div>
-            <form className="mc-card mc-card-body" onSubmit={saveLog}>
+            <section className="health-management-section">
+              <div className="mc-sec-head">
+                <span className="mc-sec-title">오늘의 식사·운동 기록</span>
+                <span className="mc-card-sub">{today}</span>
+              </div>
+              <form className="mc-card mc-card-body health-management-log" onSubmit={saveLog}>
               <div className="mc-grid-2">
                 <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
                   <legend className="mc-field-label" style={{ marginBottom: 8 }}>식사 상태</legend>
@@ -275,11 +238,55 @@ export default function HealthManagement() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
                 <button className="mc-btn mc-btn-primary" type="submit" disabled={saving}>{saving ? '저장 중...' : '오늘 기록 저장'}</button>
               </div>
-            </form>
+              </form>
+            </section>
+          </div>
+
+          <section className="health-management-section">
+            <div className="mc-sec-head">
+              <span className="mc-sec-title">당뇨 위험 참고 안내</span>
+              <span className={`mc-tag ${level.tone}`}>{level.label}</span>
+            </div>
+            <div className="mc-card mc-card-body health-management-guidance">
+              <div className="health-management-guidance-main">
+                <div style={{ fontWeight: 700, lineHeight: 1.6 }}>{assessment?.guidance}</div>
+                {assessment?.recommendHba1c && (
+                  <div className="mc-alert mc-alert-blue" style={{ marginTop: 12 }}>
+                    최근 검진 수치를 바탕으로 당화혈색소(HbA1c) 검사를 의료기관과 상담해보세요.
+                  </div>
+                )}
+                {assessment?.signals?.length > 0 && (
+                  <ul style={{ margin: '12px 0 0', paddingLeft: 20, color: 'var(--text-2)', lineHeight: 1.8 }}>
+                    {assessment.signals.map((signal, index) => (
+                      <li key={`${signal.name}-${index}`}>
+                        <strong>{signal.name}</strong>: {signal.detail}{signal.date ? ` (${signal.date})` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {assessment?.actions?.length > 0 && (
+                  <ul style={{ margin: '12px 0 0', paddingLeft: 20, lineHeight: 1.8 }}>
+                    {assessment.actions.map((action) => <li key={action}>{action}</li>)}
+                  </ul>
+                )}
+                <div className="mc-card-sub" style={{ marginTop: 12 }}>{assessment?.disclaimer}</div>
+              </div>
+              <div className="health-management-family-history">
+                <label className="mc-form-field">
+                  <span className="mc-field-label">당뇨 가족력 (선택)</span>
+                  <select className="mc-select" value={familyHistory} onChange={(event) => setFamilyHistory(event.target.value)}>
+                    <option value="">응답하지 않음</option>
+                    <option value="true">있음</option>
+                    <option value="false">없음</option>
+                  </select>
+                </label>
+                <button className="mc-btn mc-btn-primary" type="button" onClick={saveRiskProfile}>저장</button>
+              </div>
+            </div>
           </section>
 
-          <section>
-            <div className="mc-sec-head" style={{ marginTop: 20 }}>
+          <section className="health-management-section">
+            <div className="mc-sec-head">
               <span className="mc-sec-title">당화혈색소 검사 기록</span>
             </div>
             <div className="mc-two-col">
