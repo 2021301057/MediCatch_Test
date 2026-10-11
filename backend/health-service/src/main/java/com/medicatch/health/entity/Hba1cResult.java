@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -29,7 +30,7 @@ public class Hba1cResult {
     private LocalDate testDate;
 
     @Column(nullable = false, precision = 4, scale = 2)
-    private Double value;
+    private BigDecimal value;
 
     @Column(length = 150)
     private String organizationName;

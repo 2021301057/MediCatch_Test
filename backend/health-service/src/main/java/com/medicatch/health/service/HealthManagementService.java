@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -102,10 +103,10 @@ public class HealthManagementService {
         }
 
         if (latestHba1c != null) {
-            if (latestHba1c.getValue() >= 6.5) {
+            if (latestHba1c.getValue().compareTo(BigDecimal.valueOf(6.5)) >= 0) {
                 signals.add(signal("당화혈색소", "검사 기준에 해당할 수 있어 의료기관 확인이 필요합니다.", latestHba1c.getTestDate()));
                 highSignal = true;
-            } else if (latestHba1c.getValue() >= 5.7) {
+            } else if (latestHba1c.getValue().compareTo(BigDecimal.valueOf(5.7)) >= 0) {
                 signals.add(signal("당화혈색소", "경계 범위입니다. 의료진과 결과를 상담해보세요.", latestHba1c.getTestDate()));
             }
         }
@@ -243,7 +244,9 @@ public class HealthManagementService {
 
     private void validateHba1c(Hba1cRequest request) {
         if (request == null || request.testDate() == null || request.value() == null
-                || !Double.isFinite(request.value()) || request.value() < 3 || request.value() > 20) {
+                || request.value().compareTo(BigDecimal.valueOf(3)) < 0
+                || request.value().compareTo(BigDecimal.valueOf(20)) > 0
+                || request.value().scale() > 2) {
             throw new IllegalArgumentException("검사일과 유효한 HbA1c 결과(3~20%)를 입력해주세요.");
         }
         if (request.testDate().isAfter(LocalDate.now(APP_ZONE))) {
