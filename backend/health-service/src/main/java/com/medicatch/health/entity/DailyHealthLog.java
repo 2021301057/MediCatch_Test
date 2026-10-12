@@ -31,6 +31,9 @@ public class DailyHealthLog {
     @Column(length = 10)
     private String mealQuality;
 
+    @Column(length = 1000)
+    private String mealDescription;
+
     @Column(nullable = false)
     private boolean highSugarIntake;
 

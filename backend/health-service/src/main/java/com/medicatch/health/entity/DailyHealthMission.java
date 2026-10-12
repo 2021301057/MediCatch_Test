@@ -43,6 +43,12 @@ public class DailyHealthMission {
     @Column(nullable = false, length = 300)
     private String reason;
 
+    @Column(length = 16)
+    private String source;
+
+    @Column
+    private Long assessmentId;
+
     @Column(nullable = false, length = 20)
     private String status;
 

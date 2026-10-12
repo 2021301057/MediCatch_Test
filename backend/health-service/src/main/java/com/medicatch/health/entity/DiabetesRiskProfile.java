@@ -27,6 +27,21 @@ public class DiabetesRiskProfile {
     @Column
     private Boolean familyHistoryDiabetes;
 
+    @Column(length = 24)
+    private String diagnosisStatus;
+
+    @Column(length = 24)
+    private String hba1cTestStatus;
+
+    @Column(length = 24)
+    private String healthCheckupStatus;
+
+    @Column
+    private Boolean aiProcessingConsent;
+
+    @Column
+    private LocalDateTime onboardingCompletedAt;
+
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 

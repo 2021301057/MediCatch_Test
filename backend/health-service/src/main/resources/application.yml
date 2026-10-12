@@ -33,6 +33,11 @@ codef:
   public-key: ${CODEF_PUBLIC_KEY:}
   use-demo: ${CODEF_USE_DEMO:true}
 
+ai:
+  api-key: ${AI_API_KEY:}
+  model: ${AI_MODEL:llama-3.3-70b-versatile}
+  base-url: ${AI_BASE_URL:https://api.groq.com/openai/v1}
+
 eureka:
   client:
     service-url:

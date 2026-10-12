@@ -9,5 +9,6 @@ import java.util.Optional;
 
 public interface DailyHealthMissionRepository extends JpaRepository<DailyHealthMission, Long> {
     List<DailyHealthMission> findByUserIdAndMissionDateOrderByCategoryAsc(Long userId, LocalDate missionDate);
+    List<DailyHealthMission> findByUserIdAndMissionDateBetween(Long userId, LocalDate start, LocalDate end);
     Optional<DailyHealthMission> findByIdAndUserId(Long id, Long userId);
 }

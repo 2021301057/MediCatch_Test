@@ -9,5 +9,6 @@ import java.util.Optional;
 
 public interface DailyHealthLogRepository extends JpaRepository<DailyHealthLog, Long> {
     Optional<DailyHealthLog> findByUserIdAndLogDate(Long userId, LocalDate logDate);
+    List<DailyHealthLog> findByUserIdAndLogDateBetween(Long userId, LocalDate start, LocalDate end);
     List<DailyHealthLog> findTop7ByUserIdOrderByLogDateDesc(Long userId);
 }

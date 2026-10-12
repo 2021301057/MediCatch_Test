@@ -5,9 +5,16 @@ import MobileNavMenu from '../components/common/MobileNavMenu';
 const todayKst = () => new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
 }).format(new Date());
+const currentMonthKst = () => todayKst().slice(0, 7);
+const shiftMonth = (month, amount) => {
+  const [year, value] = month.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, value - 1 + amount, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
+};
 
 const EMPTY_LOG = {
   mealQuality: '',
+  mealDescription: '',
   highSugarIntake: false,
   lateNightMeal: false,
   walkingMinutes: '',
@@ -30,7 +37,18 @@ export default function HealthManagement() {
   const [assessment, setAssessment] = useState(null);
   const [results, setResults] = useState([]);
   const [missions, setMissions] = useState([]);
+  const [aiGuidance, setAiGuidance] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(currentMonthKst);
+  const [calendarDays, setCalendarDays] = useState([]);
+  const [hasExistingHba1c, setHasExistingHba1c] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [activeStage, setActiveStage] = useState(0);
+  const [onboarding, setOnboarding] = useState({
+    diagnosisStatus: 'UNKNOWN', healthCheckupStatus: 'UNKNOWN', familyHistoryDiabetes: '', hba1cTestStatus: 'UNKNOWN',
+    aiProcessingConsent: '', testDate: todayKst(), value: '', organizationName: '',
+  });
   const [familyHistory, setFamilyHistory] = useState('');
+  const [aiConsent, setAiConsent] = useState('');
   const [log, setLog] = useState(EMPTY_LOG);
   const [editingId, setEditingId] = useState(null);
   const [testForm, setTestForm] = useState({ testDate: today, value: '', organizationName: '', note: '' });
@@ -38,42 +56,114 @@ export default function HealthManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     setMessage('');
-    const [assessmentResult, resultsResult, missionsResult, logResult] = await Promise.allSettled([
+    const [assessmentResult, resultsResult, logResult] = await Promise.allSettled([
       healthAPI.getDiabetesAssessment(),
       healthAPI.getHba1cResults(),
-      healthAPI.getTodayMissions(),
       healthAPI.getDailyHealthLog(today),
     ]);
     if (assessmentResult.status === 'fulfilled') {
       const data = assessmentResult.value;
       setAssessment(data);
+      setOnboarding((current) => ({ ...current, healthCheckupStatus: data.healthCheckupStatus || current.healthCheckupStatus }));
       setFamilyHistory(data.familyHistoryDiabetes == null ? '' : String(data.familyHistoryDiabetes));
+      setAiConsent(data.aiProcessingConsent == null ? '' : String(data.aiProcessingConsent));
+      if (!data.onboardingComplete) {
+        setHasExistingHba1c(Boolean(data.latestHba1c));
+        setOnboarding((current) => ({
+          ...current,
+          diagnosisStatus: data.diagnosisStatus || 'UNKNOWN',
+          healthCheckupStatus: data.healthCheckupStatus || 'UNKNOWN',
+          familyHistoryDiabetes: data.familyHistoryDiabetes == null ? '' : String(data.familyHistoryDiabetes),
+          hba1cTestStatus: data.latestHba1c ? 'RESULT_AVAILABLE' : (data.hba1cTestStatus || 'UNKNOWN'),
+          aiProcessingConsent: data.aiProcessingConsent == null ? '' : String(data.aiProcessingConsent),
+          testDate: data.latestHba1c?.testDate || current.testDate,
+          value: data.latestHba1c?.value == null ? current.value : String(data.latestHba1c.value),
+          organizationName: data.latestHba1c?.organizationName || current.organizationName,
+        }));
+      }
     }
     if (resultsResult.status === 'fulfilled') setResults(Array.isArray(resultsResult.value) ? resultsResult.value : []);
-    if (missionsResult.status === 'fulfilled') setMissions(Array.isArray(missionsResult.value) ? missionsResult.value : []);
     if (logResult.status === 'fulfilled') setLog({ ...EMPTY_LOG, ...logResult.value,
       walkingMinutes: logResult.value.walkingMinutes ?? '',
       stepCount: logResult.value.stepCount ?? '',
     });
-    if ([assessmentResult, resultsResult, missionsResult, logResult].some((result) => result.status === 'rejected')) {
+    if ([assessmentResult, resultsResult, logResult].some((result) => result.status === 'rejected')) {
       setMessage('일부 건강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
     }
+
+    const data = assessmentResult.status === 'fulfilled' ? assessmentResult.value : null;
+    if (data?.onboardingComplete && data.aiProcessingConsent) {
+      try {
+        setAiGuidance(await healthAPI.getAiDiabetesGuidance());
+      } catch {
+        setAiGuidance(null);
+      }
+    } else {
+      setAiGuidance(null);
+    }
+    const missionsResult = await Promise.allSettled([healthAPI.getTodayMissions()]);
+    if (missionsResult[0].status === 'fulfilled') setMissions(Array.isArray(missionsResult[0].value) ? missionsResult[0].value : []);
     setLoading(false);
   }, [today]);
 
   useEffect(() => { load(); }, [load]);
 
-  const updateLog = (key, value) => setLog((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    const attendance = calendarMonth === currentMonthKst()
+      ? healthAPI.recordHealthAttendance()
+      : Promise.resolve();
+    attendance.then(() => healthAPI.getHealthCalendar(calendarMonth))
+      .then((data) => setCalendarDays(Array.isArray(data.days) ? data.days : []))
+      .catch(() => {});
+  }, [calendarMonth]);
+
+  const updateLog = (key, value) => setLog((current) => ({
+    ...current,
+    [key]: value,
+    ...(key === 'mealDescription' ? { mealReview: null } : {}),
+  }));
 
   const saveRiskProfile = async () => {
     try {
       const updated = await healthAPI.saveDiabetesRiskProfile({
         familyHistoryDiabetes: familyHistory === '' ? null : familyHistory === 'true',
+        aiProcessingConsent: aiConsent === '' ? null : aiConsent === 'true',
+        healthCheckupStatus: onboarding.healthCheckupStatus,
       });
       setAssessment(updated);
-      setMessage('가족력 응답을 저장했습니다.');
+      await load();
+      setMessage('건강관리 설정을 저장했습니다.');
     } catch {
       setMessage('가족력 응답을 저장하지 못했습니다.');
+    }
+  };
+
+  const submitOnboarding = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = {
+        diagnosisStatus: onboarding.diagnosisStatus,
+        healthCheckupStatus: onboarding.healthCheckupStatus,
+        familyHistoryDiabetes: onboarding.familyHistoryDiabetes === '' ? null : onboarding.familyHistoryDiabetes === 'true',
+        hba1cTestStatus: onboarding.hba1cTestStatus,
+        aiProcessingConsent: onboarding.aiProcessingConsent === 'true',
+      };
+      if (onboarding.hba1cTestStatus === 'RESULT_AVAILABLE' && onboarding.value !== '' && !hasExistingHba1c) {
+        payload.hba1cResult = {
+          testDate: onboarding.testDate,
+          value: Number(onboarding.value),
+          organizationName: onboarding.organizationName,
+        };
+      }
+      await healthAPI.completeDiabetesOnboarding(payload);
+      await load();
+      setMessage('건강 정보를 저장했습니다.');
+    } catch (error) {
+      setMessage(error.response?.data?.message || '건강 정보를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -87,8 +177,8 @@ export default function HealthManagement() {
       else await healthAPI.createHba1cResult(payload);
       setEditingId(null);
       setTestForm({ testDate: today, value: '', organizationName: '', note: '' });
-      setMessage('당화혈색소 기록을 저장했습니다.');
       await load();
+      setMessage('당화혈색소 기록을 저장했습니다.');
     } catch (error) {
       setMessage(error.response?.data?.message || '검사 결과를 저장하지 못했습니다.');
     } finally {
@@ -109,8 +199,8 @@ export default function HealthManagement() {
   const deleteHba1c = async (id) => {
     try {
       await healthAPI.deleteHba1cResult(id);
-      setMessage('검사 기록을 삭제했습니다.');
       await load();
+      setMessage('검사 기록을 삭제했습니다.');
     } catch {
       setMessage('검사 기록을 삭제하지 못했습니다.');
     }
@@ -121,12 +211,24 @@ export default function HealthManagement() {
     setSaving(true);
     setMessage('');
     try {
-      await healthAPI.saveDailyHealthLog(today, {
+      const savedLog = await healthAPI.saveDailyHealthLog(today, {
         ...log,
         walkingMinutes: log.walkingMinutes === '' ? null : Number(log.walkingMinutes),
         stepCount: log.stepCount === '' ? null : Number(log.stepCount),
       });
-      setMessage('오늘의 식사·운동 기록을 저장했습니다.');
+      setLog((current) => ({ ...current, ...savedLog }));
+      if (log.mealDescription.trim() && assessment?.aiProcessingConsent) {
+        try {
+          const review = await healthAPI.reviewDailyMeal(today);
+          setLog((current) => ({ ...current, mealReview: review }));
+          setMessage('기록을 저장하고 AI 식사 평가를 완료했습니다.');
+        } catch {
+          setMessage('기록은 저장했지만 AI 평가를 받지 못했습니다. 잠시 후 다시 시도해주세요.');
+        }
+      } else {
+        setMessage('오늘의 식사·운동 기록을 저장했습니다. 음식 내용을 입력하고 AI 이용에 동의하면 평가를 받을 수 있습니다.');
+      }
+      healthAPI.getHealthCalendar(calendarMonth).then((calendar) => setCalendarDays(Array.isArray(calendar.days) ? calendar.days : [])).catch(() => {});
     } catch (error) {
       setMessage(error.response?.data?.message || '오늘 기록을 저장하지 못했습니다.');
     } finally {
@@ -138,12 +240,20 @@ export default function HealthManagement() {
     try {
       const completed = await healthAPI.completeMission(id);
       setMissions((current) => current.map((mission) => mission.id === id ? completed : mission));
+      healthAPI.getHealthCalendar(calendarMonth).then((calendar) => setCalendarDays(Array.isArray(calendar.days) ? calendar.days : [])).catch(() => {});
     } catch {
       setMessage('미션 상태를 저장하지 못했습니다.');
     }
   };
 
   const level = LEVELS[assessment?.level] || LEVELS.NO_DATA;
+  const [calendarYear, calendarMonthNumber] = calendarMonth.split('-').map(Number);
+  const calendarStartDay = new Date(calendarYear, calendarMonthNumber - 1, 1).getDay();
+  const calendarDayCount = new Date(calendarYear, calendarMonthNumber, 0).getDate();
+  const calendarByDate = Object.fromEntries(calendarDays.map((day) => [day.date, day]));
+  const previousMonth = shiftMonth(calendarMonth, -1);
+  const nextMonth = shiftMonth(calendarMonth, 1);
+  const earliestMonth = shiftMonth(currentMonthKst(), -24);
 
   return (
     <div className="mc-page fade-in">
@@ -160,7 +270,113 @@ export default function HealthManagement() {
         <div className="mc-alert mc-alert-blue"><div><div className="mc-alert-title">건강 정보를 불러오는 중</div></div></div>
       ) : (
         <>
-          <div className="health-management-daily-grid">
+          <nav className="health-stage-nav" aria-label="건강관리 단계">
+            {['당뇨 위험 안내', '검진 이력', '오늘의 건강 활동', '활동 달력'].map((title, index) => (
+              <button type="button" key={title} className={`health-stage-tab${activeStage === index ? ' active' : ''}`} aria-current={activeStage === index ? 'step' : undefined} onClick={() => setActiveStage(index)}>
+                <span>{index + 1}</span>{title}
+              </button>
+            ))}
+          </nav>
+          {activeStage === 1 && assessment && !assessment.onboardingComplete && (
+            <section className="health-onboarding-section" aria-labelledby="health-onboarding-title">
+              <div className="mc-sec-head">
+                <span className="mc-sec-title" id="health-onboarding-title">건강검진 이력과 시작 정보</span>
+                <span className="mc-card-sub">{onboardingStep + 1} / 5</span>
+              </div>
+              <form className="mc-card mc-card-body health-onboarding-form" onSubmit={onboardingStep < 4 ? (event) => { event.preventDefault(); setOnboardingStep((step) => Math.min(step + 1, 4)); } : submitOnboarding}>
+                {onboardingStep === 0 && (
+                  <label className="mc-form-field health-onboarding-field">
+                    <span className="mc-field-label">건강검진을 받은 적이 있나요?</span>
+                    <select className="mc-select" value={onboarding.healthCheckupStatus} onChange={(event) => setOnboarding({ ...onboarding, healthCheckupStatus: event.target.value })}>
+                      <option value="HAD_CHECKUP">받은 적 있어요</option>
+                      <option value="NEVER">아직 받은 적 없어요</option>
+                      <option value="UNKNOWN">잘 모르겠어요</option>
+                    </select>
+                    {assessment?.checkupDate && <span className="mc-card-sub">연동된 최근 검진: {assessment.checkupDate}</span>}
+                  </label>
+                )}
+                {onboardingStep === 1 && (
+                  <label className="mc-form-field health-onboarding-field">
+                    <span className="mc-field-label">당뇨 진단을 받은 적이 있나요?</span>
+                    <select className="mc-select" value={onboarding.diagnosisStatus} onChange={(event) => setOnboarding({ ...onboarding, diagnosisStatus: event.target.value })}>
+                      <option value="DIAGNOSED">진단받았어요</option>
+                      <option value="NOT_DIAGNOSED">진단받은 적 없어요</option>
+                      <option value="UNKNOWN">잘 모르겠어요</option>
+                    </select>
+                  </label>
+                )}
+                {onboardingStep === 2 && (
+                  <label className="mc-form-field health-onboarding-field">
+                    <span className="mc-field-label">가족 중 당뇨 진단을 받은 분이 있나요?</span>
+                    <select className="mc-select" value={onboarding.familyHistoryDiabetes} onChange={(event) => setOnboarding({ ...onboarding, familyHistoryDiabetes: event.target.value })}>
+                      <option value="">응답하지 않을게요</option>
+                      <option value="true">있어요</option>
+                      <option value="false">없어요</option>
+                    </select>
+                  </label>
+                )}
+                {onboardingStep === 3 && (
+                  assessment?.latestHba1c ? (
+                    <div className="health-onboarding-existing-result">
+                      <div className="mc-field-label">저장된 당화혈색소 검사 결과가 있어요</div>
+                      <div>{assessment.latestHba1c.testDate} · <strong>{assessment.latestHba1c.value}%</strong></div>
+                      <div className="mc-card-sub">기존 기록을 그대로 사용합니다.</div>
+                    </div>
+                  ) : (
+                    <label className="mc-form-field health-onboarding-field">
+                      <span className="mc-field-label">당화혈색소(HbA1c) 검사를 받아본 적이 있나요?</span>
+                      <select className="mc-select" value={onboarding.hba1cTestStatus} onChange={(event) => setOnboarding({ ...onboarding, hba1cTestStatus: event.target.value })}>
+                        <option value="RESULT_AVAILABLE">검사 결과가 있어요</option>
+                        <option value="TESTED_NO_RESULT">검사는 받았지만 결과를 몰라요</option>
+                        <option value="NOT_TESTED">아직 받지 않았어요</option>
+                        <option value="UNKNOWN">잘 모르겠어요</option>
+                      </select>
+                    </label>
+                  )
+                )}
+                {onboardingStep === 4 && (
+                  <div className="health-onboarding-final-step">
+                    {onboarding.hba1cTestStatus === 'RESULT_AVAILABLE' && (
+                      <div className="health-onboarding-result-fields">
+                        <div className="mc-field-label">검사 결과</div>
+                        <label className="mc-form-field">
+                          <span className="mc-card-sub">검사일</span>
+                          <input className="mc-input" type="date" max={today} value={onboarding.testDate} required={!assessment?.latestHba1c} readOnly={hasExistingHba1c} onChange={(event) => setOnboarding({ ...onboarding, testDate: event.target.value })} />
+                        </label>
+                        <label className="mc-form-field">
+                          <span className="mc-card-sub">당화혈색소 (%)</span>
+                          <input className="mc-input" type="number" min="3" max="20" step="0.01" value={onboarding.value} required={!assessment?.latestHba1c} readOnly={hasExistingHba1c} onChange={(event) => setOnboarding({ ...onboarding, value: event.target.value })} />
+                        </label>
+                        <label className="mc-form-field">
+                          <span className="mc-card-sub">병원명 (선택)</span>
+                          <input className="mc-input" maxLength="150" value={onboarding.organizationName} readOnly={hasExistingHba1c} onChange={(event) => setOnboarding({ ...onboarding, organizationName: event.target.value })} />
+                        </label>
+                      </div>
+                    )}
+                    <label className="mc-form-field health-onboarding-field">
+                      <span className="mc-field-label">개인화 건강 안내를 위해 AI 분석을 이용할까요?</span>
+                      <select className="mc-select" required value={onboarding.aiProcessingConsent} onChange={(event) => setOnboarding({ ...onboarding, aiProcessingConsent: event.target.value })}>
+                        <option value="">선택해주세요</option>
+                        <option value="true">동의합니다</option>
+                        <option value="false">동의하지 않습니다</option>
+                      </select>
+                      <span className="mc-card-sub">동의하면 위험 단계와 필요한 검사 수치가 AI 제공업체로 전송됩니다. 이름과 병원명은 보내지 않습니다. 동의하지 않아도 규칙 기반 안내와 기록 기능은 이용할 수 있습니다.</span>
+                    </label>
+                  </div>
+                )}
+                <div className="health-onboarding-actions">
+                  <button className="mc-btn" type="button" disabled={onboardingStep === 0 || saving} onClick={() => setOnboardingStep((step) => Math.max(step - 1, 0))}>이전</button>
+                  <button className="mc-btn mc-btn-primary" type="submit" disabled={saving || (onboardingStep === 4 && onboarding.aiProcessingConsent === '')}>
+                    {saving ? '저장 중...' : onboardingStep === 4 ? '건강 정보 저장' : '다음'}
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+          {activeStage === 2 && assessment && !assessment.onboardingComplete && (
+            <div className="mc-alert mc-alert-blue">먼저 검진 이력과 건강관리 시작 정보를 입력하면 오늘의 미션이 개인화됩니다. 기록 기능은 계속 이용할 수 있어요.</div>
+          )}
+          {activeStage === 2 && <div className="health-management-daily-grid">
             <section className="health-management-section">
               <div className="mc-sec-head">
               <span className="mc-sec-title">오늘의 건강 미션</span>
@@ -173,7 +389,7 @@ export default function HealthManagement() {
                   <article className="mc-card mc-card-body" key={mission.id}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'start' }}>
                       <div>
-                        <div className="mc-field-label">{mission.category === 'ACTIVITY' ? '운동' : '식사'}</div>
+                        <div className="mc-field-label">{mission.category === 'ACTIVITY' ? '운동' : '식사'} · {mission.source === 'AI' ? 'AI 추천' : '기본 추천'}</div>
                         <h3 style={{ margin: '6px 0', fontSize: 17 }}>{mission.title}</h3>
                       </div>
                       <span className={`mc-tag ${mission.status === 'COMPLETED' ? 'mc-tag-success' : 'mc-tag-warning'}`}>
@@ -201,6 +417,10 @@ export default function HealthManagement() {
               <div className="mc-grid-2">
                 <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
                   <legend className="mc-field-label" style={{ marginBottom: 8 }}>식사 상태</legend>
+                  <label className="mc-form-field health-meal-description">
+                    <span className="mc-card-sub">오늘 먹은 음식</span>
+                    <textarea className="mc-input" rows="3" maxLength="1000" placeholder="예: 아침 오트밀과 달걀, 점심 비빔밥을 먹었어요" value={log.mealDescription || ''} onChange={(event) => updateLog('mealDescription', event.target.value)} />
+                  </label>
                   <div className="mc-row-wrap">
                     {[['GOOD', '좋음'], ['FAIR', '보통'], ['POOR', '나쁨']].map(([value, label]) => (
                       <button key={value} type="button" className={`mc-chip${log.mealQuality === value ? ' active' : ''}`} onClick={() => updateLog('mealQuality', value)}>
@@ -235,14 +455,58 @@ export default function HealthManagement() {
                   </label>
                 </div>
               </div>
+              {log.mealReview && <div className="health-meal-review" aria-live="polite">
+                <strong>{log.mealReview.balanceLabel === 'BALANCED' ? '균형 잡힌 식사예요' : log.mealReview.balanceLabel === 'NEEDS_ATTENTION' ? '조금 더 챙기면 좋아요' : '식사 기록 평가'}</strong>
+                <p>{log.mealReview.summary}</p>
+                {log.mealReview.positivePoints?.length > 0 && <div>좋았던 점: {log.mealReview.positivePoints.join(' · ')}</div>}
+                {log.mealReview.improvements?.length > 0 && <div>다음 식사 제안: {log.mealReview.improvements.join(' · ')}</div>}
+                <small>입력한 음식 내용에 대한 참고 의견이며 진단이나 영양 처방이 아닙니다.</small>
+              </div>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
                 <button className="mc-btn mc-btn-primary" type="submit" disabled={saving}>{saving ? '저장 중...' : '오늘 기록 저장'}</button>
               </div>
               </form>
             </section>
-          </div>
+          </div>}
 
-          <section className="health-management-section">
+          {activeStage === 3 && <section className="health-management-section">
+            <div className="mc-sec-head health-calendar-heading">
+              <span className="mc-sec-title">건강 활동 달력</span>
+              <div className="health-calendar-controls">
+                <button className="mc-btn" type="button" aria-label="이전 달" disabled={calendarMonth <= earliestMonth} onClick={() => setCalendarMonth(previousMonth)}>←</button>
+                <strong>{calendarMonth}</strong>
+                <button className="mc-btn" type="button" aria-label="다음 달" disabled={nextMonth > currentMonthKst()} onClick={() => setCalendarMonth(nextMonth)}>→</button>
+              </div>
+            </div>
+            <div className="mc-card mc-card-body health-calendar-card">
+              <div className="health-calendar-grid" role="grid" aria-label={`${calendarMonth} 건강 활동 달력`}>
+                {['일', '월', '화', '수', '목', '금', '토'].map((day) => <div className="health-calendar-weekday" role="columnheader" key={day}>{day}</div>)}
+                {Array.from({ length: calendarStartDay }, (_, index) => <div className="health-calendar-blank" role="gridcell" key={`blank-${index}`} />)}
+                {Array.from({ length: calendarDayCount }, (_, index) => {
+                  const dayNumber = index + 1;
+                  const date = `${calendarMonth}-${String(dayNumber).padStart(2, '0')}`;
+                  const activity = calendarByDate[date];
+                  return (
+                    <div className="health-calendar-day" role="gridcell" aria-label={`${date}${activity?.attendance ? ', 출석' : ''}${activity?.meal ? ', 식사 기록' : ''}${activity?.exercise ? ', 운동 기록' : ''}`} key={date}>
+                      <span>{dayNumber}</span>
+                      <div className="health-calendar-marks" aria-hidden="true">
+                        {activity?.attendance && <i className="attendance" />}
+                        {activity?.meal && <i className="meal" />}
+                        {activity?.exercise && <i className="exercise" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="health-calendar-legend">
+                <span><i className="attendance" /> 출석</span>
+                <span><i className="meal" /> 식사 기록/미션</span>
+                <span><i className="exercise" /> 운동 기록/미션</span>
+              </div>
+            </div>
+          </section>}
+
+          {activeStage === 0 && <section className="health-management-section">
             <div className="mc-sec-head">
               <span className="mc-sec-title">당뇨 위험 참고 안내</span>
               <span className={`mc-tag ${level.tone}`}>{level.label}</span>
@@ -269,6 +533,17 @@ export default function HealthManagement() {
                     {assessment.actions.map((action) => <li key={action}>{action}</li>)}
                   </ul>
                 )}
+                {aiGuidance?.guidance && (
+                  <div className="health-ai-guidance">
+                    <div className="mc-field-label">나를 위한 AI 건강 가이드</div>
+                    <p>{aiGuidance.guidance.summary}</p>
+                    {aiGuidance.guidance.mealRecommendations?.length > 0 && <ul>{aiGuidance.guidance.mealRecommendations.map((item, index) => <li key={`meal-${index}`}>{item}</li>)}</ul>}
+                    {aiGuidance.guidance.actions?.length > 0 && <ul>{aiGuidance.guidance.actions.map((item, index) => <li key={`action-${index}`}>{item}</li>)}</ul>}
+                  </div>
+                )}
+                {assessment?.aiProcessingConsent && !aiGuidance && (
+                  <div className="mc-card-sub" role="status" style={{ marginTop: 12 }}>AI 가이드를 불러오지 못해 규칙 기반 안내를 표시하고 있습니다.</div>
+                )}
                 <div className="mc-card-sub" style={{ marginTop: 12 }}>{assessment?.disclaimer}</div>
               </div>
               <div className="health-management-family-history">
@@ -280,11 +555,37 @@ export default function HealthManagement() {
                     <option value="false">없음</option>
                   </select>
                 </label>
+                <label className="mc-form-field">
+                  <span className="mc-field-label">AI 개인화 가이드</span>
+                  <select className="mc-select" value={aiConsent} onChange={(event) => setAiConsent(event.target.value)}>
+                    <option value="">선택하지 않음</option>
+                    <option value="true">동의</option>
+                    <option value="false">동의하지 않음</option>
+                  </select>
+                  <span className="mc-card-sub">동의 시 필요한 검사 수치가 AI 제공업체로 전송됩니다. 이름과 병원명은 전송하지 않습니다.</span>
+                </label>
                 <button className="mc-btn mc-btn-primary" type="button" onClick={saveRiskProfile}>저장</button>
               </div>
             </div>
-          </section>
+          </section>}
 
+          {activeStage === 1 && <>
+          {assessment?.onboardingComplete && <div className="mc-card mc-card-body health-checkup-status-card">
+            <div className="mc-field-label">건강검진 이력</div>
+            <p>{assessment.checkupDate ? `최근 검진 기록이 있습니다 · ${assessment.checkupDate}` : assessment.healthCheckupStatus === 'NEVER' ? '아직 건강검진 기록이 없습니다.' : '건강검진을 받은 적이 있는지 등록된 정보가 없습니다.'}</p>
+            <div className="health-checkup-status-edit">
+              <label className="mc-form-field"><span className="mc-card-sub">검진 이력</span>
+                <select className="mc-select" value={onboarding.healthCheckupStatus} onChange={(event) => setOnboarding((current) => ({ ...current, healthCheckupStatus: event.target.value }))}>
+                  <option value="HAD_CHECKUP">받은 적 있어요</option><option value="NEVER">아직 받은 적 없어요</option><option value="UNKNOWN">잘 모르겠어요</option>
+                </select>
+              </label>
+              <button className="mc-btn mc-btn-primary" type="button" onClick={saveRiskProfile}>검진 이력 저장</button>
+            </div>
+          </div>}
+          {assessment && !assessment.onboardingComplete && <div className="mc-card mc-card-body health-checkup-status-card">
+            <div className="mc-field-label">당화혈색소 검사 기록</div>
+            <p>검진 이력을 입력한 다음 검사 기록을 추가할 수 있어요.</p>
+          </div>}
           <section className="health-management-section">
             <div className="mc-sec-head">
               <span className="mc-sec-title">당화혈색소 검사 기록</span>
@@ -344,6 +645,7 @@ export default function HealthManagement() {
               </div>
             </div>
           </section>
+          </>}
         </>
       )}
     </div>

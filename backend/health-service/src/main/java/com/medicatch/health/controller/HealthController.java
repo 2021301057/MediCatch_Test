@@ -2,6 +2,7 @@ package com.medicatch.health.controller;
 
 import com.medicatch.health.dto.CheckupResultDto;
 import com.medicatch.health.dto.DailyHealthLogRequest;
+import com.medicatch.health.dto.DiabetesOnboardingRequest;
 import com.medicatch.health.dto.DiabetesRiskProfileRequest;
 import com.medicatch.health.dto.Hba1cRequest;
 import com.medicatch.health.dto.MedicalRecordDto;
@@ -25,6 +26,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -407,7 +410,49 @@ public class HealthController {
             @RequestHeader("X-User-Id") Long userId,
             @RequestBody DiabetesRiskProfileRequest request) {
         return ResponseEntity.ok(healthManagementService.saveDiabetesRiskProfile(
-                userId, request == null ? null : request.familyHistoryDiabetes()));
+                userId, request == null ? null : request.familyHistoryDiabetes(),
+                request == null ? null : request.aiProcessingConsent(),
+                request == null ? null : request.healthCheckupStatus()));
+    }
+
+    @PostMapping("/diabetes-assessment/onboarding")
+    public ResponseEntity<?> completeDiabetesOnboarding(@RequestHeader("X-User-Id") Long userId,
+                                                        @RequestBody DiabetesOnboardingRequest request) {
+        try {
+            return ResponseEntity.ok(healthManagementService.completeDiabetesOnboarding(userId, request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/diabetes-assessment/ai-guidance")
+    public ResponseEntity<?> getAiDiabetesGuidance(@RequestHeader("X-User-Id") Long userId) {
+        try {
+            return ResponseEntity.ok(healthManagementService.generateAiGuidance(userId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/attendance/today")
+    public ResponseEntity<Map<String, Object>> recordHealthAttendance(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(healthManagementService.recordTodayAttendance(userId));
+    }
+
+    @GetMapping("/calendar")
+    public ResponseEntity<?> getHealthCalendar(@RequestHeader("X-User-Id") Long userId,
+                                               @RequestParam String month) {
+        YearMonth parsed;
+        try {
+            parsed = YearMonth.parse(month);
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "달력 월 형식은 YYYY-MM이어야 합니다."));
+        }
+        try {
+            return ResponseEntity.ok(healthManagementService.getCalendar(userId, parsed));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
     @GetMapping("/daily-logs")
@@ -424,6 +469,18 @@ public class HealthController {
             return ResponseEntity.ok(healthManagementService.saveDailyLog(userId, date, request));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/daily-logs/meal-review")
+    public ResponseEntity<?> reviewDailyMeal(@RequestHeader("X-User-Id") Long userId,
+                                              @RequestParam LocalDate date) {
+        try {
+            return ResponseEntity.ok(healthManagementService.reviewDailyMeal(userId, date));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
         }
     }
 

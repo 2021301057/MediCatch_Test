@@ -5167,15 +5167,15 @@ body::before {
 
 .health-management-guidance {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   gap: 24px;
   align-items: end;
 }
 
 .health-management-family-history {
-  display: flex;
-  align-items: end;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
 .health-management-family-history .mc-form-field {
@@ -5184,6 +5184,10 @@ body::before {
   min-width: 0;
   flex-direction: column;
   gap: 6px;
+}
+
+.health-management-family-history > .mc-btn {
+  justify-self: end;
 }
 
 .health-management-section > .mc-two-col {
@@ -5212,6 +5216,267 @@ body::before {
 
 @media (max-width: 430px) {
   .health-management-family-history {
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.health-onboarding-section {
+  max-width: 760px;
+  margin: 0 auto 30px;
+}
+
+.health-onboarding-form {
+  display: flex;
+  min-height: 250px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.health-onboarding-field {
+  display: flex;
+  width: min(100%, 520px);
+  flex-direction: column;
+  gap: 8px;
+}
+
+.health-onboarding-final-step {
+  display: grid;
+  gap: 24px;
+}
+
+.health-onboarding-result-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.health-onboarding-result-fields > .mc-field-label {
+  grid-column: 1 / -1;
+}
+
+.health-onboarding-result-fields .mc-form-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.health-onboarding-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.health-onboarding-existing-result {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-left: 3px solid #3978B8;
+  background: #F3F7FB;
+  color: var(--text-2);
+}
+
+.health-calendar-heading {
+  align-items: center;
+}
+
+.health-calendar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.health-calendar-controls strong {
+  min-width: 76px;
+  text-align: center;
+}
+
+.health-calendar-card {
+  width: 100%;
+  max-width: none;
+}
+
+.health-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.health-calendar-weekday,
+.health-calendar-blank,
+.health-calendar-day {
+  min-width: 0;
+  min-height: 76px;
+}
+
+.health-calendar-weekday {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.health-calendar-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--surface, #fff);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.health-stage-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 8px 0 24px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.health-stage-tab {
+  display: flex;
+  min-width: 0;
+  min-height: 54px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.health-stage-tab > span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e9eef5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.health-stage-tab.active {
+  border-bottom-color: #3978B8;
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.health-stage-tab.active > span { background: #3978B8; color: white; }
+
+.health-meal-description { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.health-meal-description textarea { width: 100%; min-height: 82px; resize: vertical; }
+
+.health-meal-review {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-left: 3px solid #16836B;
+  background: #F2F8F5;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.health-meal-review p { margin: 0; }
+.health-meal-review small { color: var(--text-3); }
+.health-checkup-status-card { margin-bottom: 20px; }
+.health-checkup-status-card p { margin: 8px 0 12px; color: var(--text-2); }
+.health-checkup-status-edit { display: flex; max-width: 560px; align-items: end; gap: 12px; }
+.health-checkup-status-edit .mc-form-field { display: flex; flex: 1; flex-direction: column; gap: 6px; }
+
+@media (max-width: 650px) {
+  .health-stage-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; }
+  .health-stage-tab { min-height: 48px; padding: 8px 4px; font-size: 13px; }
+  .health-checkup-status-edit { align-items: stretch; flex-direction: column; }
+}
+
+.health-calendar-marks,
+.health-calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.health-calendar-marks i,
+.health-calendar-legend i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+}
+
+.health-calendar-marks .attendance,
+.health-calendar-legend .attendance { background: #16836B; }
+.health-calendar-marks .meal,
+.health-calendar-legend .meal { background: #D88A27; }
+.health-calendar-marks .exercise,
+.health-calendar-legend .exercise { background: #3978B8; }
+
+.health-calendar-legend {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 18px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.health-calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.health-ai-guidance {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-left: 3px solid #16836B;
+  background: #F2F8F5;
+  color: var(--text-2);
+  line-height: 1.65;
+}
+
+.health-ai-guidance p {
+  margin: 8px 0;
+}
+
+.health-ai-guidance ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+@media (max-width: 600px) {
+  .health-onboarding-result-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .health-calendar-day {
+    min-height: 56px;
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  .health-calendar-marks {
+    gap: 3px;
+  }
+
+  .health-calendar-marks i {
+    width: 6px;
+    height: 6px;
+    flex-basis: 6px;
   }
 }
