@@ -7,6 +7,7 @@ import com.medicatch.health.entity.DailyHealthLog;
 import com.medicatch.health.entity.DailyHealthMission;
 import com.medicatch.health.entity.DiabetesRiskProfile;
 import com.medicatch.health.entity.HealthDailyAttendance;
+import com.medicatch.health.entity.HealthExerciseReview;
 import com.medicatch.health.entity.HealthAiAssessment;
 import com.medicatch.health.repository.CheckupResultRepository;
 import com.medicatch.health.repository.DailyHealthLogRepository;
@@ -16,6 +17,7 @@ import com.medicatch.health.repository.Hba1cResultRepository;
 import com.medicatch.health.repository.HealthAiAssessmentRepository;
 import com.medicatch.health.repository.HealthDailyAttendanceRepository;
 import com.medicatch.health.repository.HealthMealReviewRepository;
+import com.medicatch.health.repository.HealthExerciseReviewRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +49,7 @@ class HealthManagementServiceTest {
     @Mock private HealthAiAssessmentRepository healthAiAssessmentRepository;
     @Mock private HealthDailyAttendanceRepository healthDailyAttendanceRepository;
     @Mock private HealthMealReviewRepository healthMealReviewRepository;
+    @Mock private HealthExerciseReviewRepository healthExerciseReviewRepository;
     @Mock private HealthAiClient healthAiClient;
 
     private HealthManagementService service;
@@ -55,7 +58,8 @@ class HealthManagementServiceTest {
     void setUp() {
         service = new HealthManagementService(checkupResultRepository, hba1cResultRepository,
                 diabetesRiskProfileRepository, dailyHealthLogRepository, dailyHealthMissionRepository,
-                healthAiAssessmentRepository, healthDailyAttendanceRepository, healthMealReviewRepository, healthAiClient, new ObjectMapper());
+                healthAiAssessmentRepository, healthDailyAttendanceRepository, healthMealReviewRepository,
+                healthExerciseReviewRepository, healthAiClient, new ObjectMapper());
     }
 
     @Test
@@ -93,6 +97,34 @@ class HealthManagementServiceTest {
         assertThrows(IllegalStateException.class, () -> service.generateAiGuidance(42L));
         verifyNoInteractions(healthAiClient);
         verifyNoInteractions(healthAiAssessmentRepository);
+    }
+
+    @Test
+    void exerciseNarrativeIsReviewedAndPersistedWhenConsentIsGranted() {
+        long userId = 42L;
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(
+                DiabetesRiskProfile.builder().userId(userId).aiProcessingConsent(true).build()));
+        when(dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)).thenReturn(Optional.of(
+                DailyHealthLog.builder().userId(userId).logDate(date)
+                        .exerciseDescription("퇴근 후 실내 자전거를 20분 탔어요.").build()));
+        when(healthExerciseReviewRepository.findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString()))
+                .thenReturn(Optional.empty());
+        when(healthAiClient.completeJson(anyString(), anyString())).thenReturn("""
+                {"activityType":"AEROBIC","effortLabel":"MODERATE","summary":"실내 자전거를 20분 수행했습니다.","positivePoints":["운동 시간을 기록했어요"],"improvements":["마친 뒤 가볍게 스트레칭하세요"]}
+                """);
+        when(healthAiClient.getModel()).thenReturn("test-model");
+        when(healthExerciseReviewRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> review = service.reviewDailyExercise(userId, date);
+
+        assertEquals("AEROBIC", review.get("activityType"));
+        assertEquals("MODERATE", review.get("effortLabel"));
+        assertEquals("실내 자전거를 20분 수행했습니다.", review.get("summary"));
+        verify(healthExerciseReviewRepository).save(argThat(saved ->
+                saved.getExerciseDescription().contains("실내 자전거")
+                        && saved.getReviewJson().contains("AEROBIC")
+                        && saved.getUserId().equals(userId)));
     }
 
     @Test

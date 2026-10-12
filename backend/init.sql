@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS daily_health_logs (
     log_date DATE NOT NULL,
     meal_quality VARCHAR(10),
     meal_description VARCHAR(1000),
+    exercise_description VARCHAR(1000),
     high_sugar_intake BIT NOT NULL DEFAULT 0,
     late_night_meal BIT NOT NULL DEFAULT 0,
     walking_minutes INT,
@@ -140,6 +141,18 @@ CREATE TABLE IF NOT EXISTS health_meal_reviews (
     model_name VARCHAR(120) NOT NULL,
     created_at DATETIME NOT NULL,
     UNIQUE KEY uk_health_meal_review_input (user_id, log_date, input_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS health_exercise_reviews (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    log_date DATE NOT NULL,
+    input_hash CHAR(64) NOT NULL,
+    exercise_description VARCHAR(1000) NOT NULL,
+    review_json LONGTEXT NOT NULL,
+    model_name VARCHAR(120) NOT NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_health_exercise_review_input (user_id, log_date, input_hash)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS daily_health_missions (

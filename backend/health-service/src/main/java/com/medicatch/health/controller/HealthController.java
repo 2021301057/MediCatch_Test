@@ -422,6 +422,8 @@ public class HealthController {
             return ResponseEntity.ok(healthManagementService.completeDiabetesOnboarding(userId, request));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
         }
     }
 
@@ -477,6 +479,18 @@ public class HealthController {
                                               @RequestParam LocalDate date) {
         try {
             return ResponseEntity.ok(healthManagementService.reviewDailyMeal(userId, date));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/daily-logs/exercise-review")
+    public ResponseEntity<?> reviewDailyExercise(@RequestHeader("X-User-Id") Long userId,
+                                                  @RequestParam LocalDate date) {
+        try {
+            return ResponseEntity.ok(healthManagementService.reviewDailyExercise(userId, date));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {

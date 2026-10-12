@@ -126,6 +126,7 @@ export const healthAPI = {
   getDailyHealthLog: (date) => api.get('/health/daily-logs', { params: { date } }),
   saveDailyHealthLog: (date, data) => api.put('/health/daily-logs', data, { params: { date } }),
   reviewDailyMeal: (date) => api.post('/health/daily-logs/meal-review', null, { params: { date } }),
+  reviewDailyExercise: (date) => api.post('/health/daily-logs/exercise-review', null, { params: { date } }),
   getTodayMissions: () => api.get('/health/missions/today'),
   completeMission: (id) => api.patch(`/health/missions/${id}/complete`),
   recordHealthAttendance: () => api.post('/health/attendance/today'),

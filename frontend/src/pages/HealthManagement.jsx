@@ -13,13 +13,8 @@ const shiftMonth = (month, amount) => {
 };
 
 const EMPTY_LOG = {
-  mealQuality: '',
   mealDescription: '',
-  highSugarIntake: false,
-  lateNightMeal: false,
-  walkingMinutes: '',
-  stepCount: '',
-  exerciseCompleted: false,
+  exerciseDescription: '',
 };
 
 const LEVELS = {
@@ -49,6 +44,7 @@ export default function HealthManagement() {
   });
   const [familyHistory, setFamilyHistory] = useState('');
   const [aiConsent, setAiConsent] = useState('');
+  const [showAiSettings, setShowAiSettings] = useState(false);
   const [log, setLog] = useState(EMPTY_LOG);
   const [editingId, setEditingId] = useState(null);
   const [testForm, setTestForm] = useState({ testDate: today, value: '', organizationName: '', note: '' });
@@ -83,10 +79,7 @@ export default function HealthManagement() {
       }
     }
     if (resultsResult.status === 'fulfilled') setResults(Array.isArray(resultsResult.value) ? resultsResult.value : []);
-    if (logResult.status === 'fulfilled') setLog({ ...EMPTY_LOG, ...logResult.value,
-      walkingMinutes: logResult.value.walkingMinutes ?? '',
-      stepCount: logResult.value.stepCount ?? '',
-    });
+    if (logResult.status === 'fulfilled') setLog({ ...EMPTY_LOG, ...logResult.value });
     if ([assessmentResult, resultsResult, logResult].some((result) => result.status === 'rejected')) {
       setMessage('일부 건강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
     }
@@ -121,9 +114,10 @@ export default function HealthManagement() {
     ...current,
     [key]: value,
     ...(key === 'mealDescription' ? { mealReview: null } : {}),
+    ...(key === 'exerciseDescription' ? { exerciseReview: null } : {}),
   }));
 
-  const saveRiskProfile = async () => {
+  const saveAiConsent = async () => {
     try {
       const updated = await healthAPI.saveDiabetesRiskProfile({
         familyHistoryDiabetes: familyHistory === '' ? null : familyHistory === 'true',
@@ -132,9 +126,10 @@ export default function HealthManagement() {
       });
       setAssessment(updated);
       await load();
-      setMessage('건강관리 설정을 저장했습니다.');
+      setShowAiSettings(false);
+      setMessage('AI 분석 동의 설정을 저장했습니다.');
     } catch {
-      setMessage('가족력 응답을 저장하지 못했습니다.');
+      setMessage('AI 분석 동의 설정을 저장하지 못했습니다.');
     }
   };
 
@@ -210,23 +205,38 @@ export default function HealthManagement() {
     event.preventDefault();
     setSaving(true);
     setMessage('');
+    const mealDescription = (log.mealDescription || '').trim();
+    const exerciseDescription = (log.exerciseDescription || '').trim();
     try {
       const savedLog = await healthAPI.saveDailyHealthLog(today, {
-        ...log,
-        walkingMinutes: log.walkingMinutes === '' ? null : Number(log.walkingMinutes),
-        stepCount: log.stepCount === '' ? null : Number(log.stepCount),
+        mealDescription,
+        exerciseDescription,
       });
-      setLog((current) => ({ ...current, ...savedLog }));
-      if (log.mealDescription.trim() && assessment?.aiProcessingConsent) {
-        try {
-          const review = await healthAPI.reviewDailyMeal(today);
-          setLog((current) => ({ ...current, mealReview: review }));
-          setMessage('기록을 저장하고 AI 식사 평가를 완료했습니다.');
-        } catch {
-          setMessage('기록은 저장했지만 AI 평가를 받지 못했습니다. 잠시 후 다시 시도해주세요.');
+      let mealReview = savedLog.mealReview || null;
+      let exerciseReview = savedLog.exerciseReview || null;
+      const reviews = [];
+      if (assessment?.aiProcessingConsent && mealDescription) {
+        reviews.push(['meal', healthAPI.reviewDailyMeal(today)]);
+      }
+      if (assessment?.aiProcessingConsent && exerciseDescription) {
+        reviews.push(['exercise', healthAPI.reviewDailyExercise(today)]);
+      }
+      const outcomes = await Promise.all(reviews.map(async ([type, promise]) => ({ type, result: await Promise.allSettled([promise]).then(([result]) => result) })));
+      outcomes.forEach(({ type, result }) => {
+        if (result.status === 'fulfilled') {
+          if (type === 'meal') mealReview = result.value;
+          if (type === 'exercise') exerciseReview = result.value;
         }
+      });
+      setLog((current) => ({ ...current, ...savedLog, mealReview, exerciseReview }));
+      if (!assessment?.aiProcessingConsent && (mealDescription || exerciseDescription)) {
+        setMessage('기록은 저장했습니다. AI 평가를 받으려면 당뇨 위험 안내에서 AI 분석에 동의해주세요.');
+      } else if (reviews.length > 0 && outcomes.every(({ result }) => result.status === 'fulfilled')) {
+        setMessage('오늘 기록을 저장하고 AI 평가를 완료했습니다.');
+      } else if (reviews.length > 0) {
+        setMessage('오늘 기록은 저장했지만 일부 AI 평가에 실패했습니다. 잠시 후 다시 저장해보세요.');
       } else {
-        setMessage('오늘의 식사·운동 기록을 저장했습니다. 음식 내용을 입력하고 AI 이용에 동의하면 평가를 받을 수 있습니다.');
+        setMessage('오늘의 식사·운동 기록을 저장했습니다.');
       }
       healthAPI.getHealthCalendar(calendarMonth).then((calendar) => setCalendarDays(Array.isArray(calendar.days) ? calendar.days : [])).catch(() => {});
     } catch (error) {
@@ -416,52 +426,35 @@ export default function HealthManagement() {
               <form className="mc-card mc-card-body health-management-log" onSubmit={saveLog}>
               <div className="mc-grid-2">
                 <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-                  <legend className="mc-field-label" style={{ marginBottom: 8 }}>식사 상태</legend>
+                  <legend className="mc-field-label" style={{ marginBottom: 8 }}>오늘의 식사</legend>
                   <label className="mc-form-field health-meal-description">
-                    <span className="mc-card-sub">오늘 먹은 음식</span>
-                    <textarea className="mc-input" rows="3" maxLength="1000" placeholder="예: 아침 오트밀과 달걀, 점심 비빔밥을 먹었어요" value={log.mealDescription || ''} onChange={(event) => updateLog('mealDescription', event.target.value)} />
+                    <span className="mc-card-sub">먹은 음식과 식사 내용을 문장으로 적어주세요</span>
+                    <textarea className="mc-input" rows="4" maxLength="1000" placeholder="예: 아침에는 오트밀과 달걀을 먹었고, 점심에는 비빔밥을 먹었어요." value={log.mealDescription || ''} onChange={(event) => updateLog('mealDescription', event.target.value)} />
                   </label>
-                  <div className="mc-row-wrap">
-                    {[['GOOD', '좋음'], ['FAIR', '보통'], ['POOR', '나쁨']].map(([value, label]) => (
-                      <button key={value} type="button" className={`mc-chip${log.mealQuality === value ? ' active' : ''}`} onClick={() => updateLog('mealQuality', value)}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <label className="mc-check-row" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="checkbox" checked={log.highSugarIntake} onChange={(event) => updateLog('highSugarIntake', event.target.checked)} />
-                    당류가 많은 음식이나 음료를 먹었어요
-                  </label>
-                  <label className="mc-check-row" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="checkbox" checked={log.lateNightMeal} onChange={(event) => updateLog('lateNightMeal', event.target.checked)} />
-                    야식을 먹었어요
-                  </label>
+                  {log.mealReview && <div className="health-meal-review" aria-live="polite">
+                    <strong>{log.mealReview.balanceLabel === 'BALANCED' ? '균형 잡힌 식사예요' : log.mealReview.balanceLabel === 'NEEDS_ATTENTION' ? '조금 더 챙기면 좋아요' : '식사 기록 평가'}</strong>
+                    <p>{log.mealReview.summary}</p>
+                    {log.mealReview.positivePoints?.length > 0 && <div>좋았던 점: {log.mealReview.positivePoints.join(' · ')}</div>}
+                    {log.mealReview.improvements?.length > 0 && <div>다음 식사 제안: {log.mealReview.improvements.join(' · ')}</div>}
+                    <small>입력한 음식 내용에 대한 참고 의견이며 진단이나 영양 처방이 아닙니다.</small>
+                  </div>}
                 </fieldset>
                 <div>
-                  <div className="mc-field-label" style={{ marginBottom: 8 }}>운동</div>
-                  <div className="mc-grid-2">
-                    <label className="mc-form-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span className="mc-card-sub">걷기 시간 (분)</span>
-                      <input className="mc-input" type="number" min="0" max="1440" value={log.walkingMinutes} onChange={(event) => updateLog('walkingMinutes', event.target.value)} />
-                    </label>
-                    <label className="mc-form-field" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span className="mc-card-sub">걸음 수</span>
-                      <input className="mc-input" type="number" min="0" max="100000" value={log.stepCount} onChange={(event) => updateLog('stepCount', event.target.value)} />
-                    </label>
-                  </div>
-                  <label className="mc-check-row" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="checkbox" checked={log.exerciseCompleted} onChange={(event) => updateLog('exerciseCompleted', event.target.checked)} />
-                    오늘 운동을 완료했어요
+                  <div className="mc-field-label" style={{ marginBottom: 8 }}>오늘의 운동</div>
+                  <label className="mc-form-field health-meal-description">
+                    <span className="mc-card-sub">운동 종류·시간·진행 방식을 문장으로 적어주세요</span>
+                    <textarea className="mc-input" rows="4" maxLength="1000" placeholder="예: 퇴근 후 헬스장에서 하체 근력운동을 40분 하고, 실내 자전거를 15분 탔어요." value={log.exerciseDescription || ''} onChange={(event) => updateLog('exerciseDescription', event.target.value)} />
                   </label>
+                  {log.exerciseReview && <div className="health-meal-review" aria-live="polite">
+                    <strong>운동 기록 AI 평가</strong>
+                    <div>운동 유형: {{ AEROBIC: '유산소', STRENGTH: '근력', FLEXIBILITY: '유연성', SPORT: '스포츠', MIXED: '복합', OTHER: '기타', UNKNOWN: '확인 어려움' }[log.exerciseReview.activityType] || '확인 어려움'} · 강도 참고: {{ LIGHT: '가벼움', MODERATE: '보통', HIGH: '높음', UNKNOWN: '정보 부족' }[log.exerciseReview.effortLabel] || '정보 부족'}</div>
+                    <p>{log.exerciseReview.summary}</p>
+                    {log.exerciseReview.positivePoints?.length > 0 && <div>좋았던 점: {log.exerciseReview.positivePoints.join(' · ')}</div>}
+                    {log.exerciseReview.improvements?.length > 0 && <div>다음 활동 제안: {log.exerciseReview.improvements.join(' · ')}</div>}
+                    <small>입력 내용에 대한 참고 의견이며 운동 처방이나 진단이 아닙니다.</small>
+                  </div>}
                 </div>
               </div>
-              {log.mealReview && <div className="health-meal-review" aria-live="polite">
-                <strong>{log.mealReview.balanceLabel === 'BALANCED' ? '균형 잡힌 식사예요' : log.mealReview.balanceLabel === 'NEEDS_ATTENTION' ? '조금 더 챙기면 좋아요' : '식사 기록 평가'}</strong>
-                <p>{log.mealReview.summary}</p>
-                {log.mealReview.positivePoints?.length > 0 && <div>좋았던 점: {log.mealReview.positivePoints.join(' · ')}</div>}
-                {log.mealReview.improvements?.length > 0 && <div>다음 식사 제안: {log.mealReview.improvements.join(' · ')}</div>}
-                <small>입력한 음식 내용에 대한 참고 의견이며 진단이나 영양 처방이 아닙니다.</small>
-              </div>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
                 <button className="mc-btn mc-btn-primary" type="submit" disabled={saving}>{saving ? '저장 중...' : '오늘 기록 저장'}</button>
               </div>
@@ -547,24 +540,25 @@ export default function HealthManagement() {
                 <div className="mc-card-sub" style={{ marginTop: 12 }}>{assessment?.disclaimer}</div>
               </div>
               <div className="health-management-family-history">
-                <label className="mc-form-field">
-                  <span className="mc-field-label">당뇨 가족력 (선택)</span>
-                  <select className="mc-select" value={familyHistory} onChange={(event) => setFamilyHistory(event.target.value)}>
-                    <option value="">응답하지 않음</option>
-                    <option value="true">있음</option>
-                    <option value="false">없음</option>
-                  </select>
-                </label>
-                <label className="mc-form-field">
-                  <span className="mc-field-label">AI 개인화 가이드</span>
-                  <select className="mc-select" value={aiConsent} onChange={(event) => setAiConsent(event.target.value)}>
-                    <option value="">선택하지 않음</option>
-                    <option value="true">동의</option>
-                    <option value="false">동의하지 않음</option>
-                  </select>
-                  <span className="mc-card-sub">동의 시 필요한 검사 수치가 AI 제공업체로 전송됩니다. 이름과 병원명은 전송하지 않습니다.</span>
-                </label>
-                <button className="mc-btn mc-btn-primary" type="button" onClick={saveRiskProfile}>저장</button>
+                {!assessment?.onboardingComplete && <div className="health-first-setup">
+                  <div className="mc-field-label">처음 이용하시나요?</div>
+                  <p className="mc-card-sub">초기 건강 정보는 한 번만 입력합니다. 저장하면 다음 방문부터 이 질문은 표시되지 않습니다.</p>
+                  <button className="mc-btn mc-btn-primary" type="button" onClick={() => setActiveStage(1)}>초기 건강 정보 입력</button>
+                </div>}
+                <button className="mc-btn" type="button" onClick={() => setShowAiSettings((value) => !value)}>
+                  {showAiSettings ? 'AI 동의 설정 닫기' : 'AI 분석 동의 설정'}
+                </button>
+                {showAiSettings && <div className="health-ai-consent-settings">
+                  <label className="mc-form-field">
+                    <span className="mc-field-label">개인화 AI 분석</span>
+                    <select className="mc-select" value={aiConsent} onChange={(event) => setAiConsent(event.target.value)}>
+                      <option value="true">동의</option>
+                      <option value="false">동의하지 않음</option>
+                    </select>
+                    <span className="mc-card-sub">동의하면 식사·운동 문장과 필요한 건강 정보가 AI 제공업체로 전송됩니다. 이름과 병원명은 보내지 않습니다.</span>
+                  </label>
+                  <button className="mc-btn mc-btn-primary" type="button" onClick={saveAiConsent}>설정 저장</button>
+                </div>}
               </div>
             </div>
           </section>}
@@ -573,14 +567,6 @@ export default function HealthManagement() {
           {assessment?.onboardingComplete && <div className="mc-card mc-card-body health-checkup-status-card">
             <div className="mc-field-label">건강검진 이력</div>
             <p>{assessment.checkupDate ? `최근 검진 기록이 있습니다 · ${assessment.checkupDate}` : assessment.healthCheckupStatus === 'NEVER' ? '아직 건강검진 기록이 없습니다.' : '건강검진을 받은 적이 있는지 등록된 정보가 없습니다.'}</p>
-            <div className="health-checkup-status-edit">
-              <label className="mc-form-field"><span className="mc-card-sub">검진 이력</span>
-                <select className="mc-select" value={onboarding.healthCheckupStatus} onChange={(event) => setOnboarding((current) => ({ ...current, healthCheckupStatus: event.target.value }))}>
-                  <option value="HAD_CHECKUP">받은 적 있어요</option><option value="NEVER">아직 받은 적 없어요</option><option value="UNKNOWN">잘 모르겠어요</option>
-                </select>
-              </label>
-              <button className="mc-btn mc-btn-primary" type="button" onClick={saveRiskProfile}>검진 이력 저장</button>
-            </div>
           </div>}
           {assessment && !assessment.onboardingComplete && <div className="mc-card mc-card-body health-checkup-status-card">
             <div className="mc-field-label">당화혈색소 검사 기록</div>

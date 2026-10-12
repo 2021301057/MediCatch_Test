@@ -5393,13 +5393,14 @@ body::before {
 .health-meal-review small { color: var(--text-3); }
 .health-checkup-status-card { margin-bottom: 20px; }
 .health-checkup-status-card p { margin: 8px 0 12px; color: var(--text-2); }
-.health-checkup-status-edit { display: flex; max-width: 560px; align-items: end; gap: 12px; }
-.health-checkup-status-edit .mc-form-field { display: flex; flex: 1; flex-direction: column; gap: 6px; }
+.health-first-setup { display: grid; justify-items: start; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
+.health-first-setup p { margin: 0; line-height: 1.5; }
+.health-ai-consent-settings { display: grid; max-width: 420px; gap: 10px; padding: 14px; border: 1px solid var(--border-soft); border-radius: 4px; }
+.health-ai-consent-settings .mc-form-field { display: flex; flex-direction: column; gap: 6px; }
 
 @media (max-width: 650px) {
   .health-stage-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; }
   .health-stage-tab { min-height: 48px; padding: 8px 4px; font-size: 13px; }
-  .health-checkup-status-edit { align-items: stretch; flex-direction: column; }
 }
 
 .health-calendar-marks,

@@ -11,10 +11,12 @@ import com.medicatch.health.entity.DiabetesRiskProfile;
 import com.medicatch.health.entity.HealthAiAssessment;
 import com.medicatch.health.entity.HealthDailyAttendance;
 import com.medicatch.health.entity.HealthMealReview;
+import com.medicatch.health.entity.HealthExerciseReview;
 import com.medicatch.health.entity.Hba1cResult;
 import com.medicatch.health.repository.HealthAiAssessmentRepository;
 import com.medicatch.health.repository.HealthDailyAttendanceRepository;
 import com.medicatch.health.repository.HealthMealReviewRepository;
+import com.medicatch.health.repository.HealthExerciseReviewRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -57,11 +59,13 @@ public class HealthManagementService {
     private final HealthAiAssessmentRepository healthAiAssessmentRepository;
     private final HealthDailyAttendanceRepository healthDailyAttendanceRepository;
     private final HealthMealReviewRepository healthMealReviewRepository;
+    private final HealthExerciseReviewRepository healthExerciseReviewRepository;
     private final HealthAiClient healthAiClient;
     private final ObjectMapper objectMapper;
 
     private static final String AI_PROMPT_VERSION = "diabetes-guidance-v1";
     private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v1";
+    private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v1";
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getHba1cResults(Long userId) {
@@ -128,6 +132,10 @@ public class HealthManagementService {
     }
 
     public Map<String, Object> completeDiabetesOnboarding(Long userId, DiabetesOnboardingRequest request) {
+        if (diabetesRiskProfileRepository.findByUserId(userId)
+                .map(profile -> profile.getOnboardingCompletedAt() != null).orElse(false)) {
+            throw new IllegalStateException("초기 건강 정보 입력은 이미 완료되었습니다.");
+        }
         validateOnboarding(userId, request);
         DiabetesRiskProfile profile = diabetesRiskProfileRepository.findByUserId(userId)
                 .orElseGet(() -> DiabetesRiskProfile.builder().userId(userId).build());
@@ -339,7 +347,8 @@ public class HealthManagementService {
             boolean meal = (log != null && (log.getMealQuality() != null
                     || (log.getMealDescription() != null && !log.getMealDescription().isBlank())))
                     || missions.stream().anyMatch(m -> "MEAL".equals(m.getCategory()) && "COMPLETED".equals(m.getStatus()));
-            boolean exercise = (log != null && (log.isExerciseCompleted()
+            boolean exercise = (log != null && ((log.getExerciseDescription() != null && !log.getExerciseDescription().isBlank())
+                    || log.isExerciseCompleted()
                     || (log.getWalkingMinutes() != null && log.getWalkingMinutes() > 0)
                     || (log.getStepCount() != null && log.getStepCount() > 0)))
                     || missions.stream().anyMatch(m -> "ACTIVITY".equals(m.getCategory()) && "COMPLETED".equals(m.getStatus()));
@@ -360,6 +369,7 @@ public class HealthManagementService {
                 .map(this::toDailyLogMap)
                 .orElseGet(() -> emptyDailyLog(date));
         response.put("mealReview", getMealReview(userId, date, (String) response.get("mealDescription")));
+        response.put("exerciseReview", getExerciseReview(userId, date, (String) response.get("exerciseDescription")));
         return response;
     }
 
@@ -370,13 +380,15 @@ public class HealthManagementService {
                 .orElseGet(() -> DailyHealthLog.builder().userId(userId).logDate(date).build());
         log.setMealQuality(clean(request.mealQuality(), 10));
         log.setMealDescription(clean(request.mealDescription(), 1000));
+        log.setExerciseDescription(clean(request.exerciseDescription(), 1000));
         log.setHighSugarIntake(Boolean.TRUE.equals(request.highSugarIntake()));
         log.setLateNightMeal(Boolean.TRUE.equals(request.lateNightMeal()));
-        log.setWalkingMinutes(request.walkingMinutes());
-        log.setStepCount(request.stepCount());
-        log.setExerciseCompleted(Boolean.TRUE.equals(request.exerciseCompleted()));
+        log.setWalkingMinutes(null);
+        log.setStepCount(null);
+        log.setExerciseCompleted(false);
         Map<String, Object> response = toDailyLogMap(dailyHealthLogRepository.save(log));
         response.put("mealReview", getMealReview(userId, date, (String) response.get("mealDescription")));
+        response.put("exerciseReview", getExerciseReview(userId, date, (String) response.get("exerciseDescription")));
         return response;
     }
 
@@ -407,6 +419,33 @@ public class HealthManagementService {
         return mealReviewMap(review);
     }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public Map<String, Object> reviewDailyExercise(Long userId, LocalDate date) {
+        validateLogDate(date);
+        DiabetesRiskProfile profile = diabetesRiskProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalStateException("건강 정보 입력을 먼저 완료해주세요."));
+        if (!Boolean.TRUE.equals(profile.getAiProcessingConsent())) {
+            throw new IllegalStateException("AI 분석 이용 동의가 필요합니다.");
+        }
+        DailyHealthLog log = dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)
+                .orElseThrow(() -> new IllegalStateException("운동 기록을 먼저 저장해주세요."));
+        String description = clean(log.getExerciseDescription(), 1000);
+        if (description == null) throw new IllegalArgumentException("오늘 한 운동을 먼저 입력해주세요.");
+        String hash = sha256(EXERCISE_REVIEW_PROMPT_VERSION + "|" + description);
+        HealthExerciseReview review = healthExerciseReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date, hash)
+                .orElseGet(() -> {
+                    String system = "운동 기록을 검토하는 건강정보 보조 도구입니다. 사용자가 쓴 문장만 근거로 운동 종류와 수행 내용, 실천 가능한 개선점을 평가하세요. 운동시간이나 강도를 임의로 추정하지 말고 정보가 부족하면 분명히 밝히세요. 진단이나 치료 지시를 하지 말고 JSON 객체만 반환하세요. 키는 activityType, effortLabel, summary, positivePoints, improvements입니다. activityType은 AEROBIC, STRENGTH, FLEXIBILITY, SPORT, MIXED, OTHER, UNKNOWN 중 하나, effortLabel은 LIGHT, MODERATE, HIGH, UNKNOWN 중 하나이며 배열은 최대 3개입니다.";
+                    String output = healthAiClient.completeJson(system,
+                            "오늘의 운동 기록: " + description + "\n운동 종류와 기록의 구체성을 요약하고 무리하지 않는 다음 행동을 제안하세요.");
+                    try { objectMapper.readTree(output); }
+                    catch (Exception e) { throw new IllegalStateException("AI 운동 평가 형식이 올바르지 않습니다."); }
+                    return healthExerciseReviewRepository.save(HealthExerciseReview.builder().userId(userId).logDate(date)
+                            .inputHash(hash).exerciseDescription(description).reviewJson(output)
+                            .modelName(healthAiClient.getModel()).build());
+                });
+        return exerciseReviewMap(review);
+    }
+
     private Map<String, Object> getMealReview(Long userId, LocalDate date, String description) {
         if (description == null || description.isBlank()) return null;
         return healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date,
@@ -425,6 +464,28 @@ public class HealthManagementService {
             result.put("createdAt", review.getCreatedAt());
             return result;
         } catch (Exception e) { throw new IllegalStateException("저장된 식사 평가를 읽을 수 없습니다.", e); }
+    }
+
+    private Map<String, Object> getExerciseReview(Long userId, LocalDate date, String description) {
+        if (description == null || description.isBlank()) return null;
+        return healthExerciseReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date,
+                sha256(EXERCISE_REVIEW_PROMPT_VERSION + "|" + description.trim())).map(this::exerciseReviewMap).orElse(null);
+    }
+
+    private Map<String, Object> exerciseReviewMap(HealthExerciseReview review) {
+        try {
+            JsonNode json = objectMapper.readTree(review.getReviewJson());
+            String activityType = json.path("activityType").asText("UNKNOWN");
+            String effortLabel = json.path("effortLabel").asText("UNKNOWN");
+            Map<String, Object> result = new HashMap<>();
+            result.put("activityType", List.of("AEROBIC", "STRENGTH", "FLEXIBILITY", "SPORT", "MIXED", "OTHER", "UNKNOWN").contains(activityType) ? activityType : "UNKNOWN");
+            result.put("effortLabel", List.of("LIGHT", "MODERATE", "HIGH", "UNKNOWN").contains(effortLabel) ? effortLabel : "UNKNOWN");
+            result.put("summary", json.path("summary").asText("입력한 운동 기록을 확인했습니다."));
+            result.put("positivePoints", jsonStringList(json.path("positivePoints")));
+            result.put("improvements", jsonStringList(json.path("improvements")));
+            result.put("createdAt", review.getCreatedAt());
+            return result;
+        } catch (Exception e) { throw new IllegalStateException("저장된 운동 평가를 읽을 수 없습니다.", e); }
     }
 
     private List<String> jsonStringList(JsonNode node) {
@@ -713,6 +774,7 @@ public class HealthManagementService {
         map.put("logDate", log.getLogDate());
         map.put("mealQuality", log.getMealQuality());
         map.put("mealDescription", log.getMealDescription());
+        map.put("exerciseDescription", log.getExerciseDescription());
         map.put("highSugarIntake", log.isHighSugarIntake());
         map.put("lateNightMeal", log.isLateNightMeal());
         map.put("walkingMinutes", log.getWalkingMinutes());
@@ -726,6 +788,7 @@ public class HealthManagementService {
         map.put("logDate", date);
         map.put("mealQuality", null);
         map.put("mealDescription", null);
+        map.put("exerciseDescription", null);
         map.put("highSugarIntake", false);
         map.put("lateNightMeal", false);
         map.put("walkingMinutes", null);
