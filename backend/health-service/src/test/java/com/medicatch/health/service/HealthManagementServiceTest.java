@@ -121,6 +121,10 @@ class HealthManagementServiceTest {
         assertEquals("AEROBIC", review.get("activityType"));
         assertEquals("MODERATE", review.get("effortLabel"));
         assertEquals("실내 자전거를 20분 수행했습니다.", review.get("summary"));
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(healthAiClient).completeJson(systemPrompt.capture(), anyString());
+        assertTrue(systemPrompt.getValue().contains("자연스러운 한국어로만 작성"));
+        assertTrue(systemPrompt.getValue().contains("영어 문장이나 표현을 섞지 마세요"));
         verify(healthExerciseReviewRepository).save(argThat(saved ->
                 saved.getExerciseDescription().contains("실내 자전거")
                         && saved.getReviewJson().contains("AEROBIC")

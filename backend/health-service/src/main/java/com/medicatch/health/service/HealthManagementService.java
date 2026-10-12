@@ -64,8 +64,8 @@ public class HealthManagementService {
     private final ObjectMapper objectMapper;
 
     private static final String AI_PROMPT_VERSION = "diabetes-guidance-v1";
-    private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v1";
-    private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v1";
+    private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v2";
+    private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v2";
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getHba1cResults(Long userId) {
@@ -407,9 +407,9 @@ public class HealthManagementService {
         String hash = sha256(MEAL_REVIEW_PROMPT_VERSION + "|" + description);
         HealthMealReview review = healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date, hash)
                 .orElseGet(() -> {
-                    String system = "식사 기록을 평가하는 건강정보 보조 도구입니다. 진단이나 칼로리 추측을 하지 말고 기록된 음식에 근거해 균형과 개선점만 간결하게 제안하세요. JSON 객체만 반환하고 키는 balanceLabel, summary, positivePoints, improvements로 합니다. balanceLabel은 BALANCED, NEEDS_ATTENTION, UNKNOWN 중 하나이며 배열은 각각 최대 3개입니다.";
+                    String system = "식사 기록을 평가하는 건강정보 보조 도구입니다. 진단이나 칼로리 추측을 하지 말고 기록된 음식에 근거해 균형과 개선점만 간결하게 제안하세요. 사용자에게 보이는 summary, positivePoints, improvements의 모든 문장은 자연스러운 한국어로만 작성하고 영어 문장이나 표현을 섞지 마세요. JSON 객체만 반환하고 키는 balanceLabel, summary, positivePoints, improvements로 합니다. balanceLabel은 BALANCED, NEEDS_ATTENTION, UNKNOWN 중 하나이며 배열은 각각 최대 3개입니다.";
                     String output = healthAiClient.completeJson(system,
-                            "식사 기록: " + description + "\n당뇨 예방 관점에서 비난 없이 실천 가능한 피드백을 작성하세요. 양이 없으면 양을 추정하지 마세요.");
+                            "식사 기록: " + description + "\n당뇨 예방 관점에서 비난 없이 실천 가능한 피드백을 한국어로 작성하세요. 양이 없으면 양을 추정하지 마세요.");
                     try { objectMapper.readTree(output); }
                     catch (Exception e) { throw new IllegalStateException("AI 식사 평가 형식이 올바르지 않습니다."); }
                     return healthMealReviewRepository.save(HealthMealReview.builder().userId(userId).logDate(date)
@@ -434,9 +434,9 @@ public class HealthManagementService {
         String hash = sha256(EXERCISE_REVIEW_PROMPT_VERSION + "|" + description);
         HealthExerciseReview review = healthExerciseReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date, hash)
                 .orElseGet(() -> {
-                    String system = "운동 기록을 검토하는 건강정보 보조 도구입니다. 사용자가 쓴 문장만 근거로 운동 종류와 수행 내용, 실천 가능한 개선점을 평가하세요. 운동시간이나 강도를 임의로 추정하지 말고 정보가 부족하면 분명히 밝히세요. 진단이나 치료 지시를 하지 말고 JSON 객체만 반환하세요. 키는 activityType, effortLabel, summary, positivePoints, improvements입니다. activityType은 AEROBIC, STRENGTH, FLEXIBILITY, SPORT, MIXED, OTHER, UNKNOWN 중 하나, effortLabel은 LIGHT, MODERATE, HIGH, UNKNOWN 중 하나이며 배열은 최대 3개입니다.";
+                    String system = "운동 기록을 검토하는 건강정보 보조 도구입니다. 사용자가 쓴 문장만 근거로 운동 종류와 수행 내용, 실천 가능한 개선점을 평가하세요. 운동시간이나 강도를 임의로 추정하지 말고 정보가 부족하면 분명히 밝히세요. 진단이나 치료 지시를 하지 마세요. 사용자에게 보이는 summary, positivePoints, improvements의 모든 문장은 자연스러운 한국어로만 작성하고 영어 문장이나 표현을 섞지 마세요. JSON 객체만 반환하세요. 키는 activityType, effortLabel, summary, positivePoints, improvements입니다. activityType은 AEROBIC, STRENGTH, FLEXIBILITY, SPORT, MIXED, OTHER, UNKNOWN 중 하나, effortLabel은 LIGHT, MODERATE, HIGH, UNKNOWN 중 하나이며 배열은 최대 3개입니다.";
                     String output = healthAiClient.completeJson(system,
-                            "오늘의 운동 기록: " + description + "\n운동 종류와 기록의 구체성을 요약하고 무리하지 않는 다음 행동을 제안하세요.");
+                            "오늘의 운동 기록: " + description + "\n운동 종류와 기록의 구체성을 한국어로 요약하고 무리하지 않는 다음 행동을 제안하세요.");
                     try { objectMapper.readTree(output); }
                     catch (Exception e) { throw new IllegalStateException("AI 운동 평가 형식이 올바르지 않습니다."); }
                     return healthExerciseReviewRepository.save(HealthExerciseReview.builder().userId(userId).logDate(date)
