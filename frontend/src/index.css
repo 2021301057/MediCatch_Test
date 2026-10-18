@@ -5378,6 +5378,49 @@ body::before {
 .health-meal-description { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .health-meal-description textarea { width: 100%; min-height: 82px; resize: vertical; }
 
+.health-log-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.health-log-fieldset > legend { margin-bottom: 6px; }
+.health-log-hint { margin: 0 0 14px; line-height: 1.5; }
+.health-meal-slots { display: grid; gap: 10px; }
+.health-meal-slot {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.health-meal-slot > legend { padding: 8px 0; color: var(--text-1); font-weight: 700; }
+.health-choice-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 104px), 1fr));
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+.health-choice {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 7px 11px;
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.3;
+}
+.health-choice.selected {
+  border-color: #3978B8;
+  background: #eaf2fa;
+  color: #245e91;
+  font-weight: 700;
+}
+.health-duration-group { margin: 16px 0 0; padding: 0; border: 0; }
+.health-duration-group > legend { margin-bottom: 8px; }
+.health-optional-note { display: flex; flex-direction: column; gap: 6px; margin: 14px 0 0; }
+.health-optional-note textarea { width: 100%; resize: vertical; }
+
 .health-meal-review {
   display: grid;
   gap: 8px;
@@ -5401,6 +5444,8 @@ body::before {
 @media (max-width: 650px) {
   .health-stage-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; }
   .health-stage-tab { min-height: 48px; padding: 8px 4px; font-size: 13px; }
+  .health-meal-slot { grid-template-columns: 1fr; gap: 4px; }
+  .health-meal-slot > legend { padding: 2px 0; }
 }
 
 .health-calendar-marks,
