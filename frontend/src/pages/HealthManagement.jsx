@@ -31,8 +31,8 @@ const EXERCISE_ENTRY_PREFIX = '운동 빠른 기록';
 const emptyMealEntries = () => ({ breakfast: [], lunch: [], dinner: [], note: '' });
 const emptyExerciseEntry = () => ({ activity: '', minutes: '', note: '' });
 
-const parseMealDescription = (description = '') => {
-  const value = description.trim();
+const parseMealDescription = (description) => {
+  const value = typeof description === 'string' ? description.trim() : '';
   if (!value.startsWith(`${MEAL_ENTRY_PREFIX}\n`)) return { ...emptyMealEntries(), note: value };
 
   const entries = emptyMealEntries();
@@ -61,8 +61,8 @@ const serializeMealEntries = (entries) => {
   return `${MEAL_ENTRY_PREFIX}\n${lines.join('\n')}`;
 };
 
-const parseExerciseDescription = (description = '') => {
-  const value = description.trim();
+const parseExerciseDescription = (description) => {
+  const value = typeof description === 'string' ? description.trim() : '';
   if (!value.startsWith(`${EXERCISE_ENTRY_PREFIX}\n`)) return { ...emptyExerciseEntry(), note: value };
   const entry = emptyExerciseEntry();
   value.split('\n').slice(1).forEach((line) => {
