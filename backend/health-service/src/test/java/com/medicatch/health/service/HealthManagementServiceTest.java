@@ -183,4 +183,54 @@ class HealthManagementServiceTest {
         assertEquals(true, days.get(2).get("exercise"));
         assertEquals(false, days.get(2).get("attendance"));
     }
+
+    @Test
+    void calendarCalculatesMealAndExerciseRecordingScoresFromStoredInputs() {
+        long userId = 42L;
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Seoul"));
+        LocalDate date = month.atDay(1);
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(DailyHealthLog.builder().userId(userId).logDate(date)
+                        .mealDescription("끼니별 빠른 기록\n아침: 밥·잡곡밥\n점심: 기록 없음\n저녁: 채소")
+                        .exerciseDescription("운동 빠른 기록\n종류: 걷기\n시간: 20분")
+                        .build()));
+        when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) service.getCalendar(userId, month).get("days");
+        Map<String, Object> day = days.get(0);
+
+        assertEquals(2, day.get("mealRecordedCount"));
+        assertEquals(67, day.get("mealScore"));
+        assertEquals(20, day.get("exerciseMinutes"));
+        assertEquals(67, day.get("exerciseScore"));
+        assertEquals(67, day.get("totalScore"));
+    }
+
+    @Test
+    void calendarDoesNotScoreRestDaysOrUnspecifiedExerciseDurationAsZero() {
+        long userId = 42L;
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Seoul"));
+        LocalDate date = month.atDay(1);
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(DailyHealthLog.builder().userId(userId).logDate(date)
+                                .exerciseDescription("운동 빠른 기록\n종류: 오늘은 운동하지 않음\n시간: 운동하지 않음").build(),
+                        DailyHealthLog.builder().userId(userId).logDate(date.plusDays(1))
+                                .exerciseDescription("평소보다 오래 걸었어요.").build()));
+        when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) service.getCalendar(userId, month).get("days");
+
+        assertNull(days.get(0).get("exerciseScore"));
+        assertNull(days.get(0).get("totalScore"));
+        assertNull(days.get(1).get("exerciseScore"));
+        assertNull(days.get(1).get("totalScore"));
+    }
 }

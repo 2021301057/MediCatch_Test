@@ -44,6 +44,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -66,6 +68,9 @@ public class HealthManagementService {
     private static final String AI_PROMPT_VERSION = "diabetes-guidance-v1";
     private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v2";
     private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v2";
+    private static final String MEAL_ENTRY_PREFIX = "끼니별 빠른 기록";
+    private static final String EXERCISE_ENTRY_PREFIX = "운동 빠른 기록";
+    private static final Pattern EXERCISE_MINUTES_PATTERN = Pattern.compile("(\\d{1,3})\\s*분");
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getHba1cResults(Long userId) {
@@ -357,9 +362,71 @@ public class HealthManagementService {
             day.put("attendance", attendanceByDate.containsKey(date));
             day.put("meal", meal);
             day.put("exercise", exercise);
+            day.putAll(dailyActivityScores(log));
             days.add(day);
         }
         return Map.of("month", month.toString(), "days", days);
+    }
+
+    private Map<String, Object> dailyActivityScores(DailyHealthLog log) {
+        Map<String, Object> scores = new HashMap<>();
+        Integer mealCount = null;
+        Integer mealScore = null;
+        String mealReason = "식사 기록이 없습니다.";
+        if (log != null && log.getMealDescription() != null && !log.getMealDescription().isBlank()) {
+            String description = log.getMealDescription().trim();
+            if (description.startsWith(MEAL_ENTRY_PREFIX + "\n")) {
+                mealCount = 0;
+                for (String label : List.of("아침", "점심", "저녁")) {
+                    String entry = description.lines()
+                            .filter(line -> line.startsWith(label + ": "))
+                            .map(line -> line.substring(label.length() + 2).trim())
+                            .findFirst().orElse("기록 없음");
+                    if (!entry.isEmpty() && !"기록 없음".equals(entry)) mealCount++;
+                }
+                mealScore = Math.round(mealCount * 100.0f / 3);
+                mealReason = mealCount + "/3개 끼니 칸 기록 기준";
+            } else {
+                mealReason = "끼니별 기록이 없어 점수를 계산하지 않았습니다.";
+            }
+        }
+
+        Integer exerciseMinutes = null;
+        Integer exerciseScore = null;
+        String exerciseReason = "운동 기록이 없습니다.";
+        if (log != null && log.getExerciseDescription() != null && !log.getExerciseDescription().isBlank()) {
+            String description = log.getExerciseDescription().trim();
+            if (description.contains("종류: 오늘은 운동하지 않음") || description.contains("시간: 운동하지 않음")) {
+                exerciseReason = "휴식 기록은 점수 계산에서 제외합니다.";
+            } else {
+                String durationEntry = description.lines()
+                        .filter(line -> line.startsWith("시간: "))
+                        .map(line -> line.substring("시간: ".length()))
+                        .findFirst().orElse(description);
+                Matcher matcher = EXERCISE_MINUTES_PATTERN.matcher(durationEntry);
+                while (matcher.find()) exerciseMinutes = Integer.parseInt(matcher.group(1));
+                if (exerciseMinutes != null && exerciseMinutes > 0) {
+                    exerciseScore = Math.min(100, Math.round(exerciseMinutes * 100.0f / 30));
+                    exerciseReason = exerciseMinutes + "분 기록 (30분 기준, 최대 100점)";
+                } else {
+                    exerciseReason = "운동 시간 정보가 없어 점수를 계산하지 않았습니다.";
+                }
+            }
+        }
+
+        List<Integer> availableScores = new ArrayList<>();
+        if (mealScore != null) availableScores.add(mealScore);
+        if (exerciseScore != null) availableScores.add(exerciseScore);
+        Integer totalScore = availableScores.isEmpty() ? null
+                : Math.round((float) availableScores.stream().mapToInt(Integer::intValue).sum() / availableScores.size());
+        scores.put("mealRecordedCount", mealCount);
+        scores.put("mealScore", mealScore);
+        scores.put("mealScoreReason", mealReason);
+        scores.put("exerciseMinutes", exerciseMinutes);
+        scores.put("exerciseScore", exerciseScore);
+        scores.put("exerciseScoreReason", exerciseReason);
+        scores.put("totalScore", totalScore);
+        return scores;
     }
 
     @Transactional(readOnly = true)

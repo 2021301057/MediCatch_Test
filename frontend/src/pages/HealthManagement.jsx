@@ -105,6 +105,7 @@ export default function HealthManagement() {
   const [aiGuidance, setAiGuidance] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(currentMonthKst);
   const [calendarDays, setCalendarDays] = useState([]);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(todayKst);
   const [hasExistingHba1c, setHasExistingHba1c] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [activeStage, setActiveStage] = useState(0);
@@ -368,9 +369,14 @@ export default function HealthManagement() {
   const calendarStartDay = new Date(calendarYear, calendarMonthNumber - 1, 1).getDay();
   const calendarDayCount = new Date(calendarYear, calendarMonthNumber, 0).getDate();
   const calendarByDate = Object.fromEntries(calendarDays.map((day) => [day.date, day]));
+  const selectedCalendarDay = calendarByDate[selectedCalendarDate];
   const previousMonth = shiftMonth(calendarMonth, -1);
   const nextMonth = shiftMonth(calendarMonth, 1);
   const earliestMonth = shiftMonth(currentMonthKst(), -24);
+  const changeCalendarMonth = (month) => {
+    setCalendarMonth(month);
+    setSelectedCalendarDate(`${month}-01`);
+  };
 
   return (
     <div className="mc-page fade-in">
@@ -634,9 +640,9 @@ export default function HealthManagement() {
             <div className="mc-sec-head health-calendar-heading">
               <span className="mc-sec-title">건강 활동 달력</span>
               <div className="health-calendar-controls">
-                <button className="mc-btn" type="button" aria-label="이전 달" disabled={calendarMonth <= earliestMonth} onClick={() => setCalendarMonth(previousMonth)}>←</button>
+                <button className="mc-btn" type="button" aria-label="이전 달" disabled={calendarMonth <= earliestMonth} onClick={() => changeCalendarMonth(previousMonth)}>←</button>
                 <strong>{calendarMonth}</strong>
-                <button className="mc-btn" type="button" aria-label="다음 달" disabled={nextMonth > currentMonthKst()} onClick={() => setCalendarMonth(nextMonth)}>→</button>
+                <button className="mc-btn" type="button" aria-label="다음 달" disabled={nextMonth > currentMonthKst()} onClick={() => changeCalendarMonth(nextMonth)}>→</button>
               </div>
             </div>
             <div className="mc-card mc-card-body health-calendar-card">
@@ -648,13 +654,22 @@ export default function HealthManagement() {
                   const date = `${calendarMonth}-${String(dayNumber).padStart(2, '0')}`;
                   const activity = calendarByDate[date];
                   return (
-                    <div className="health-calendar-day" role="gridcell" aria-label={`${date}${activity?.attendance ? ', 출석' : ''}${activity?.meal ? ', 식사 기록' : ''}${activity?.exercise ? ', 운동 기록' : ''}`} key={date}>
-                      <span>{dayNumber}</span>
-                      <div className="health-calendar-marks" aria-hidden="true">
-                        {activity?.attendance && <i className="attendance" />}
-                        {activity?.meal && <i className="meal" />}
-                        {activity?.exercise && <i className="exercise" />}
-                      </div>
+                    <div className="health-calendar-cell" role="gridcell" key={date}>
+                      <button
+                        className={`health-calendar-day${selectedCalendarDate === date ? ' selected' : ''}`}
+                        type="button"
+                        aria-pressed={selectedCalendarDate === date}
+                        aria-label={`${date}${activity?.attendance ? ', 출석' : ''}${activity?.meal ? ', 식사 기록' : ''}${activity?.exercise ? ', 운동 기록' : ''}${activity?.totalScore != null ? `, 기록 점수 ${activity.totalScore}점` : ''}`}
+                        onClick={() => setSelectedCalendarDate(date)}
+                      >
+                        <span>{dayNumber}</span>
+                        {activity?.totalScore != null && <small className="health-calendar-score">{activity.totalScore}점</small>}
+                        <div className="health-calendar-marks" aria-hidden="true">
+                          {activity?.attendance && <i className="attendance" />}
+                          {activity?.meal && <i className="meal" />}
+                          {activity?.exercise && <i className="exercise" />}
+                        </div>
+                      </button>
                     </div>
                   );
                 })}
@@ -664,6 +679,28 @@ export default function HealthManagement() {
                 <span><i className="meal" /> 식사 기록/미션</span>
                 <span><i className="exercise" /> 운동 기록/미션</span>
               </div>
+              <section className="health-calendar-scorecard" aria-labelledby="health-calendar-score-title">
+                <div className="health-calendar-scorecard-heading">
+                  <h3 id="health-calendar-score-title">{selectedCalendarDate} 기록 점수표</h3>
+                  <strong>종합 {selectedCalendarDay?.totalScore == null ? '미산정' : `${selectedCalendarDay.totalScore}점`}</strong>
+                </div>
+                <div className="health-calendar-score-table" role="table" aria-label={`${selectedCalendarDate} 식사·운동 기록 점수`}>
+                  <div className="health-calendar-score-row header" role="row">
+                    <span role="columnheader">구분</span><span role="columnheader">점수</span><span role="columnheader">산정 기준</span>
+                  </div>
+                  <div className="health-calendar-score-row" role="row">
+                    <span role="cell">식사 기록</span>
+                    <strong role="cell">{selectedCalendarDay?.mealScore == null ? '미산정' : `${selectedCalendarDay.mealScore}점`}</strong>
+                    <span role="cell">{selectedCalendarDay?.mealScoreReason || '식사 기록이 없습니다.'}</span>
+                  </div>
+                  <div className="health-calendar-score-row" role="row">
+                    <span role="cell">운동 기록</span>
+                    <strong role="cell">{selectedCalendarDay?.exerciseScore == null ? '미산정' : `${selectedCalendarDay.exerciseScore}점`}</strong>
+                    <span role="cell">{selectedCalendarDay?.exerciseScoreReason || '운동 기록이 없습니다.'}</span>
+                  </div>
+                </div>
+                <p className="health-calendar-score-note">식사 점수는 기록한 끼니 칸 수(3칸 기준), 운동 점수는 입력된 운동 시간(30분 기준, 최대 100점)을 보여주는 기록 참고값입니다. 건강 상태나 의학적 평가 점수가 아닙니다.</p>
+              </section>
             </div>
           </section>}
 
