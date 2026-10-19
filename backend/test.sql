@@ -351,16 +351,28 @@ USE medicatch_health;
 
 SET @test_user_id = 2;
 -- 기존 건강검진/예측 테스트 데이터 초기화 (FK 순서: 자식→부모)
-DELETE FROM disease_prediction_compares WHERE prediction_id IN (SELECT id FROM disease_predictions WHERE user_id = @test_user_id);
-DELETE FROM disease_prediction_factors  WHERE prediction_id IN (SELECT id FROM disease_predictions WHERE user_id = @test_user_id);
-DELETE FROM disease_predictions WHERE user_id = @test_user_id;
-DELETE FROM health_age_results WHERE user_id = @test_user_id;
-DELETE FROM checkup_results WHERE user_id = @test_user_id;
+DELETE FROM disease_prediction_compares WHERE id IN (
+    SELECT id FROM (SELECT child.id FROM disease_prediction_compares child
+    JOIN disease_predictions parent ON parent.id = child.prediction_id
+    WHERE parent.user_id = @test_user_id) AS user_compares
+);
+DELETE FROM disease_prediction_factors WHERE id IN (
+    SELECT id FROM (SELECT child.id FROM disease_prediction_factors child
+    JOIN disease_predictions parent ON parent.id = child.prediction_id
+    WHERE parent.user_id = @test_user_id) AS user_factors
+);
+DELETE FROM disease_predictions WHERE id IN (SELECT id FROM (SELECT id FROM disease_predictions WHERE user_id = @test_user_id) AS user_predictions);
+DELETE FROM health_age_results WHERE id IN (SELECT id FROM (SELECT id FROM health_age_results WHERE user_id = @test_user_id) AS user_health_age);
+DELETE FROM daily_health_missions WHERE id IN (SELECT id FROM (SELECT id FROM daily_health_missions WHERE user_id = @test_user_id) AS user_missions);
+DELETE FROM daily_health_logs WHERE id IN (SELECT id FROM (SELECT id FROM daily_health_logs WHERE user_id = @test_user_id) AS user_logs);
+DELETE FROM hba1c_results WHERE id IN (SELECT id FROM (SELECT id FROM hba1c_results WHERE user_id = @test_user_id) AS user_hba1c);
+DELETE FROM diabetes_risk_profiles WHERE id IN (SELECT id FROM (SELECT id FROM diabetes_risk_profiles WHERE user_id = @test_user_id) AS user_profiles);
+DELETE FROM checkup_results WHERE id IN (SELECT id FROM (SELECT id FROM checkup_results WHERE user_id = @test_user_id) AS user_checkups);
 
 -- 건강검진 결과: init.sql의 checkup_results 컬럼 기준
 INSERT INTO checkup_results (
     user_id, checkup_date, checkup_type,
-    height, weight, bmi,
+    height, weight, waist, bmi,
     blood_pressure_systolic, blood_pressure_diastolic,
     glucose, total_cholesterol, hdl_cholesterol, ldl_cholesterol, triglycerides,
     abnormal_findings, recommendations,
@@ -368,7 +380,7 @@ INSERT INTO checkup_results (
 ) VALUES
 (
     @test_user_id, '2026-03-18', 'REGULAR',
-    171.4, 76.2, 26.0,
+    171.4, 76.2, 86.4, 26.0,
     134, 88,
     103, 232, 49, 151, 174,
     '혈압, LDL, 중성지방 추적 관찰 권고', '주의',
@@ -376,7 +388,7 @@ INSERT INTO checkup_results (
 ),
 (
     @test_user_id, '2025-04-12', 'REGULAR',
-    171.2, 75.1, 25.6,
+    171.2, 75.1, 85.1, 25.6,
     127, 82,
     97, 216, 53, 139, 152,
     '', '주의',
@@ -384,12 +396,39 @@ INSERT INTO checkup_results (
 ),
 (
     @test_user_id, '2024-05-09', 'REGULAR',
-    171.0, 73.8, 25.2,
+    171.0, 73.8, 83.4, 25.2,
     121, 78,
     92, 204, 56, 128, 133,
     '', '정상',
     NOW(), NOW()
 );
+
+-- 당뇨 관리 및 일일 습관 기록 샘플
+INSERT INTO hba1c_results (user_id, test_date, value, organization_name, note, created_at, updated_at)
+VALUES (@test_user_id, '2026-03-20', 5.8, '메디캐치 검진센터', '사용자 입력 샘플', NOW(), NOW());
+
+INSERT INTO diabetes_risk_profiles (user_id, family_history_diabetes, updated_at)
+VALUES (@test_user_id, NULL, NOW());
+
+INSERT INTO daily_health_logs (
+    user_id, log_date, meal_quality, high_sugar_intake, late_night_meal,
+    walking_minutes, step_count, exercise_completed, created_at, updated_at
+) VALUES (
+    @test_user_id, CURRENT_DATE(), 'FAIR', 0, 0, 20, 5200, 1, NOW(), NOW()
+);
+
+INSERT INTO daily_health_missions (
+    user_id, mission_date, category, code, title, description, reason, status, created_at
+) VALUES
+(
+    @test_user_id, CURRENT_DATE(), 'ACTIVITY', 'WALK_20_MIN', '오늘 20분 걷기',
+    '무리가 없는 편안한 속도로 20분 걸어보세요.', '가볍게 시작할 수 있는 오늘의 활동 목표입니다.', 'COMPLETED', NOW()
+),
+(
+    @test_user_id, CURRENT_DATE(), 'MEAL', 'REDUCE_SUGARY_DRINKS', '단 음료 대신 물 선택하기',
+    '오늘 마실 음료 중 하나를 물이나 무가당 음료로 바꿔보세요.', '작은 식사 기록을 쌓기 위한 오늘의 미션입니다.', 'PENDING', NOW()
+)
+ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description), reason = VALUES(reason);
 
 -- 건강나이: health_age_results 테이블
 INSERT INTO health_age_results (

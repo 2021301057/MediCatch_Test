@@ -19,10 +19,10 @@ const P = {
 };
 
 const QUICK_QUESTIONS = [
-  '내 보장에 부족한 부분이 있어?',
-  '최근 검진 결과 요약해줘',
-  '도수치료 보장 어떻게 돼?',
-  '내 건강 위험도가 어때?',
+  '도수치료 보험 보장이 돼?',
+  '내 보험에서 MRI 얼마나 나와?',
+  '당뇨 위험이 높은데 어떤 보험이 필요해?',
+  '내 보장에 뭐가 부족해?',
 ];
 
 export default function HealthChat({ variant = 'page', initialQuery = '' }) {
@@ -43,21 +43,16 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
   }, [initialQuery, searchParams]);
 
   useEffect(() => {
-    let cancelled = false;
     chatAPI.getHistory()
       .then((r) => {
-        if (cancelled) return;
         const history = Array.isArray(r?.messages) ? r.messages : [];
         if (history.length > 0) {
           setMessages(history.map((h) => ({
-            role: h.role.toLowerCase(),
-            content: h.message,
-            sources: Array.isArray(h.sources) ? h.sources : [],
+            role: h.role.toLowerCase(), content: h.message,
           })));
         }
       })
       .catch(() => {});
-    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -73,12 +68,12 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
     try {
       const res = await chatAPI.sendMessage(msg);
       const responseText = res?.message || res?.content || '';
-      const sources = Array.isArray(res?.sources) ? res.sources : [];
-      setMessages((prev) => [...prev, { role: 'assistant', content: responseText, sources }]);
-    } catch {
+      setMessages((prev) => [...prev, { role: 'assistant', content: responseText }]);
+    } catch (err) {
+      const serverMessage = err?.response?.data?.message;
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: '죄송해요. 잠시 후 다시 시도해주세요.',
+        content: serverMessage || '죄송해요. 잠시 후 다시 시도해주세요.',
       }]);
     } finally {
       setLoading(false);
@@ -146,13 +141,6 @@ export default function HealthChat({ variant = 'page', initialQuery = '' }) {
                 {msg.role === 'assistant'
                   ? <ReactMarkdown>{msg.content}</ReactMarkdown>
                   : msg.content}
-                {msg.role === 'assistant' && Array.isArray(msg.sources) && msg.sources.length > 0 && (
-                  <div className="mc-chat-sources">
-                    {msg.sources.map((s) => (
-                      <span key={s} className="mc-chat-source-chip">{s}</span>
-                    ))}
-                  </div>
-                )}
               </div>
               {msg.role === 'user' && (
                 <div className="mc-chat-avatar user">나</div>

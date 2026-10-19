@@ -14,6 +14,7 @@ import InsuranceList    from './pages/InsuranceList';
 import MedicalRecords   from './pages/MedicalRecords';
 import InsurancePlan    from './pages/InsurancePlan';
 import HealthReport     from './pages/HealthReport';
+import HealthManagement from './pages/HealthManagement';
 import AccountPage      from './pages/AccountPage';
 
 function Layout({ children }) {
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/medical-records" element={<PrivateRoute><MedicalRecords /></PrivateRoute>} />
           <Route path="/insurance-plan"  element={<PrivateRoute><InsurancePlan /></PrivateRoute>} />
           <Route path="/health-report"   element={<PrivateRoute><HealthReport /></PrivateRoute>} />
+          <Route path="/health-management" element={<PrivateRoute><HealthManagement /></PrivateRoute>} />
           <Route path="/account"         element={<PrivateRoute><AccountPage /></PrivateRoute>} />
           <Route path="/chat"            element={<PrivateRoute><Navigate to="/" replace /></PrivateRoute>} />
           <Route path="*"                element={<Navigate to="/" replace />} />

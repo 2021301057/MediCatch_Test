@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { healthAPI, insuranceAPI } from '../api/services';
 import KakaoHospitalMap from '../components/KakaoHospitalMap';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Icon = ({ children, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -21,6 +22,7 @@ const P = {
   chart:  (<path d="M2 14h12M4 14V9M7 14V6M10 14V8M13 14V4" />),
   chat:   (<><path d="M2 2h12v9H9l-3 3v-3H2V2z" /><path d="M5 6h6M5 8.5h4" /></>),
   shield: (<path d="M8 1 3 3.5v4C3 10 5.5 12.5 8 14c2.5-1.5 5-4 5-6.5v-4L8 1z" />),
+  lock:   (<><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></>),
   x:      (<path d="M4 4l8 8M12 4l-8 8" />),
   mapPin: (<><path d="M8 14s5-4.2 5-8a5 5 0 0 0-10 0c0 3.8 5 8 5 8z"/><circle cx="8" cy="6" r="1.6"/></>),
   phone:  (<><path d="M5 2h6v12H5z"/><path d="M7 12h2"/></>),
@@ -29,7 +31,8 @@ const P = {
 const QUICK_ACTS = [
   { icon: 'search', title: '진료 전 보장 확인',  sub: '병원 가기 전에',  path: '/pre-treatment' },
   { icon: 'clip',   title: '최근 진료 기록',     sub: '방문 내역 확인', path: '/medical-records' },
-  { icon: 'chart',  title: '12개월 건강 리포트', sub: '최신 분석',      path: '/health-report' },
+  { icon: 'chart',  title: '건강 통합 리포트',   sub: '검진·진료 흐름',  path: '/health-report' },
+  { icon: 'check',  title: '오늘의 건강 관리',   sub: '미션·기록·혈당',  path: '/health-management' },
   { icon: 'chat',   title: 'AI 건강 상담',       sub: '지금 채팅',      path: '/chat' },
 ];
 
@@ -169,6 +172,12 @@ const REGION_GROUPS = [
 
 const RISK_META = { '나쁨': '위험 구간 · 관리 필요', '보통': '평균 수준', '좋음': '양호한 상태' };
 
+const RISK_PLACEHOLDERS = [
+  { name: '뇌졸중', cls: 'lo', level: '낮음', pct: 22 },
+  { name: '당뇨', cls: 'mid', level: '중간', pct: 48 },
+  { name: '심뇌혈관', cls: 'lo', level: '낮음', pct: 30 },
+];
+
 export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -178,7 +187,7 @@ export default function Dashboard() {
   const [gaps, setGaps]               = useState([]);
   const [totalVisits, setTotalVisits] = useState(0);
   const [topDept, setTopDept]         = useState('-');
-  const [nextCheckup, setNextCheckup] = useState(null);
+  const [latestCheckupDate, setLatestCheckupDate] = useState(null);
   const [premium, setPremium]         = useState({ total: 0, insurers: 0 });
 
   // 국가건강검진 예약 모달
@@ -280,16 +289,7 @@ export default function Dashboard() {
       .then((rows) => {
         if (!Array.isArray(rows) || rows.length === 0) return;
         const latest = rows.reduce((a, b) => (a.checkupDate > b.checkupDate ? a : b));
-        const lastDate = new Date(latest.checkupDate);
-        const nextDate = new Date(lastDate);
-        nextDate.setFullYear(nextDate.getFullYear() + 1);
-        const now = new Date();
-        const diffDays = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
-        setNextCheckup({
-          lastDate: latest.checkupDate,
-          nextDate: nextDate.toISOString().slice(0, 10),
-          dday: diffDays,
-        });
+        setLatestCheckupDate(latest.checkupDate);
       })
       .catch(() => {});
 
@@ -357,6 +357,8 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <MobileNavMenu />
+
       {/* Stats strip */}
       <div className="mc-stats-strip">
         {stats.map((s, i) => (
@@ -379,7 +381,7 @@ export default function Dashboard() {
               전체 보기 <Icon>{P.arrow}</Icon>
             </button>
           </div>
-          <table className="mc-tbl">
+          <table className="mc-tbl mc-dashboard-record-table">
             <thead>
               <tr>
                 <th>병원 / 내역</th>
@@ -419,7 +421,7 @@ export default function Dashboard() {
               리포트 <Icon>{P.arrow}</Icon>
             </button>
           </div>
-          <div className="mc-risk-list">
+          <div className={`mc-risk-list${risks.length === 0 ? ' locked' : ''}`}>
             {risks.length > 0 ? risks.map((r, i) => (
               <div className="mc-risk-row" key={i}>
                 <div className="mc-risk-meta">
@@ -438,8 +440,26 @@ export default function Dashboard() {
                 </div>
               </div>
             )) : (
-              <div style={{ color: 'var(--text-3)', fontSize: 13, padding: '12px 0' }}>
-                건강 위험도 데이터가 없어요.
+              <div className="mc-risk-locked-preview">
+                {RISK_PLACEHOLDERS.map((r) => (
+                  <div className="mc-risk-row mc-risk-row-placeholder" key={r.name}>
+                    <div className="mc-risk-meta">
+                      <span className="mc-risk-name">{r.name}</span>
+                      <span className={`mc-risk-lvl ${r.cls}`}>{r.level}</span>
+                    </div>
+                    <div className="mc-risk-bar">
+                      <div className={`mc-risk-fill ${r.cls}`} style={{ width: `${r.pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+                <div className="mc-risk-lock-overlay">
+                  <span className="mc-risk-lock-icon"><Icon size={16}>{P.lock}</Icon></span>
+                  <strong>데이터를 먼저 불러와주세요</strong>
+                  <span>데이터를 연결하면 질병 위험도와 변화 추이를 확인할 수 있어요.</span>
+                  <button className="mc-btn mc-btn-primary" type="button" onClick={() => navigate('/checkup')}>
+                    건강검진 기록 보기
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -491,8 +511,12 @@ export default function Dashboard() {
                 </div>
               );
             }) : (
-              <div style={{ color: 'var(--text-3)', fontSize: 13, padding: '12px 16px' }}>
-                보험 공백 데이터가 없어요.
+              <div className="mc-gap-empty-state">
+                <span className="mc-gap-empty-icon"><Icon size={15}>{P.shield}</Icon></span>
+                <div>
+                  <strong>보험 공백이 없어요</strong>
+                  <span>현재 확인된 부족 보장은 없습니다.</span>
+                </div>
               </div>
             )}
             <div className="mc-gap-footer">
@@ -509,19 +533,14 @@ export default function Dashboard() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="mc-sec-head">
-            <span className="mc-sec-title">다가오는 검진</span>
+            <span className="mc-sec-title">건강검진 기록</span>
           </div>
           <div className="mc-widget">
-            <div className="mc-widget-title">국가건강검진</div>
-            {nextCheckup ? (
-              <>
-                <div className="mc-widget-sub">
-                  최근 검진 {nextCheckup.lastDate} · 다음 예정 {nextCheckup.nextDate}
-                </div>
-                <div style={{ fontSize: 12, color: nextCheckup.dday <= 30 ? '#9A6060' : 'var(--text-2)', marginBottom: 8 }}>
-                  {nextCheckup.dday > 0 ? `D-${nextCheckup.dday}` : nextCheckup.dday === 0 ? 'D-day' : `D+${Math.abs(nextCheckup.dday)} 초과`}
-                </div>
-              </>
+            <div className="mc-widget-title">최근 검진</div>
+            {latestCheckupDate ? (
+              <div className="mc-widget-sub" style={{ marginBottom: 8 }}>
+                마지막 기록 {latestCheckupDate}
+              </div>
             ) : (
               <div className="mc-widget-sub">검진 기록이 없어요</div>
             )}

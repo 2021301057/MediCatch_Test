@@ -59,19 +59,141 @@ CREATE TABLE IF NOT EXISTS checkup_results (
     checkup_type VARCHAR(50) NOT NULL,
     height DECIMAL(5,2),
     weight DECIMAL(5,2),
+    waist DECIMAL(6,2),
+    bmi DECIMAL(5,2),
+    sight VARCHAR(30),
+    hearing VARCHAR(30),
     blood_pressure_systolic DECIMAL(5,2),
     blood_pressure_diastolic DECIMAL(5,2),
+    urinary_protein VARCHAR(20),
+    hemoglobin DECIMAL(7,2),
     glucose DECIMAL(7,2),
     total_cholesterol DECIMAL(7,2),
     hdl_cholesterol DECIMAL(7,2),
     ldl_cholesterol DECIMAL(7,2),
     triglycerides DECIMAL(7,2),
+    serum_creatinine DECIMAL(7,2),
+    gfr DECIMAL(7,2),
+    ast DECIMAL(7,2),
+    alt DECIMAL(7,2),
+    gamma_gtp DECIMAL(7,2),
+    tb_chest_disease VARCHAR(50),
+    osteoporosis VARCHAR(50),
+    organization_name VARCHAR(100),
     abnormal_findings LONGTEXT,
     recommendations LONGTEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
     INDEX idx_checkup_date (checkup_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Daily health management and HbA1c records
+CREATE TABLE IF NOT EXISTS hba1c_results (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    test_date DATE NOT NULL,
+    value DECIMAL(4,2) NOT NULL,
+    organization_name VARCHAR(150),
+    note VARCHAR(500),
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_hba1c_user_date (user_id, test_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS diabetes_risk_profiles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    family_history_diabetes BIT,
+    diagnosis_status VARCHAR(24),
+    hba1c_test_status VARCHAR(24),
+    health_checkup_status VARCHAR(24),
+    ai_processing_consent BIT,
+    onboarding_completed_at DATETIME,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_diabetes_profile_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS daily_health_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    log_date DATE NOT NULL,
+    meal_quality VARCHAR(10),
+    meal_description VARCHAR(1000),
+    exercise_description VARCHAR(1000),
+    high_sugar_intake BIT NOT NULL DEFAULT 0,
+    late_night_meal BIT NOT NULL DEFAULT 0,
+    walking_minutes INT,
+    step_count INT,
+    exercise_completed BIT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_daily_health_log_user_date (user_id, log_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS health_meal_reviews (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    log_date DATE NOT NULL,
+    input_hash CHAR(64) NOT NULL,
+    meal_description VARCHAR(1000) NOT NULL,
+    review_json LONGTEXT NOT NULL,
+    model_name VARCHAR(120) NOT NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_health_meal_review_input (user_id, log_date, input_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS health_exercise_reviews (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    log_date DATE NOT NULL,
+    input_hash CHAR(64) NOT NULL,
+    exercise_description VARCHAR(1000) NOT NULL,
+    review_json LONGTEXT NOT NULL,
+    model_name VARCHAR(120) NOT NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_health_exercise_review_input (user_id, log_date, input_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS daily_health_missions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    mission_date DATE NOT NULL,
+    category VARCHAR(20) NOT NULL,
+    code VARCHAR(40) NOT NULL,
+    title VARCHAR(120) NOT NULL,
+    description VARCHAR(500) NOT NULL,
+    reason VARCHAR(300) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    source VARCHAR(16),
+    assessment_id BIGINT,
+    completed_at DATETIME,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_daily_mission_user_date_category (user_id, mission_date, category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS health_ai_assessments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    risk_level VARCHAR(24) NOT NULL,
+    input_hash CHAR(64) NOT NULL,
+    prompt_version VARCHAR(32) NOT NULL,
+    model_name VARCHAR(120) NOT NULL,
+    checkup_result_id BIGINT,
+    hba1c_result_id BIGINT,
+    input_snapshot JSON NOT NULL,
+    output_json JSON NOT NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_health_ai_input (user_id, input_hash, prompt_version),
+    INDEX idx_health_ai_user_created (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS health_daily_attendances (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    attendance_date DATE NOT NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_health_attendance_user_date (user_id, attendance_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Medication Details table

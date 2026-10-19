@@ -34,7 +34,7 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
     codefId:       localStorage.getItem('codefId')   || '',
     codefPassword: '',
     userName:      localStorage.getItem('userName')  || '',
-    phoneNo:       localStorage.getItem('phoneNo')   || '',
+    phoneNo:       (localStorage.getItem('phoneNo') || '').replace(/\D/g, ''),
     identityFront: '',
     identityBack:  '',
     telecom:       '0',
@@ -49,6 +49,10 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
   const [medicalResult,      setMedicalResult]      = useState(null);
 
   const handle = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const handlePhoneNo = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 11);
+    setForm(f => ({ ...f, phoneNo: value }));
+  };
   const handleIdentityFront = (e) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 6);
     setForm(f => ({ ...f, identityFront: value }));
@@ -207,8 +211,8 @@ export default function CodefSyncModal({ userId, onClose, onSuccess }) {
                     placeholder="홍길동" style={s.input} required />
                 </Field>
                 <Field label="전화번호">
-                  <input name="phoneNo" value={form.phoneNo} onChange={handle}
-                    placeholder="01012345678" style={s.input} required />
+                  <input name="phoneNo" inputMode="numeric" value={form.phoneNo} onChange={handlePhoneNo}
+                    placeholder="01012345678 (- 없이)" style={s.input} required />
                 </Field>
               </div>
               <Field label="인증 방법">

@@ -1,6 +1,10 @@
 package com.medicatch.health.controller;
 
 import com.medicatch.health.dto.CheckupResultDto;
+import com.medicatch.health.dto.DailyHealthLogRequest;
+import com.medicatch.health.dto.DiabetesOnboardingRequest;
+import com.medicatch.health.dto.DiabetesRiskProfileRequest;
+import com.medicatch.health.dto.Hba1cRequest;
 import com.medicatch.health.dto.MedicalRecordDto;
 import com.medicatch.health.entity.DiseasePrediction;
 import com.medicatch.health.entity.DiseasePredictionCompare;
@@ -16,11 +20,14 @@ import com.medicatch.health.repository.HealthAgeResultRepository;
 import com.medicatch.health.repository.HospitalRepository;
 import com.medicatch.health.service.CodefSyncService;
 import com.medicatch.health.service.HealthService;
+import com.medicatch.health.service.HealthManagementService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +40,7 @@ import java.util.stream.Collectors;
 public class HealthController {
 
     private final HealthService healthService;
+    private final HealthManagementService healthManagementService;
     private final CodefSyncService codefSyncService;
     private final DiseasePredictionRepository diseasePredictionRepo;
     private final HealthAgeResultRepository healthAgeResultRepo;
@@ -40,12 +48,14 @@ public class HealthController {
     private final ObjectMapper objectMapper;
 
     public HealthController(HealthService healthService,
+                            HealthManagementService healthManagementService,
                             CodefSyncService codefSyncService,
                             DiseasePredictionRepository diseasePredictionRepo,
                             HealthAgeResultRepository healthAgeResultRepo,
                             HospitalRepository hospitalRepository,
                             ObjectMapper objectMapper) {
         this.healthService = healthService;
+        this.healthManagementService = healthManagementService;
         this.codefSyncService = codefSyncService;
         this.diseasePredictionRepo = diseasePredictionRepo;
         this.healthAgeResultRepo = healthAgeResultRepo;
@@ -100,10 +110,7 @@ public class HealthController {
             @RequestParam(required = false) LocalDate endDate) {
         log.info("GET /api/health/checkup-results - userId: {}", userId);
         try {
-            LocalDate start = startDate != null ? startDate : LocalDate.now().minusYears(3);
-            LocalDate end = endDate != null ? endDate : LocalDate.now();
-
-            List<CheckupResultDto> results = healthService.getCheckupResults(userId, start, end)
+            List<CheckupResultDto> results = healthService.getCheckupResults(userId, startDate, endDate)
                     .stream().map(CheckupResultDto::from).collect(Collectors.toList());
             return ResponseEntity.ok(results);
         } catch (Exception e) {
@@ -353,6 +360,156 @@ public class HealthController {
         } catch (Exception e) {
             log.error("Error getting disease predictions: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/hba1c-results")
+    public ResponseEntity<List<Map<String, Object>>> getHba1cResults(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(healthManagementService.getHba1cResults(userId));
+    }
+
+    @PostMapping("/hba1c-results")
+    public ResponseEntity<?> createHba1cResult(@RequestHeader("X-User-Id") Long userId,
+                                               @RequestBody Hba1cRequest request) {
+        try {
+            return ResponseEntity.ok(healthManagementService.createHba1cResult(userId, request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/hba1c-results/{id}")
+    public ResponseEntity<?> updateHba1cResult(@RequestHeader("X-User-Id") Long userId,
+                                               @PathVariable Long id,
+                                               @RequestBody Hba1cRequest request) {
+        try {
+            return ResponseEntity.ok(healthManagementService.updateHba1cResult(userId, id, request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/hba1c-results/{id}")
+    public ResponseEntity<?> deleteHba1cResult(@RequestHeader("X-User-Id") Long userId,
+                                               @PathVariable Long id) {
+        try {
+            healthManagementService.deleteHba1cResult(userId, id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/diabetes-assessment")
+    public ResponseEntity<Map<String, Object>> getDiabetesAssessment(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(healthManagementService.getDiabetesAssessment(userId));
+    }
+
+    @PutMapping("/diabetes-assessment/profile")
+    public ResponseEntity<Map<String, Object>> updateDiabetesRiskProfile(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestBody DiabetesRiskProfileRequest request) {
+        return ResponseEntity.ok(healthManagementService.saveDiabetesRiskProfile(
+                userId, request == null ? null : request.familyHistoryDiabetes(),
+                request == null ? null : request.aiProcessingConsent(),
+                request == null ? null : request.healthCheckupStatus()));
+    }
+
+    @PostMapping("/diabetes-assessment/onboarding")
+    public ResponseEntity<?> completeDiabetesOnboarding(@RequestHeader("X-User-Id") Long userId,
+                                                        @RequestBody DiabetesOnboardingRequest request) {
+        try {
+            return ResponseEntity.ok(healthManagementService.completeDiabetesOnboarding(userId, request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/diabetes-assessment/ai-guidance")
+    public ResponseEntity<?> getAiDiabetesGuidance(@RequestHeader("X-User-Id") Long userId) {
+        try {
+            return ResponseEntity.ok(healthManagementService.generateAiGuidance(userId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/attendance/today")
+    public ResponseEntity<Map<String, Object>> recordHealthAttendance(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(healthManagementService.recordTodayAttendance(userId));
+    }
+
+    @GetMapping("/calendar")
+    public ResponseEntity<?> getHealthCalendar(@RequestHeader("X-User-Id") Long userId,
+                                               @RequestParam String month) {
+        YearMonth parsed;
+        try {
+            parsed = YearMonth.parse(month);
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "달력 월 형식은 YYYY-MM이어야 합니다."));
+        }
+        try {
+            return ResponseEntity.ok(healthManagementService.getCalendar(userId, parsed));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/daily-logs")
+    public ResponseEntity<Map<String, Object>> getDailyHealthLog(@RequestHeader("X-User-Id") Long userId,
+                                                                  @RequestParam LocalDate date) {
+        return ResponseEntity.ok(healthManagementService.getDailyLog(userId, date));
+    }
+
+    @PutMapping("/daily-logs")
+    public ResponseEntity<?> saveDailyHealthLog(@RequestHeader("X-User-Id") Long userId,
+                                                @RequestParam LocalDate date,
+                                                @RequestBody DailyHealthLogRequest request) {
+        try {
+            return ResponseEntity.ok(healthManagementService.saveDailyLog(userId, date, request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/daily-logs/meal-review")
+    public ResponseEntity<?> reviewDailyMeal(@RequestHeader("X-User-Id") Long userId,
+                                              @RequestParam LocalDate date) {
+        try {
+            return ResponseEntity.ok(healthManagementService.reviewDailyMeal(userId, date));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/daily-logs/exercise-review")
+    public ResponseEntity<?> reviewDailyExercise(@RequestHeader("X-User-Id") Long userId,
+                                                  @RequestParam LocalDate date) {
+        try {
+            return ResponseEntity.ok(healthManagementService.reviewDailyExercise(userId, date));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/missions/today")
+    public ResponseEntity<List<Map<String, Object>>> getTodayMissions(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(healthManagementService.getTodayMissions(userId));
+    }
+
+    @PatchMapping("/missions/{id}/complete")
+    public ResponseEntity<?> completeMission(@RequestHeader("X-User-Id") Long userId,
+                                             @PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(healthManagementService.completeMission(userId, id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
         }
     }
 

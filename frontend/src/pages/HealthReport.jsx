@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts';
 import { healthAPI, insuranceAPI } from '../api/services';
+import { openPrintPopup } from '../utils/printPage';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -15,6 +20,7 @@ const P = {
   search:   (<><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></>),
   check:    (<path d="M3 8.5 6.5 12 13 4"/>),
   chev:     (<path d="M4 6l4 4 4-4"/>),
+  print:    (<><path d="M5 6V2h6v4"/><rect x="3" y="6" width="10" height="6" rx="1.5"/><path d="M5 11h6v3H5z"/><path d="M11.5 8h.01"/></>),
 };
 
 const RISK_COLOR = { '나쁨': '#9A6060', '보통': '#8A7040', '좋음': '#2F6FE8', '-': 'var(--text-2)' };
@@ -193,6 +199,67 @@ const healthAgeFactorLine = (factor) => (
   )
 );
 
+const buildCheckupTrend = (checkups, hba1cResults) => {
+  const dates = [...new Set([
+    ...checkups.map((item) => item.checkupDate),
+    ...hba1cResults.map((item) => item.testDate),
+  ].filter(Boolean))]
+    .sort((a, b) => String(b).localeCompare(String(a)))
+    .slice(0, 6);
+  const rows = [
+    { key: 'glucose', label: '공복혈당', unit: 'mg/dL', reference: '100 미만', value: (item) => item?.glucose },
+    { key: 'hba1c', label: '당화혈색소', unit: '%', reference: '5.7 미만 참고', value: (item) => item?.hba1c },
+    { key: 'bloodPressure', label: '혈압', unit: 'mmHg', reference: '120/80 미만 참고', value: (item) => (
+      item?.bloodPressureSystolic == null && item?.bloodPressureDiastolic == null
+        ? null
+        : `${item.bloodPressureSystolic ?? '-'}/${item.bloodPressureDiastolic ?? '-'}`
+    ) },
+    { key: 'bmi', label: 'BMI', unit: 'kg/m²', reference: '개인별 기준 확인', value: (item) => item?.bmi },
+    { key: 'waist', label: '허리둘레', unit: 'cm', reference: '남 90 / 여 85 미만 참고', value: (item) => item?.waist },
+    { key: 'triglycerides', label: '중성지방', unit: 'mg/dL', reference: '150 미만 참고', value: (item) => item?.triglycerides },
+    { key: 'hdl', label: 'HDL 콜레스테롤', unit: 'mg/dL', reference: '남 40 / 여 50 이상 참고', value: (item) => item?.hdlCholesterol },
+  ].map((row) => {
+    const values = dates.map((date) => {
+      if (row.key === 'hba1c') {
+        const result = hba1cResults.find((item) => item.testDate === date);
+        return result?.value ?? null;
+      }
+      const checkup = checkups.find((item) => item.checkupDate === date);
+      return row.value(checkup) ?? null;
+    });
+    const numericValues = values.filter((value) => value != null && Number.isFinite(Number(value)));
+    const change = numericValues.length >= 2
+      ? Number(numericValues[0]) - Number(numericValues[1])
+      : null;
+    return { ...row, values, change };
+  }).filter((row) => row.values.some((value) => value != null));
+  return { dates, rows };
+};
+
+const RISK_TREND_KEY = {
+  STROKE: 'stroke',
+  DIABETES: 'diabetes',
+  CARDIO: 'cardio',
+};
+
+const buildRiskTrend = (predictions) => {
+  const byYear = {};
+  predictions.forEach((prediction) => {
+    const key = RISK_TREND_KEY[prediction.predictionType];
+    if (!key) return;
+    const compares = Array.isArray(prediction.compares) && prediction.compares.length > 0
+      ? prediction.compares
+      : [{ year: new Date().getFullYear(), predictedState: prediction.riskRatio }];
+    compares.forEach((item) => {
+      const year = String(item.year || '').slice(0, 4);
+      if (!year) return;
+      if (!byYear[year]) byYear[year] = { year };
+      byYear[year][key] = parseNumber(item.predictedState ?? item.riskRatio) || 0;
+    });
+  });
+  return Object.values(byYear).sort((a, b) => String(a.year).localeCompare(String(b.year))).slice(-3);
+};
+
 const LinkBtn = ({ onClick, children }) => (
   <button onClick={onClick} style={{
     background: 'none',
@@ -208,29 +275,129 @@ const LinkBtn = ({ onClick, children }) => (
 );
 
 const Metric = ({ label, value, sub, tone }) => (
-  <div style={{
-    minWidth: 0,
-    padding: '12px 14px',
-    border: '1px solid var(--border)',
-    borderRadius: 6,
-    background: '#FAFBFD',
-  }}>
-    <div className="mc-field-label">{label}</div>
-    <div style={{
-      marginTop: 5,
-      fontSize: 20,
-      fontWeight: 800,
-      color: tone || 'var(--text-1)',
-      letterSpacing: '-0.3px',
-    }}>
-      {value}
-    </div>
-    {sub && <div className="mc-card-sub" style={{ marginTop: 2 }}>{sub}</div>}
+  <div className="mc-report-metric">
+    <div className="mc-report-metric-label">{label}</div>
+    <div className="mc-report-metric-value" style={{ color: tone || 'var(--text-1)' }}>{value}</div>
+    {sub && <div className="mc-report-metric-sub">{sub}</div>}
   </div>
 );
 
+const HEALTH_MBTI_QUESTIONS = [
+  {
+    key: 'meal',
+    title: '평소 식사는 어떤 편인가요?',
+    options: [
+      { value: 'fresh', label: '균형 있게 챙겨요', desc: '채소, 단백질, 탄수화물을 비교적 고르게 먹어요.' },
+      { value: 'quick', label: '간편식이 잦아요', desc: '바쁠 때 외식이나 간편식으로 해결하는 편이에요.' },
+      { value: 'skip', label: '끼니를 자주 놓쳐요', desc: '식사 시간이 불규칙하고 거르는 날이 있어요.' },
+    ],
+  },
+  {
+    key: 'protein',
+    title: '단백질 섭취는 충분한 편인가요?',
+    options: [
+      { value: 'protein_ok', label: '매끼 조금씩 챙겨요', desc: '달걀, 생선, 두부, 고기, 콩류를 자주 먹어요.' },
+      { value: 'protein_low', label: '탄수화물 위주가 많아요', desc: '밥, 면, 빵으로 때우는 날이 잦아요.' },
+      { value: 'protein_unsure', label: '잘 모르겠어요', desc: '특별히 계산해서 먹지는 않아요.' },
+    ],
+  },
+  {
+    key: 'activity',
+    title: '활동량은 어느 쪽에 가까운가요?',
+    options: [
+      { value: 'active', label: '주 3회 이상 움직여요', desc: '운동이나 걷기를 의식적으로 해요.' },
+      { value: 'light', label: '가벼운 산책 정도예요', desc: '꾸준하진 않지만 움직이려고 해요.' },
+      { value: 'still', label: '앉아있는 시간이 길어요', desc: '하루 대부분을 책상 앞에서 보내요.' },
+    ],
+  },
+  {
+    key: 'sleep',
+    title: '수면 리듬은 어떤가요?',
+    options: [
+      { value: 'regular', label: '비교적 규칙적이에요', desc: '자는 시간과 일어나는 시간이 안정적이에요.' },
+      { value: 'late', label: '늦게 자는 편이에요', desc: '야간 활동이나 작업이 많은 편이에요.' },
+      { value: 'short', label: '수면 시간이 부족해요', desc: '피로가 누적되는 날이 많아요.' },
+    ],
+  },
+  {
+    key: 'stress',
+    title: '스트레스 관리는 어떤 편인가요?',
+    options: [
+      { value: 'release', label: '해소 루틴이 있어요', desc: '산책, 취미, 휴식으로 풀어요.' },
+      { value: 'hold', label: '참다가 한 번에 풀어요', desc: '쌓인 뒤에야 쉬는 편이에요.' },
+      { value: 'high', label: '요즘 계속 높은 편이에요', desc: '긴장 상태가 오래 이어져요.' },
+    ],
+  },
+  {
+    key: 'mood',
+    title: '최근 2주간 마음 상태는 어떤가요?',
+    options: [
+      { value: 'mood_ok', label: '대체로 괜찮아요', desc: '기분이 크게 무너지지는 않아요.' },
+      { value: 'anxious', label: '걱정과 긴장이 많아요', desc: '생각이 많고 쉽게 쉬지 못해요.' },
+      { value: 'down', label: '의욕이 낮은 날이 많아요', desc: '흥미가 줄거나 무기력한 날이 많아요.' },
+    ],
+  },
+];
+
+const getHealthMbtiResult = (answers) => {
+  const values = Object.values(answers);
+  const routineScore = ['fresh', 'regular', 'release'].filter((v) => values.includes(v)).length;
+  const activeScore = ['active', 'light'].includes(answers.activity) ? 1 : 0;
+  const nourishScore = ['fresh', 'protein_ok'].filter((v) => values.includes(v)).length;
+  const pressureScore = ['quick', 'skip', 'protein_low', 'late', 'short', 'hold', 'high', 'anxious', 'down'].filter((v) => values.includes(v)).length;
+  const type = `${routineScore >= 2 ? 'R' : 'F'}${activeScore ? 'A' : 'S'}${nourishScore >= 2 ? 'N' : 'T'}${pressureScore >= 3 ? 'P' : 'B'}`;
+
+  const nutrients = [];
+  if (['protein_low', 'protein_unsure'].includes(answers.protein) || ['quick', 'skip'].includes(answers.meal)) {
+    nutrients.push({ name: '단백질', reason: '식사가 불규칙하거나 탄수화물 위주일 때 부족해지기 쉬워요.', supplement: '두부, 달걀, 생선, 단백질 보충식' });
+  }
+  if (['high', 'hold'].includes(answers.stress) || ['short', 'late'].includes(answers.sleep)) {
+    nutrients.push({ name: '마그네슘', reason: '긴장과 수면 부족이 반복될 때 관리 후보가 될 수 있어요.', supplement: '견과류, 녹색 채소, 마그네슘' });
+  }
+  if (answers.activity === 'still') {
+    nutrients.push({ name: '비타민 D', reason: '활동량과 야외 노출이 줄면 부족 신호가 생기기 쉬워요.', supplement: '낮 시간 산책, 비타민 D' });
+  }
+  if (nutrients.length === 0) {
+    nutrients.push({ name: '기본 균형 유지', reason: '현재 응답상 큰 결핍 신호는 적어요.', supplement: '수분, 단백질, 채소 섭취 유지' });
+  }
+
+  const needsRecovery = type.endsWith('P');
+  const isStill = type[1] === 'S';
+  const isBalanced = type.includes('R') && type.includes('A') && type.includes('N') && type.includes('B');
+  const base = isBalanced ? {
+    title: '루틴 밸런서형',
+    tone: 'blue',
+    summary: '식사, 활동, 휴식의 기본 루틴이 안정적인 편이에요.',
+    tips: ['정기 검진 수치를 계속 추적해보세요.', '근력 운동을 조금 더하면 균형이 좋아져요.', '무리한 관리보다 지속 가능한 습관을 유지하세요.'],
+  } : needsRecovery ? {
+    title: '회복 우선형',
+    tone: 'amber',
+    summary: '건강 관리보다 피로와 스트레스 회복이 먼저 필요한 타입이에요.',
+    tips: ['수면 시간을 먼저 고정해보세요.', '카페인 시간을 조금 앞당겨보세요.', '하루 10분 산책처럼 작은 회복 루틴부터 시작하세요.'],
+  } : isStill ? {
+    title: '저활동 보완형',
+    tone: 'green',
+    summary: '식습관은 괜찮아도 활동량이 부족해지기 쉬운 타입이에요.',
+    tips: ['식후 10분 걷기를 붙여보세요.', '엘리베이터 대신 계단 1층부터 시작해보세요.', '주 2회 가벼운 근력 루틴을 추천해요.'],
+  } : {
+    title: '습관 리빌드형',
+    tone: 'violet',
+    summary: '좋은 습관과 흔들리는 습관이 섞여 있어 재정비 효과가 큰 타입이에요.',
+    tips: ['식사, 수면, 활동 중 하나만 먼저 고정해보세요.', '주간 목표를 작게 잡으면 성공률이 높아요.', '건강 리포트의 변화를 한 달 단위로 확인해보세요.'],
+  };
+
+  const mindHealth = answers.mood === 'down'
+    ? '우울감이나 무기력이 2주 이상 이어진다면 혼자 버티기보다 상담센터나 전문가 상담을 권장해요. 이 결과는 진단이 아니라 도움 신호예요.'
+    : answers.mood === 'anxious'
+      ? '걱정과 긴장이 오래 지속된다면 짧은 안정 루틴을 만들고, 일상 기능이 흔들리면 상담을 받아보는 것이 좋아요.'
+      : '마음 건강 신호는 비교적 안정적으로 보여요. 지금의 회복 루틴을 유지해보세요.';
+
+  return { type, ...base, nutrients: nutrients.slice(0, 3), mindHealth };
+};
+
 const HealthReport = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     visits: 0,
@@ -245,18 +412,24 @@ const HealthReport = () => {
   const [deptPattern, setDeptPattern] = useState([]);
   const [diagKeywords, setDiagKeywords] = useState([]);
   const [predictions, setPredictions] = useState([]);
+  const [checkupTrend, setCheckupTrend] = useState({ dates: [], rows: [] });
+  const [riskTrend, setRiskTrend] = useState([]);
   const [healthAge, setHealthAge] = useState(null);
   const [insights, setInsights] = useState([]);
   const [loadWarning, setLoadWarning] = useState('');
   const [expandedRisk, setExpandedRisk] = useState(null);
-  const [healthAgeOpen, setHealthAgeOpen] = useState(false);
+  const [showHealthAgeModal, setShowHealthAgeModal] = useState(false);
+  const [showMbtiModal, setShowMbtiModal] = useState(false);
+  const [mbtiStep, setMbtiStep] = useState(0);
+  const [mbtiAnswers, setMbtiAnswers] = useState({});
+  const [mbtiResult, setMbtiResult] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setLoadWarning('');
       try {
-        const [records, checkups, preds, hAge, comparisons] = await Promise.all([
+        const [records, checkups, preds, hAge, comparisons, hba1cResults] = await Promise.all([
           healthAPI.getMedicalRecords().catch(() => {
             setLoadWarning('일부 건강 데이터를 불러오지 못했습니다.');
             return [];
@@ -265,6 +438,7 @@ const HealthReport = () => {
           healthAPI.getDiseasePredictions().catch(() => []),
           healthAPI.getHealthAge().catch(() => null),
           insuranceAPI.getCoverageComparison().catch(() => []),
+          healthAPI.getHba1cResults().catch(() => []),
         ]);
 
         const cutoff = new Date();
@@ -358,7 +532,10 @@ const HealthReport = () => {
             latestPredictions[key] = prediction;
           }
         });
-        setPredictions(Object.values(latestPredictions));
+        const predictionList = Object.values(latestPredictions);
+        setPredictions(predictionList);
+        setCheckupTrend(buildCheckupTrend(checkups, hba1cResults));
+        setRiskTrend(buildRiskTrend(predictionList));
         setHealthAge(hAge);
 
         const next = [];
@@ -378,14 +555,20 @@ const HealthReport = () => {
             path: '/insurance-plan',
           });
         }
-        if (!latestCheckup?.checkupDate || (Date.now() - new Date(latestCheckup.checkupDate)) / 86400000 > 365) {
+        if (!latestCheckup?.checkupDate) {
           next.push({
             icon: P.calendar,
             title: '건강검진 기록 확인',
-            text: '최근 검진 데이터가 부족하거나 1년 이상 지난 상태일 수 있습니다.',
+            text: '검진 기록을 연결하면 수치 변화와 건강 지표를 더 정확히 확인할 수 있습니다.',
             path: '/checkup',
           });
         }
+        next.push({
+          icon: P.check,
+          title: '매일 건강 습관 기록하기',
+          text: '검진 사이에도 식사와 운동을 기록하고 오늘의 건강 미션을 이어가세요.',
+          path: '/health-management',
+        });
         if (next.length === 0) {
           next.push({
             icon: P.check,
@@ -412,30 +595,94 @@ const HealthReport = () => {
     || healthAge
     || stats.gaps > 0;
 
-  const summaryText = (() => {
-    if (!hasAnyData) return '아직 최근 12개월 건강 데이터가 충분하지 않습니다.';
-    const parts = [];
-    if (stats.topDepartment !== '-') parts.push(`${stats.topDepartment} 방문이 가장 많았고`);
-    if (stats.topDiagnosis !== '-') parts.push(`${stats.topDiagnosis} 기록이 반복해서 보입니다`);
-    if (stats.lastCheckupHeadline) parts.push(`최근 검진 소견은 "${stats.lastCheckupHeadline}"입니다`);
-    if (stats.gaps > 0) parts.push(`보험 보장 ${stats.gaps}개는 추가 확인이 필요합니다`);
-    return parts.length > 0 ? `${parts.join(', ')}.` : '최근 12개월 건강 활동을 한눈에 정리했습니다.';
+  const summaryItems = (() => {
+    if (!hasAnyData) {
+      return [{ label: '데이터', value: '대기 중', text: '최근 12개월 건강 데이터가 아직 충분하지 않습니다.' }];
+    }
+    const items = [];
+    if (stats.topDepartment !== '-') {
+      items.push({ label: '주요 방문', value: stats.topDepartment });
+    }
+    if (stats.topDiagnosis !== '-') {
+      items.push({ label: '반복 기록', value: stats.topDiagnosis });
+    }
+    if (stats.lastCheckupHeadline) {
+      items.push({ label: '검진 소견', value: stats.lastCheckupHeadline });
+    }
+    if (stats.gaps > 0) {
+      items.push({ label: '보험 점검', value: `${stats.gaps}개`, tone: 'warn' });
+    }
+    return items.length > 0
+      ? items
+      : [{ label: '요약', value: '활동 안정', text: '최근 12개월 건강 활동이 안정적으로 정리되었습니다.' }];
   })();
 
   const healthAgeDiff = healthAge && healthAge.biologicalAge != null && healthAge.chronologicalAge != null
     ? Number(healthAge.biologicalAge) - Number(healthAge.chronologicalAge)
     : null;
+  const healthAgeGuidance = healthAgeDiff == null
+    ? ''
+    : healthAgeDiff <= 0
+      ? '좋은 흐름이에요. 지금처럼 식사, 활동, 수면 리듬을 꾸준히 유지해보세요.'
+      : '건강 관리 신호가 보여요. 혈압, 혈당, 체중 지표부터 차분히 점검해보세요.';
 
   const healthAgeFactors = Array.isArray(healthAge?.factors) ? healthAge.factors : [];
+  const currentMbtiQuestion = HEALTH_MBTI_QUESTIONS[mbtiStep];
+  const mbtiProgress = Math.round(((mbtiStep + 1) / HEALTH_MBTI_QUESTIONS.length) * 100);
+
+  const openMbtiSurvey = () => {
+    if (!mbtiResult) {
+      setMbtiStep(0);
+      setMbtiAnswers({});
+    }
+    setShowMbtiModal(true);
+  };
+
+  const selectMbtiAnswer = (value) => {
+    const nextAnswers = { ...mbtiAnswers, [currentMbtiQuestion.key]: value };
+    setMbtiAnswers(nextAnswers);
+    if (mbtiStep < HEALTH_MBTI_QUESTIONS.length - 1) {
+      setMbtiStep((step) => step + 1);
+      return;
+    }
+    setMbtiResult(getHealthMbtiResult(nextAnswers));
+  };
+
+  const resetMbtiSurvey = () => {
+    setMbtiResult(null);
+    setMbtiAnswers({});
+    setMbtiStep(0);
+  };
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('mbti') === '1') {
+      openMbtiSurvey();
+    }
+  }, [location.search]);
+
+  const handlePDFDownload = () => {
+    openPrintPopup('MediCatch 건강 리포트');
+  };
 
   return (
+    <>
     <div className="mc-page fade-in">
       <div className="mc-page-top">
         <div>
-          <div className="mc-page-title">12개월 건강 리포트</div>
-          <div className="mc-page-subtitle">최근 1년간의 진료, 검진, 보험 점검 흐름을 한 곳에서 확인하세요.</div>
+          <div className="mc-page-title">건강 리포트</div>
+          <div className="mc-page-subtitle">진료, 검진, 보험 점검 흐름을 한 곳에서 확인하세요.</div>
+        </div>
+        <div className="mc-page-top-right">
+          <button className="mc-btn mc-health-mbti-top-btn" type="button" onClick={openMbtiSurvey}>
+            건강 MBTI
+          </button>
+          <button className="mc-btn mc-btn-primary" type="button" onClick={handlePDFDownload}>
+            <Ic d={P.print} size={12}/> PDF 출력하기
+          </button>
         </div>
       </div>
+
+      <MobileNavMenu />
 
       {loading ? (
         <div className="mc-alert mc-alert-blue" style={{ marginTop: 8 }}>
@@ -470,8 +717,8 @@ const HealthReport = () => {
             <div className="mc-sec-head">
               <span className="mc-sec-title">최근 12개월 요약</span>
             </div>
-            <div className="mc-card mc-card-body-lg">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+            <div className="mc-card mc-report-summary-card mc-report-panel">
+              <div className="mc-report-metric-grid">
                 <Metric label="진료" value={`${stats.visits}회`} sub="병원 방문" />
                 <Metric label="검진" value={`${stats.checkups}건`} sub="건강검진" />
                 <Metric label="처방" value={`${stats.prescriptions}건`} sub="약국 기록" />
@@ -482,16 +729,68 @@ const HealthReport = () => {
                   tone={stats.gaps > 0 ? '#9A6060' : '#2F6FE8'}
                 />
               </div>
-              <div style={{
-                marginTop: 16,
-                paddingTop: 16,
-                borderTop: '1px solid var(--border-soft)',
-                fontSize: 14,
-                lineHeight: 1.65,
-                color: 'var(--text-1)',
-              }}>
-                {summaryText}
+              <div className="mc-report-insight-grid">
+                {summaryItems.map((item) => (
+                  <div key={`${item.label}-${item.value}`} className={`mc-report-insight ${item.tone || ''}`}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    {item.text && <small>{item.text}</small>}
+                  </div>
+                ))}
               </div>
+            </div>
+          </section>
+
+          <section className="mc-report-hero-chart">
+            <div className="mc-sec-head">
+              <span className="mc-sec-title">검진 수치 추이</span>
+              <span className="mc-card-sub">건강검진 기록에서 가져온 변화 흐름입니다.</span>
+            </div>
+
+            <div className="mc-card mc-card-body mc-report-chart-card">
+              {checkupTrend.dates.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '48px 12px', fontSize: 13 }}>
+                  건강검진 또는 당화혈색소 기록을 등록하면 날짜별 추이를 볼 수 있습니다.
+                </div>
+              ) : (
+                <>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="mc-tbl" style={{ minWidth: 760 }}>
+                      <thead>
+                        <tr>
+                          <th>항목</th>
+                          <th>단위</th>
+                          <th>참고 범위</th>
+                          {checkupTrend.dates.map((date) => <th key={date}>{date}</th>)}
+                          <th>최근 변화</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {checkupTrend.rows.map((row) => (
+                          <tr key={row.key}>
+                            <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{row.label}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{row.unit}</td>
+                            <td style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{row.reference}</td>
+                            {row.values.map((value, index) => (
+                              <td key={`${row.key}-${checkupTrend.dates[index]}`}>
+                                {value == null ? '-' : Number.isFinite(Number(value)) ? Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) : value}
+                              </td>
+                            ))}
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {row.change == null ? '-'
+                                : `${row.change > 0 ? '+' : ''}${row.change.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mc-card-sub" style={{ marginTop: 12 }}>
+                    최근 6개 검사일 기준입니다. 참고 범위는 일반적인 안내이며 개인별 결과 해석은 의료진과 상담하세요.
+                    <LinkBtn onClick={() => navigate('/health-management')}>혈당 관리 보기 →</LinkBtn>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
@@ -502,192 +801,61 @@ const HealthReport = () => {
                   <span className="mc-sec-title">검진 기반 건강 지표</span>
                   <LinkBtn onClick={() => navigate('/checkup')}>검진 기록 보기 →</LinkBtn>
                 </div>
-                <div className="mc-card mc-card-body">
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.1fr)', gap: 18 }}>
-                    <div>
-                      <div className="mc-field-label">건강나이</div>
+                <div className="mc-card mc-card-body mc-report-panel mc-report-info-card mc-report-health-age-card">
+                  <div className="mc-report-health-age-inner">
+                    <div className="mc-report-health-age-main">
                       {healthAge && healthAge.biologicalAge != null ? (
                         <>
-                          <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-1)' }}>
-                              {healthAge.biologicalAge}세
-                            </span>
-                            {healthAgeDiff != null && (
-                              <span style={{
-                                fontSize: 13,
-                                fontWeight: 700,
-                                color: healthAgeDiff > 0 ? '#9A6060' : '#2F6FE8',
-                              }}>
-                                {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '실제 나이와 동일'}
+                          <div className="mc-report-health-age-primary">
+                            <div className="mc-field-label">건강나이</div>
+                            <div className="mc-report-health-age-value">
+                              <span>
+                                {healthAge.biologicalAge}세
                               </span>
+                              {healthAgeDiff != null && (
+                                <b className={healthAgeDiff > 0 ? 'warn' : 'good'}>
+                                  {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '동일'}
+                                </b>
+                              )}
+                            </div>
+                            {healthAge.summaryNote && (
+                              <div className="mc-report-health-age-note">
+                                {healthAge.summaryNote}
+                              </div>
+                            )}
+                            {healthAgeGuidance && (
+                              <div className={`mc-report-health-age-guidance ${healthAgeDiff > 0 ? 'warn' : 'good'}`}>
+                                {healthAgeGuidance}
+                              </div>
                             )}
                           </div>
-                          {healthAge.summaryNote && (
-                            <div className="mc-card-sub" style={{ marginTop: 8, lineHeight: 1.5 }}>
-                              {healthAge.summaryNote}
+                          <div className="mc-report-health-age-side">
+                            {healthAge.chronologicalAge != null && (
+                              <div className="mc-report-health-age-meta">
+                                <span>실제 나이</span>
+                                <strong>{healthAge.chronologicalAge}세</strong>
+                              </div>
+                            )}
+                            <div className="mc-report-health-age-meta">
+                              <span>나이 차이</span>
+                              <strong className={healthAgeDiff > 0 ? 'warn' : 'good'}>
+                                {healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '0세'}
+                              </strong>
                             </div>
-                          )}
-                          {(healthAge.detailMessage || healthAge.changeAfterMessage || healthAgeFactors.length > 0) && (
-                            <button
-                              type="button"
-                              onClick={() => setHealthAgeOpen((open) => !open)}
-                              className="mc-sec-link"
-                              style={{ marginTop: 10 }}
-                            >
-                              건강나이 이유 보기
-                              <span style={{ transform: healthAgeOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
-                                <Ic d={P.chev} size={11}/>
-                              </span>
-                            </button>
-                          )}
+                            {(healthAge.detailMessage || healthAge.changeAfterMessage || healthAgeFactors.length > 0) && (
+                              <button
+                                type="button"
+                                onClick={() => setShowHealthAgeModal(true)}
+                                className="mc-report-health-age-link"
+                              >
+                                건강나이 이유 보기
+                                <Ic d={P.arrow} size={11}/>
+                              </button>
+                            )}
+                          </div>
                         </>
                       ) : (
                         <div className="mc-card-sub" style={{ marginTop: 12 }}>건강나이 데이터가 없어요.</div>
-                      )}
-
-                      {healthAgeOpen && (
-                        <div className="mc-stack-xs" style={{
-                          marginTop: 12,
-                          paddingTop: 12,
-                          borderTop: '1px solid var(--border-soft)',
-                        }}>
-                          {healthAge.detailMessage && (
-                            <div className="mc-card-sub" style={{ lineHeight: 1.55 }}>{healthAge.detailMessage}</div>
-                          )}
-                          {healthAgeFactors.slice(0, 5).map((factor, index) => {
-                            const line = healthAgeFactorLine(factor);
-                            if (!line) return null;
-                            return (
-                              <div key={`${line}-${index}`} className="mc-kv" style={{ alignItems: 'flex-start' }}>
-                                <span className="mc-kv-key">요인 {index + 1}</span>
-                                <span className="mc-kv-val" style={{ textAlign: 'right', lineHeight: 1.45 }}>{line}</span>
-                              </div>
-                            );
-                          })}
-                          {healthAge.changeAfterMessage && (
-                            <div className="mc-alert mc-alert-blue" style={{ marginTop: 4 }}>
-                              <div>
-                                <div className="mc-alert-title">개선 시 변화</div>
-                                <div className="mc-alert-body">{healthAge.changeAfterMessage}</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="mc-field-label">질병 위험도</div>
-                      {predictions.length === 0 ? (
-                        <div className="mc-card-sub" style={{ marginTop: 12 }}>질병 예측 데이터가 없어요.</div>
-                      ) : (
-                        <div className="mc-stack-xs" style={{ marginTop: 10 }}>
-                          {predictions.map((prediction) => {
-                            const grade = gradeFromPrediction(prediction);
-                            const factors = Array.isArray(prediction.factors) ? prediction.factors : [];
-                            const compares = Array.isArray(prediction.compares) ? prediction.compares : [];
-                            const key = prediction.predictionType;
-                            const preview = factors.map(factorLine).filter(Boolean).slice(0, 2);
-                            const isOpen = expandedRisk === key;
-                            const needsCareCount = factors.filter((factor) => factorSeverity(factor) === '나쁨').length;
-
-                            return (
-                              <div key={key} style={{ borderBottom: '1px solid var(--border-soft)', paddingBottom: 8 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedRisk(isOpen ? null : key)}
-                                  style={{
-                                    width: '100%',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    padding: 0,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: 10,
-                                    textAlign: 'left',
-                                  }}
-                                >
-                                  <span style={{ minWidth: 0 }}>
-                                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-                                      {DISEASE_KR[key] || key}
-                                    </span>
-                                    {preview.length > 0 && (
-                                      <span className="mc-card-sub" style={{ marginTop: 2, display: 'block' }}>
-                                        관리 요인: {compactList(preview)}
-                                      </span>
-                                    )}
-                                  </span>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-                                    <RiskBadge grade={grade} />
-                                    <span style={{ color: 'var(--text-3)', transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
-                                      <Ic d={P.chev} size={12}/>
-                                    </span>
-                                  </span>
-                                </button>
-
-                                {isOpen && (
-                                  <div className="mc-stack-xs" style={{ marginTop: 10 }}>
-                                    <div className="mc-card-sub" style={{ lineHeight: 1.5 }}>
-                                      전체 예측 위험도는 현재 수치 기준으로 판단하고, 아래 항목은 위험도에 영향을 주는 개별 관리 요인입니다.
-                                      {needsCareCount > 0 ? ` 관리 필요 요인 ${needsCareCount}개가 확인됐습니다.` : ''}
-                                    </div>
-                                    {factors.length > 0 ? (
-                                      factors.slice(0, 5).map((factor, index) => {
-                                        const line = factorLine(factor);
-                                        if (!line) return null;
-                                        const status = factorStatusLabel(factor);
-                                        return (
-                                          <div
-                                            key={`${line}-${index}`}
-                                            style={{
-                                              display: 'grid',
-                                              gridTemplateColumns: '74px minmax(0, 1fr)',
-                                              gap: 12,
-                                              alignItems: 'start',
-                                            }}
-                                          >
-                                            <FactorStatus status={status !== '요인' ? status : `요인 ${index + 1}`} />
-                                            <span style={{
-                                              minWidth: 0,
-                                              fontSize: 13,
-                                              fontWeight: 700,
-                                              color: 'var(--text-1)',
-                                              lineHeight: 1.45,
-                                              wordBreak: 'keep-all',
-                                            }}>
-                                              {line}
-                                            </span>
-                                          </div>
-                                        );
-                                      })
-                                    ) : (
-                                      <div className="mc-card-sub">상세 위험요인 데이터가 없어요.</div>
-                                    )}
-                                    {compares.length > 0 && (
-                                      <div style={{
-                                        marginTop: 6,
-                                        padding: '10px 12px',
-                                        borderRadius: 6,
-                                        background: '#FAFBFD',
-                                        border: '1px solid var(--border-soft)',
-                                      }}>
-                                        <div className="mc-field-label" style={{ marginBottom: 6 }}>향후 예측 참고</div>
-                                        <div className="mc-card-sub" style={{ lineHeight: 1.5 }}>
-                                          {compares.map((item) => `${item.year}년 ${item.predictedState}`).join(' → ')}
-                                        </div>
-                                        <div className="mc-card-sub" style={{ lineHeight: 1.5, marginTop: 4 }}>
-                                          현재 검진 데이터를 바탕으로 한 참고용 변화입니다.
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
                       )}
                     </div>
                   </div>
@@ -699,7 +867,7 @@ const HealthReport = () => {
                   <span className="mc-sec-title">건강 활동 패턴</span>
                   <LinkBtn onClick={() => navigate('/medical-records')}>진료 기록 보기 →</LinkBtn>
                 </div>
-                <div className="mc-card mc-card-body">
+                <div className="mc-card mc-card-body mc-report-panel mc-report-info-card">
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
                     <div>
                       <div className="mc-field-label">자주 방문한 진료과</div>
@@ -739,108 +907,304 @@ const HealthReport = () => {
             </div>
           </section>
 
-          <section>
+          <section className="mc-print-hide mc-health-mbti-section">
             <div className="mc-sec-head">
-              <span className="mc-sec-title">월별 활동 흐름</span>
-              <span className="mc-card-sub">활동이 있는 달만 표시합니다.</span>
+              <span className="mc-sec-title">건강 MBTI</span>
+              <span className="mc-card-sub">생활습관 기반 건강 타입을 확인하세요.</span>
             </div>
-            <div className="mc-card mc-card-body">
-              {timeline.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '28px 0', fontSize: 13 }}>
-                  최근 12개월 활동 내역이 없어요.
+            <div className="mc-card mc-health-mbti-card mc-health-mbti-wide">
+              <div className="mc-health-mbti-orb">{mbtiResult ? mbtiResult.type : 'MBTI'}</div>
+              <div className="mc-health-mbti-body">
+                <div className="mc-health-mbti-copy">
+                  <div className="mc-health-mbti-kicker">생활습관 설문</div>
+                  <div className="mc-health-mbti-title">{mbtiResult ? mbtiResult.title : '나의 건강 타입'}</div>
+                  <p>{mbtiResult ? mbtiResult.summary : '식습관, 활동량, 수면 리듬을 선택하고 나의 건강 타입을 확인해보세요.'}</p>
                 </div>
-              ) : (
-                <div className="mc-stack-xs">
-                  {timeline.map((month) => {
-                    const topDepartments = Object.entries(month.departments)
-                      .sort((a, b) => b[1] - a[1])
-                      .slice(0, 2)
-                      .map(([department, count]) => `${department} ${count}`);
-                    return (
-                      <div
-                        key={month.ym}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '100px minmax(0, 1fr) minmax(160px, auto)',
-                          gap: 12,
-                          alignItems: 'center',
-                          padding: '8px 0',
-                          borderBottom: '1px solid var(--border-soft)',
-                        }}
-                      >
-                        <span className="mc-kv-key" style={{ whiteSpace: 'nowrap' }}>{fmtYM(month.ym)}</span>
-                        <div className="mc-row-wrap" style={{ gap: 6 }}>
-                          {month.visits > 0 && (
-                            <span className="mc-tag mc-tag-blue">진료 {month.visits}</span>
-                          )}
-                          {month.prescriptions > 0 && (
-                            <span className="mc-tag mc-tag-success">처방 {month.prescriptions}</span>
-                          )}
-                          {month.checkups > 0 && (
-                            <span className="mc-tag mc-tag-warning">검진 {month.checkups}</span>
-                          )}
-                          {month.total === 0 && (
-                            <span className="mc-card-sub">활동 없음</span>
-                          )}
-                        </div>
-                        <div
-                          className="mc-card-sub"
-                          style={{
-                            textAlign: 'right',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {compactList(topDepartments)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                <button className="mc-btn mc-btn-primary" type="button" onClick={openMbtiSurvey}>
+                  {mbtiResult ? '결과 보기' : '설문 시작하기'}
+                </button>
+              </div>
             </div>
           </section>
 
           <section>
             <div className="mc-sec-head">
-              <span className="mc-sec-title">다음 확인할 것</span>
+              <span className="mc-sec-title">질병 위험도 및 추이</span>
+              <span className="mc-card-sub">현재 위험도와 연도별 변화를 함께 확인하세요.</span>
             </div>
-            <div className="mc-grid-auto-md">
-              {insights.map((item, index) => (
-                <button
-                  key={`${item.title}-${index}`}
-                  className="mc-card mc-card-head"
-                  style={{ padding: '16px', cursor: 'pointer', textAlign: 'left', alignItems: 'flex-start' }}
-                  onClick={() => navigate(item.path)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
-                    <div style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 6,
-                      background: 'var(--blue-soft)',
-                      color: 'var(--blue)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <Ic d={item.icon} size={14}/>
+            <div className="mc-two-col mc-report-risk-grid" style={{ gridTemplateColumns: 'minmax(320px, 0.85fr) minmax(0, 1.35fr)' }}>
+              <div className="mc-stack-sm">
+                <div className="mc-card mc-card-body mc-report-panel mc-report-risk-list-card">
+                  <div className="mc-field-label" style={{ marginBottom: 12 }}>질병 위험도</div>
+                  {predictions.length === 0 ? (
+                    <div className="mc-card-sub" style={{ padding: '36px 0', textAlign: 'center' }}>
+                      질병 예측 데이터가 없어요.
                     </div>
-                    <div>
-                      <div className="mc-card-title" style={{ fontSize: 13.5 }}>{item.title}</div>
-                      <div className="mc-card-sub" style={{ marginTop: 4, lineHeight: 1.5 }}>{item.text}</div>
+                  ) : (
+                    <div className="mc-stack-xs">
+                      {predictions.map((prediction) => {
+                        const grade = gradeFromPrediction(prediction);
+                        const factors = Array.isArray(prediction.factors) ? prediction.factors : [];
+                        const compares = Array.isArray(prediction.compares) ? prediction.compares : [];
+                        const key = prediction.predictionType;
+                        const preview = factors.map(factorLine).filter(Boolean).slice(0, 2);
+                        const isOpen = expandedRisk === key;
+                        const needsCareCount = factors.filter((factor) => factorSeverity(factor) === '나쁨').length;
+
+                        return (
+                          <div
+                            key={key}
+                            className="mc-report-risk-item"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRisk(isOpen ? null : key)}
+                              className="mc-report-risk-toggle"
+                            >
+                              <span className="mc-report-risk-copy">
+                                <span className="mc-report-risk-name">
+                                  {DISEASE_KR[key] || key}
+                                </span>
+                                {preview.length > 0 && (
+                                  <span className="mc-report-risk-preview">
+                                    관리 요인: {compactList(preview)}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="mc-report-risk-side">
+                                <RiskBadge grade={grade} />
+                                <span style={{ color: 'var(--text-3)', transform: isOpen ? 'rotate(180deg)' : 'none', display: 'inline-flex' }}>
+                                  <Ic d={P.chev} size={12}/>
+                                </span>
+                              </span>
+                            </button>
+
+                            {isOpen && (
+                              <div className="mc-stack-xs" style={{ marginTop: 12 }}>
+                                <div className="mc-card-sub" style={{ lineHeight: 1.55 }}>
+                                  현재 수치 기준으로 판단한 예측 위험도입니다.
+                                  {needsCareCount > 0 ? ` 관리 필요 요인 ${needsCareCount}개가 확인됐습니다.` : ''}
+                                </div>
+                                {factors.length > 0 ? (
+                                  factors.slice(0, 5).map((factor, index) => {
+                                    const line = factorLine(factor);
+                                    if (!line) return null;
+                                    const status = factorStatusLabel(factor);
+                                    return (
+                                      <div
+                                        key={`${line}-${index}`}
+                                        style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: '74px minmax(0, 1fr)',
+                                          gap: 12,
+                                          alignItems: 'start',
+                                        }}
+                                      >
+                                        <FactorStatus status={status !== '요인' ? status : `요인 ${index + 1}`} />
+                                        <span style={{
+                                          minWidth: 0,
+                                          fontSize: 13,
+                                          fontWeight: 700,
+                                          color: 'var(--text-1)',
+                                          lineHeight: 1.45,
+                                          wordBreak: 'keep-all',
+                                        }}>
+                                          {line}
+                                        </span>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="mc-card-sub">상세 위험요인 데이터가 없어요.</div>
+                                )}
+                                {compares.length > 0 && (
+                                  <div style={{
+                                    marginTop: 6,
+                                    padding: '10px 12px',
+                                    borderRadius: 6,
+                                    background: '#FAFBFD',
+                                    border: '1px solid var(--border-soft)',
+                                  }}>
+                                    <div className="mc-field-label" style={{ marginBottom: 6 }}>향후 예측 참고</div>
+                                    <div className="mc-card-sub" style={{ lineHeight: 1.5 }}>
+                                      {compares.map((item) => `${item.year}년 ${item.predictedState}`).join(' → ')}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+                  )}
+                </div>
+
+              </div>
+
+              <div className="mc-card mc-card-body mc-chart-rise mc-chart-rise-delay mc-report-chart-card">
+                <div className="mc-field-label" style={{ marginBottom: 12 }}>질병 위험도 추이</div>
+                {riskTrend.length < 2 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '72px 0', fontSize: 13 }}>
+                    위험도 추이 데이터가 부족합니다.
                   </div>
-                  <Ic d={P.arrow} size={13}/>
-                </button>
-              ))}
+                ) : (
+                  <div className="mc-chart-wrap mc-chart-wrap-lg">
+                    <ResponsiveContainer width="100%" height={360}>
+                      <LineChart data={riskTrend} margin={{ top: 14, right: 18, left: 2, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#EBEEF4"/>
+                        <XAxis dataKey="year" tick={{ fill: '#4A5568', fontSize: 12 }} axisLine={{ stroke: '#DDE1EA' }}/>
+                        <YAxis tick={{ fill: '#9AA3B2', fontSize: 12 }} axisLine={{ stroke: '#DDE1EA' }}/>
+                        <Tooltip
+                          contentStyle={{
+                            background: '#fff', border: '1px solid #DDE1EA', borderRadius: 6,
+                            fontSize: 12, color: '#0D1520',
+                          }}
+                          formatter={(value) => [`${value}%`, '발병 확률']}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 12, color: '#4A5568' }}/>
+                        <Line type="monotone" dataKey="stroke" stroke="#9A6060" name="뇌졸중" strokeWidth={2.4} dot={{ r: 3.5 }}/>
+                        <Line type="monotone" dataKey="diabetes" stroke="#8A7040" name="당뇨" strokeWidth={2.4} dot={{ r: 3.5 }}/>
+                        <Line type="monotone" dataKey="cardio" stroke="#2F6FE8" name="심뇌혈관" strokeWidth={2.4} dot={{ r: 3.5 }}/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
             </div>
           </section>
+
         </div>
       )}
     </div>
+
+      {showHealthAgeModal && (
+        <div className="mc-modal-backdrop mc-health-age-backdrop mc-print-hide" onClick={() => setShowHealthAgeModal(false)}>
+          <div className="mc-modal mc-health-age-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="mc-modal-head">
+              <div>
+                <div className="mc-modal-title">건강나이 이유</div>
+                <div className="mc-health-age-modal-sub">
+                  검진 지표가 건강나이에 반영된 근거입니다.
+                </div>
+              </div>
+              <button className="mc-modal-close" type="button" onClick={() => setShowHealthAgeModal(false)} aria-label="닫기">×</button>
+            </div>
+            <div className="mc-modal-body">
+              <div className="mc-health-age-modal-summary">
+                <div>
+                  <span>건강나이</span>
+                  <strong>{healthAge?.biologicalAge ?? '-'}세</strong>
+                </div>
+                <div>
+                  <span>실제 나이</span>
+                  <strong>{healthAge?.chronologicalAge ?? '-'}세</strong>
+                </div>
+                <div>
+                  <span>차이</span>
+                  <strong className={healthAgeDiff != null && healthAgeDiff > 0 ? 'warn' : 'good'}>
+                    {healthAgeDiff == null ? '-' : healthAgeDiff > 0 ? `+${healthAgeDiff}세` : healthAgeDiff < 0 ? `${healthAgeDiff}세` : '0세'}
+                  </strong>
+                </div>
+              </div>
+
+              {healthAge?.detailMessage && (
+                <div className="mc-health-age-modal-note">
+                  {healthAge.detailMessage}
+                </div>
+              )}
+
+              {healthAgeFactors.length > 0 && (
+                <div className="mc-health-age-factor-list">
+                  {healthAgeFactors.slice(0, 5).map((factor, index) => {
+                    const line = healthAgeFactorLine(factor);
+                    if (!line) return null;
+                    return (
+                      <div key={`${line}-${index}`} className="mc-health-age-factor-row">
+                        <span>요인 {index + 1}</span>
+                        <strong>{line}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {healthAge?.changeAfterMessage && (
+                <div className="mc-alert mc-alert-blue" style={{ marginTop: 14 }}>
+                  <div>
+                    <div className="mc-alert-title">개선 시 변화</div>
+                    <div className="mc-alert-body">{healthAge.changeAfterMessage}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMbtiModal && (
+        <div className="mc-modal-backdrop mc-print-hide" onClick={() => setShowMbtiModal(false)}>
+          <div className="mc-modal mc-health-mbti-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="mc-modal-head">
+              <div>
+                <div className="mc-modal-title">건강 MBTI</div>
+                <div className="mc-health-mbti-modal-sub">생활습관 선택으로 보는 나의 건강 관리 타입</div>
+              </div>
+              <button className="mc-modal-close" type="button" onClick={() => setShowMbtiModal(false)} aria-label="닫기">×</button>
+            </div>
+            <div className="mc-modal-body">
+              {!mbtiResult ? (
+                <div className="mc-health-mbti-survey">
+                  <div className="mc-health-mbti-progress-row">
+                    <span>{mbtiStep + 1}/{HEALTH_MBTI_QUESTIONS.length}</span>
+                    <b>{mbtiProgress}%</b>
+                  </div>
+                  <div className="mc-health-mbti-progress"><i style={{ width: `${mbtiProgress}%` }} /></div>
+                  <div className="mc-health-mbti-question">{currentMbtiQuestion.title}</div>
+                  <div className="mc-health-mbti-options">
+                    {currentMbtiQuestion.options.map((option) => (
+                      <button key={option.value} type="button" onClick={() => selectMbtiAnswer(option.value)}>
+                        <span>{option.label}</span>
+                        <small>{option.desc}</small>
+                      </button>
+                    ))}
+                  </div>
+                  {mbtiStep > 0 && (
+                    <button className="mc-health-mbti-back" type="button" onClick={() => setMbtiStep((step) => Math.max(0, step - 1))}>이전 질문</button>
+                  )}
+                </div>
+              ) : (
+                <div className={`mc-health-mbti-result ${mbtiResult.tone}`}>
+                  <div className="mc-health-mbti-result-type">{mbtiResult.type}</div>
+                  <div className="mc-health-mbti-result-title">{mbtiResult.title}</div>
+                  <p>{mbtiResult.summary}</p>
+                  <div className="mc-health-mbti-tip-list">
+                    {mbtiResult.tips.map((tip) => <div key={tip}>{tip}</div>)}
+                  </div>
+                  <div className="mc-health-mbti-section-title">부족 가능 영양 · 추천</div>
+                  <div className="mc-health-mbti-nutrient-list">
+                    {mbtiResult.nutrients.map((item) => (
+                      <div key={item.name} className="mc-health-mbti-nutrient-card">
+                        <b>{item.name}</b>
+                        <span>{item.reason}</span>
+                        <small>추천: {item.supplement}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mc-health-mbti-section-title">마음 건강 체크</div>
+                  <div className={`mc-health-mbti-mind-note ${mbtiAnswers.mood === 'down' ? 'warning' : ''}`}>{mbtiResult.mindHealth}</div>
+                  <div className="mc-health-mbti-disclaimer">영양제 추천은 생활습관 기반 참고용이며, 질환·복용약이 있으면 전문가와 먼저 상의해주세요.</div>
+                  <div className="mc-health-mbti-result-actions">
+                    <button className="mc-btn" type="button" onClick={resetMbtiSurvey}>다시 하기</button>
+                    <button className="mc-btn mc-btn-primary" type="button" onClick={() => setShowMbtiModal(false)}>확인</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -73,12 +73,19 @@ public class HealthService {
     }
 
     /**
-     * Get checkup results for date range
+     * Get checkup results. Without a date filter, return every saved checkup so
+     * trend views can use the full history.
      */
     @Transactional(readOnly = true)
     public List<CheckupResult> getCheckupResults(Long userId, LocalDate startDate, LocalDate endDate) {
         log.info("Getting checkup results for userId: {} from {} to {}", userId, startDate, endDate);
-        return checkupResultRepository.findByUserIdAndCheckupDateBetween(userId, startDate, endDate);
+        if (startDate == null && endDate == null) {
+            return checkupResultRepository.findByUserIdOrderByCheckupDateDesc(userId);
+        }
+
+        LocalDate start = startDate != null ? startDate : LocalDate.of(1900, 1, 1);
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        return checkupResultRepository.findByUserIdAndCheckupDateBetweenOrderByCheckupDateDesc(userId, start, end);
     }
 
     /**

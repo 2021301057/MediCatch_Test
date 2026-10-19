@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { healthAPI } from '../api/services';
+import MobileNavMenu from '../components/common/MobileNavMenu';
 
 const Ic = ({ d, size = 13 }) => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -112,6 +113,7 @@ const MedicalRecords = () => {
 
   // ── 통계 ────────────────────────────────────────────────────────────
   const hospitalCount = new Set(records.map((r) => r.hospitalName).filter(Boolean)).size;
+  const pharmacyCount = records.filter((r) => r.treatmentType === '약국').length;
 
   const isFiltered =
     searchQuery.trim() !== '' ||
@@ -137,6 +139,8 @@ const MedicalRecords = () => {
         </div>
       </div>
 
+      <MobileNavMenu />
+
       {/* 통계: 전체 데이터 기준 */}
       <div className="mc-stats-strip">
         <div className="mc-stat">
@@ -153,6 +157,11 @@ const MedicalRecords = () => {
           <div className="mc-stat-label">{topType[0]} 진료</div>
           <div className="mc-stat-value">{topType[1]}건</div>
           <div className="mc-stat-sub">가장 많은 유형</div>
+        </div>
+        <div className="mc-stat">
+          <div className="mc-stat-label">약국 기록</div>
+          <div className="mc-stat-value">{pharmacyCount}건</div>
+          <div className="mc-stat-sub">처방·조제 기록</div>
         </div>
       </div>
 
