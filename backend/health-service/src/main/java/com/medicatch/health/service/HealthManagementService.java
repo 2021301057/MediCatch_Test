@@ -66,7 +66,7 @@ public class HealthManagementService {
     private final ObjectMapper objectMapper;
 
     private static final String AI_PROMPT_VERSION = "diabetes-guidance-v1";
-    private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v2";
+    private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v3";
     private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v2";
     private static final String MEAL_ENTRY_PREFIX = "끼니별 빠른 기록";
     private static final String EXERCISE_ENTRY_PREFIX = "운동 빠른 기록";
@@ -341,6 +341,10 @@ public class HealthManagementService {
         Map<LocalDate, DailyHealthLog> logsByDate = new HashMap<>();
         dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, start, end)
                 .forEach(item -> logsByDate.put(item.getLogDate(), item));
+        Map<LocalDate, Map<String, HealthMealReview>> mealReviewsByDate = new HashMap<>();
+        healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, start, end)
+                .forEach(review -> mealReviewsByDate.computeIfAbsent(review.getLogDate(), ignored -> new HashMap<>())
+                        .put(review.getInputHash(), review));
         Map<LocalDate, List<DailyHealthMission>> missionsByDate = new HashMap<>();
         dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, start, end)
                 .forEach(item -> missionsByDate.computeIfAbsent(item.getMissionDate(), ignored -> new ArrayList<>()).add(item));
@@ -362,32 +366,57 @@ public class HealthManagementService {
             day.put("attendance", attendanceByDate.containsKey(date));
             day.put("meal", meal);
             day.put("exercise", exercise);
-            day.putAll(dailyActivityScores(log));
+            day.putAll(dailyActivityScores(date, log, mealReviewsByDate));
             days.add(day);
         }
         return Map.of("month", month.toString(), "days", days);
     }
 
-    private Map<String, Object> dailyActivityScores(DailyHealthLog log) {
+    private Map<String, Object> dailyActivityScores(LocalDate date, DailyHealthLog log,
+            Map<LocalDate, Map<String, HealthMealReview>> mealReviewsByDate) {
         Map<String, Object> scores = new HashMap<>();
         Integer mealCount = null;
         Integer mealScore = null;
         String mealReason = "식사 기록이 없습니다.";
+        boolean allMealsSkipped = false;
         if (log != null && log.getMealDescription() != null && !log.getMealDescription().isBlank()) {
             String description = log.getMealDescription().trim();
             if (description.startsWith(MEAL_ENTRY_PREFIX + "\n")) {
                 mealCount = 0;
+                List<String> mealEntries = new ArrayList<>();
                 for (String label : List.of("아침", "점심", "저녁")) {
                     String entry = description.lines()
                             .filter(line -> line.startsWith(label + ": "))
                             .map(line -> line.substring(label.length() + 2).trim())
                             .findFirst().orElse("기록 없음");
+                    mealEntries.add(entry);
                     if (!entry.isEmpty() && !"기록 없음".equals(entry)) mealCount++;
                 }
-                mealScore = Math.round(mealCount * 100.0f / 3);
-                mealReason = mealCount + "/3개 끼니 칸 기록 기준";
+                allMealsSkipped = mealEntries.stream().allMatch("먹지 않음"::equals);
+            }
+            if (allMealsSkipped) {
+                mealReason = "모든 끼니를 먹지 않음으로 기록해 식사 점수를 산정하지 않았습니다.";
             } else {
-                mealReason = "끼니별 기록이 없어 점수를 계산하지 않았습니다.";
+                String inputHash = sha256(MEAL_REVIEW_PROMPT_VERSION + "|" + description);
+                HealthMealReview review = mealReviewsByDate.getOrDefault(date, Map.of()).get(inputHash);
+                if (review == null) {
+                    mealReason = "AI 식사 평가가 없어 점수를 계산하지 않았습니다.";
+                } else {
+                    try {
+                        String balanceLabel = objectMapper.readTree(review.getReviewJson()).path("balanceLabel").asText("UNKNOWN");
+                        if ("BALANCED".equals(balanceLabel)) {
+                            mealScore = 100;
+                            mealReason = "AI 평가: 식사 구성이 균형 잡힌 편입니다.";
+                        } else if ("NEEDS_ATTENTION".equals(balanceLabel)) {
+                            mealScore = 50;
+                            mealReason = "AI 평가: 식사 구성에 보완이 필요합니다.";
+                        } else {
+                            mealReason = "AI 평가 결과가 불확실해 점수를 계산하지 않았습니다.";
+                        }
+                    } catch (Exception e) {
+                        mealReason = "AI 식사 평가를 읽을 수 없어 점수를 계산하지 않았습니다.";
+                    }
+                }
             }
         }
 
@@ -474,7 +503,7 @@ public class HealthManagementService {
         String hash = sha256(MEAL_REVIEW_PROMPT_VERSION + "|" + description);
         HealthMealReview review = healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date, hash)
                 .orElseGet(() -> {
-                    String system = "식사 기록을 평가하는 건강정보 보조 도구입니다. 진단이나 칼로리 추측을 하지 말고 기록된 음식에 근거해 균형과 개선점만 간결하게 제안하세요. 사용자에게 보이는 summary, positivePoints, improvements의 모든 문장은 자연스러운 한국어로만 작성하고 영어 문장이나 표현을 섞지 마세요. JSON 객체만 반환하고 키는 balanceLabel, summary, positivePoints, improvements로 합니다. balanceLabel은 BALANCED, NEEDS_ATTENTION, UNKNOWN 중 하나이며 배열은 각각 최대 3개입니다.";
+                    String system = "식사 기록을 평가하는 건강정보 보조 도구입니다. 진단이나 칼로리 추측을 하지 말고 기록된 음식에 근거해 균형과 개선점만 간결하게 제안하세요. '먹지 않음'은 해당 끼니를 먹지 않았다는 뜻이며, 기록 칸을 채운 것으로 식사 균형 점수를 높이지 마세요. 모든 끼니가 먹지 않음 또는 기록 없음이면 balanceLabel은 반드시 NEEDS_ATTENTION으로 하고, 균형 잡힌 식사라고 평가하지 마세요. 입력에 기록된 음식이 부족해 판단할 수 없으면 UNKNOWN으로 하세요. 사용자에게 보이는 summary, positivePoints, improvements의 모든 문장은 자연스러운 한국어로만 작성하고 영어 문장이나 표현을 섞지 마세요. JSON 객체만 반환하고 키는 balanceLabel, summary, positivePoints, improvements로 합니다. balanceLabel은 BALANCED, NEEDS_ATTENTION, UNKNOWN 중 하나이며 배열은 각각 최대 3개입니다.";
                     String output = healthAiClient.completeJson(system,
                             "식사 기록: " + description + "\n당뇨 예방 관점에서 비난 없이 실천 가능한 피드백을 한국어로 작성하세요. 양이 없으면 양을 추정하지 마세요.");
                     try { objectMapper.readTree(output); }

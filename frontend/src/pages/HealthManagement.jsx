@@ -699,7 +699,7 @@ export default function HealthManagement() {
                     <span role="cell">{selectedCalendarDay?.exerciseScoreReason || '운동 기록이 없습니다.'}</span>
                   </div>
                 </div>
-                <p className="health-calendar-score-note">식사 점수는 기록한 끼니 칸 수(3칸 기준), 운동 점수는 입력된 운동 시간(30분 기준, 최대 100점)을 보여주는 기록 참고값입니다. 건강 상태나 의학적 평가 점수가 아닙니다.</p>
+                <p className="health-calendar-score-note">식사 점수는 AI 평가 참고값(균형 100점, 보완 필요 50점)이며 평가가 없으면 미산정입니다. 세 끼 모두 먹지 않음으로 기록한 날도 점수를 산정하지 않습니다. 운동 점수는 입력된 시간(30분 기준, 최대 100점) 참고값이며 건강 상태나 의학적 평가 점수가 아닙니다.</p>
               </section>
             </div>
           </section>}

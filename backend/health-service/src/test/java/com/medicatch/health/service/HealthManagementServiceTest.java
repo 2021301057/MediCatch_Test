@@ -7,6 +7,7 @@ import com.medicatch.health.entity.DailyHealthLog;
 import com.medicatch.health.entity.DailyHealthMission;
 import com.medicatch.health.entity.DiabetesRiskProfile;
 import com.medicatch.health.entity.HealthDailyAttendance;
+import com.medicatch.health.entity.HealthMealReview;
 import com.medicatch.health.entity.HealthExerciseReview;
 import com.medicatch.health.entity.HealthAiAssessment;
 import com.medicatch.health.repository.CheckupResultRepository;
@@ -28,9 +29,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.HexFormat;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -185,15 +189,20 @@ class HealthManagementServiceTest {
     }
 
     @Test
-    void calendarCalculatesMealAndExerciseRecordingScoresFromStoredInputs() {
+    void calendarUsesAiMealReviewAndExerciseDurationForScores() throws Exception {
         long userId = 42L;
         YearMonth month = YearMonth.now(ZoneId.of("Asia/Seoul"));
         LocalDate date = month.atDay(1);
+        String mealDescription = "끼니별 빠른 기록\n아침: 밥·잡곡밥\n점심: 기록 없음\n저녁: 채소";
         when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of(DailyHealthLog.builder().userId(userId).logDate(date)
-                        .mealDescription("끼니별 빠른 기록\n아침: 밥·잡곡밥\n점심: 기록 없음\n저녁: 채소")
+                        .mealDescription(mealDescription)
                         .exerciseDescription("운동 빠른 기록\n종류: 걷기\n시간: 20분")
                         .build()));
+        when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(HealthMealReview.builder().userId(userId).logDate(date)
+                        .inputHash(mealReviewHash(mealDescription))
+                        .reviewJson("{\"balanceLabel\":\"NEEDS_ATTENTION\"}").build()));
         when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of());
         when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
@@ -204,10 +213,37 @@ class HealthManagementServiceTest {
         Map<String, Object> day = days.get(0);
 
         assertEquals(2, day.get("mealRecordedCount"));
-        assertEquals(67, day.get("mealScore"));
+        assertEquals(50, day.get("mealScore"));
         assertEquals(20, day.get("exerciseMinutes"));
         assertEquals(67, day.get("exerciseScore"));
-        assertEquals(67, day.get("totalScore"));
+        assertEquals(59, day.get("totalScore"));
+    }
+
+    @Test
+    void calendarNeverAwardsMealBalanceScoreWhenAllMealsAreSkipped() throws Exception {
+        long userId = 42L;
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Seoul"));
+        LocalDate date = month.atDay(1);
+        String mealDescription = "끼니별 빠른 기록\n아침: 먹지 않음\n점심: 먹지 않음\n저녁: 먹지 않음";
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(DailyHealthLog.builder().userId(userId).logDate(date)
+                        .mealDescription(mealDescription).build()));
+        when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(HealthMealReview.builder().userId(userId).logDate(date)
+                        .inputHash(mealReviewHash(mealDescription))
+                        .reviewJson("{\"balanceLabel\":\"BALANCED\"}").build()));
+        when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) service.getCalendar(userId, month).get("days");
+
+        assertEquals(3, days.get(0).get("mealRecordedCount"));
+        assertNull(days.get(0).get("mealScore"));
+        assertNull(days.get(0).get("totalScore"));
+        assertTrue(((String) days.get(0).get("mealScoreReason")).contains("먹지 않음"));
     }
 
     @Test
@@ -232,5 +268,11 @@ class HealthManagementServiceTest {
         assertNull(days.get(0).get("totalScore"));
         assertNull(days.get(1).get("exerciseScore"));
         assertNull(days.get(1).get("totalScore"));
+    }
+
+    private static String mealReviewHash(String description) throws Exception {
+        byte[] hash = MessageDigest.getInstance("SHA-256")
+                .digest(("meal-review-v3|" + description).getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(hash);
     }
 }
