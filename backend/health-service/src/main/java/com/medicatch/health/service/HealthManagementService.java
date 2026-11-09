@@ -26,6 +26,7 @@ import com.medicatch.health.repository.DailyHealthMissionRepository;
 import com.medicatch.health.repository.DiabetesRiskProfileRepository;
 import com.medicatch.health.repository.Hba1cResultRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +54,7 @@ import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional
 public class HealthManagementService {
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
@@ -69,7 +71,7 @@ public class HealthManagementService {
     private final HealthAiClient healthAiClient;
     private final ObjectMapper objectMapper;
 
-    private static final String AI_PROMPT_VERSION = "diabetes-guidance-v2";
+    private static final String AI_PROMPT_VERSION = "diabetes-guidance-v3";
     private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v4";
     private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v2";
     private static final String MEAL_ENTRY_PREFIX = "끼니별 빠른 기록";
@@ -790,8 +792,8 @@ public class HealthManagementService {
                         return parsed;
                     }).toList();
                 }
-            } catch (Exception ignored) {
-                // Use the same personalized rule-based candidates if AI is unavailable.
+            } catch (Exception e) {
+                log.warn("AI mission generation failed; using rule-based missions: {}", e.getMessage());
             }
         }
 
@@ -1013,17 +1015,47 @@ public class HealthManagementService {
 
     private HealthAiAssessment createAiAssessment(Long userId, Map<String, Object> assessment, Map<String, Object> snapshot,
                                                    String snapshotJson, String inputHash) {
+        List<Map<String, Object>> candidates = missionCandidates(snapshot);
         String prompt = "건강관리 대상자의 요약 데이터: " + snapshotJson + "\n"
                 + "규칙 기반 위험 단계: " + assessment.get("level") + "\n"
                 + "최근 7일의 집계와 최근 미션 코드를 고려해 반복을 줄인 생활습관 안내와 미션을 생성하세요. 원본 식사 입력은 제공되지 않습니다.";
         String system = "당신은 건강관리 안내 작성 도우미입니다. 진단, 치료, 약물 변경을 지시하지 말고 의료진 상담이 필요한 경우 명시하세요. "
                 + "과장하거나 입력에 없는 건강 상태를 추정하지 말고, 한국어로 작성하세요. 반드시 JSON 객체만 반환하고 형식은 "
                 + "{\\\"summary\\\":string,\\\"mealRecommendations\\\":[string],\\\"actions\\\":[string],\\\"missions\\\":["
-                + "{\\\"category\\\":\\\"MEAL\\\"|\\\"ACTIVITY\\\",\\\"code\\\":string,\\\"title\\\":string,\\\"description\\\":string,\\\"reason\\\":string}]} 입니다. "
-                + "missions의 code는 입력의 missionCandidates에 있는 해당 category의 code만 사용하고, 제목과 설명은 그 후보의 행동 범위를 벗어나지 마세요. "
-                + "recentMissionCodes에 있는 코드는 가능한 한 반복하지 말고, MEAL과 ACTIVITY 각각 하나씩 반환하세요.";
+                + "{\\\"category\\\":\\\"MEAL\\\"|\\\"ACTIVITY\\\",\\\"title\\\":string,\\\"description\\\":string,\\\"reason\\\":string}]} 입니다. "
+                + "missionCandidates에 있는 각 후보를 category별로 하나씩 반드시 반환하세요. 후보의 행동과 목표는 바꾸지 말고 문구만 자연스럽게 개인화하세요. "
+                + "code는 출력하지 않아도 됩니다. 서버가 category에 맞는 후보 code를 연결합니다. "
+                + "recentMissionCodes에 있는 미션은 가능한 한 반복하지 말고, JSON 외의 설명은 쓰지 마세요.";
         String raw = healthAiClient.completeJson(system, prompt);
-        Map<String, Object> output = normalizeAiOutput(raw);
+        Map<String, Object> output = normalizeAiOutput(raw, candidates);
+        List<Map<String, Object>> missions = new ArrayList<>();
+        Object initialMissions = output.get("missions");
+        if (initialMissions instanceof List<?> list) {
+            list.stream().filter(Map.class::isInstance).map(item -> (Map<String, Object>) item).forEach(missions::add);
+        }
+        List<String> missingCategories = List.of("MEAL", "ACTIVITY").stream()
+                .filter(category -> missions.stream().noneMatch(mission -> category.equals(mission.get("category"))))
+                .toList();
+        if (!missingCategories.isEmpty()) {
+            List<Map<String, Object>> missingCandidates = candidates.stream()
+                    .filter(candidate -> missingCategories.contains(candidate.get("category"))).toList();
+            log.warn("AI guidance omitted mission categories {}; retrying those candidates", missingCategories);
+            try {
+                String retryPrompt = "이전 응답에서 다음 미션 category가 누락되었거나 후보 code와 일치하지 않았습니다: "
+                        + missingCategories + ". 아래 후보를 각각 하나씩, 제목·설명·추천 이유만 자연스럽게 작성하세요. "
+                        + "후보 행동과 목표는 바꾸지 말고 JSON 객체만 반환하세요. 후보: " + writeJson(missingCandidates);
+                Map<String, Object> retryOutput = normalizeAiOutput(healthAiClient.completeJson(system, retryPrompt), candidates);
+                Object retryMissions = retryOutput.get("missions");
+                if (retryMissions instanceof List<?> retryList) {
+                    retryList.stream().filter(Map.class::isInstance).map(item -> (Map<String, Object>) item)
+                            .filter(mission -> missingCategories.contains(mission.get("category")))
+                            .forEach(missions::add);
+                }
+            } catch (Exception e) {
+                log.warn("AI mission retry failed; missing categories will use rule-based candidates: {}", e.getMessage());
+            }
+        }
+        output.put("missions", missions);
         HealthAiAssessment entity = HealthAiAssessment.builder()
                 .userId(userId)
                 .riskLevel(String.valueOf(assessment.get("level")))
@@ -1038,7 +1070,14 @@ public class HealthManagementService {
         return healthAiAssessmentRepository.save(entity);
     }
 
-    private Map<String, Object> normalizeAiOutput(String raw) {
+    private List<Map<String, Object>> missionCandidates(Map<String, Object> snapshot) {
+        Object value = snapshot.get("missionCandidates");
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item).toList();
+    }
+
+    private Map<String, Object> normalizeAiOutput(String raw, List<Map<String, Object>> candidates) {
         try {
             JsonNode root = objectMapper.readTree(raw);
             Map<String, Object> output = new HashMap<>();
@@ -1051,9 +1090,15 @@ public class HealthManagementService {
                 for (JsonNode node : missionNodes) {
                     String category = node.path("category").asText("");
                     if (!List.of("MEAL", "ACTIVITY").contains(category)) continue;
+                    Map<String, Object> candidate = candidates.stream()
+                            .filter(item -> category.equals(item.get("category"))).findFirst().orElse(null);
+                    if (candidate == null) continue;
+                    String candidateCode = String.valueOf(candidate.get("code"));
+                    String responseCode = node.path("code").asText("");
+                    if (!responseCode.isBlank() && !candidateCode.equals(responseCode)) continue;
                     Map<String, Object> mission = new HashMap<>();
                     mission.put("category", category);
-                    mission.put("code", textOr(node.path("code").asText(null), "", 40));
+                    mission.put("code", candidateCode);
                     mission.put("title", textOr(node.path("title").asText(null), category.equals("MEAL") ? "식사 습관 점검" : "가벼운 신체 활동", 120));
                     mission.put("description", textOr(node.path("description").asText(null), "무리가 없는 범위에서 실천해보세요.", 500));
                     mission.put("reason", textOr(node.path("reason").asText(null), "일상 건강관리를 위한 제안입니다.", 300));

@@ -318,6 +318,49 @@ class HealthManagementServiceTest {
     }
 
     @Test
+    void todayMissionsRetryMissingCategoryAndBindCandidateCodeWhenAiOmitsCode() {
+        long userId = 42L;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        DiabetesRiskProfile profile = DiabetesRiskProfile.builder().userId(userId)
+                .onboardingCompletedAt(LocalDateTime.now()).aiProcessingConsent(true).build();
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateOrderByCategoryAsc(userId, today))
+                .thenReturn(List.of());
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, today.minusDays(6), today))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, today.minusDays(3), today.minusDays(1)))
+                .thenReturn(List.of());
+        when(checkupResultRepository.findByUserIdOrderByCheckupDateDesc(userId)).thenReturn(List.of());
+        when(hba1cResultRepository.findByUserIdOrderByTestDateDescIdDesc(userId)).thenReturn(List.of());
+        when(healthAiAssessmentRepository.findByUserIdAndInputHashAndPromptVersion(eq(userId), anyString(), anyString()))
+                .thenReturn(Optional.empty());
+        when(healthAiClient.completeJson(anyString(), anyString())).thenReturn("""
+                {"summary":"생활습관을 이어가세요.","mealRecommendations":[],"actions":[],"missions":[
+                  {"category":"MEAL","title":"균형 잡힌 한 끼","description":"채소와 단백질을 함께 드세요.","reason":"실천하기 쉬운 식사예요."}]}
+                """, """
+                {"missions":[
+                  {"category":"ACTIVITY","title":"천천히 10분 걷기","description":"편한 속도로 걸어보세요.","reason":"짧게 시작해보세요."}]}
+                """);
+        when(healthAiClient.getModel()).thenReturn("test-model");
+        when(healthAiAssessmentRepository.save(any())).thenAnswer(invocation -> {
+            HealthAiAssessment saved = invocation.getArgument(0);
+            saved.setId(77L);
+            return saved;
+        });
+        when(dailyHealthMissionRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Map<String, Object>> missions = service.getTodayMissions(userId);
+
+        assertEquals(2, missions.size());
+        assertTrue(missions.stream().allMatch(mission -> "AI".equals(mission.get("source"))));
+        assertTrue(missions.stream().anyMatch(mission -> "MEAL_BALANCED_PLATE".equals(mission.get("code"))
+                && "균형 잡힌 한 끼".equals(mission.get("title"))));
+        assertTrue(missions.stream().anyMatch(mission -> "ACTIVITY_START_WALK".equals(mission.get("code"))
+                && "천천히 10분 걷기".equals(mission.get("title"))));
+        verify(healthAiClient, times(2)).completeJson(anyString(), anyString());
+    }
+
+    @Test
     void weeklySummaryComparesCurrentWeekToTheSameElapsedDaysLastWeek() {
         long userId = 42L;
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
