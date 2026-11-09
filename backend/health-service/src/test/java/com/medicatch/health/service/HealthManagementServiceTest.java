@@ -2,6 +2,7 @@ package com.medicatch.health.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medicatch.health.client.HealthAiClient;
+import com.medicatch.health.dto.DailyHealthLogRequest;
 import com.medicatch.health.dto.DiabetesOnboardingRequest;
 import com.medicatch.health.entity.DailyHealthLog;
 import com.medicatch.health.entity.DailyHealthMission;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -118,7 +120,7 @@ class HealthManagementServiceTest {
                 {"activityType":"AEROBIC","effortLabel":"MODERATE","summary":"실내 자전거를 20분 수행했습니다.","positivePoints":["운동 시간을 기록했어요"],"improvements":["마친 뒤 가볍게 스트레칭하세요"]}
                 """);
         when(healthAiClient.getModel()).thenReturn("test-model");
-        when(healthExerciseReviewRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(healthExerciseReviewRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         Map<String, Object> review = service.reviewDailyExercise(userId, date);
 
@@ -129,10 +131,87 @@ class HealthManagementServiceTest {
         verify(healthAiClient).completeJson(systemPrompt.capture(), anyString());
         assertTrue(systemPrompt.getValue().contains("자연스러운 한국어로만 작성"));
         assertTrue(systemPrompt.getValue().contains("영어 문장이나 표현을 섞지 마세요"));
-        verify(healthExerciseReviewRepository).save(argThat(saved ->
+        verify(healthExerciseReviewRepository).saveAndFlush(argThat(saved ->
                 saved.getExerciseDescription().contains("실내 자전거")
                         && saved.getReviewJson().contains("AEROBIC")
                         && saved.getUserId().equals(userId)));
+    }
+
+    @Test
+    void mealReviewUsesValidatedAiScoreAndPersistsStructuredResult() {
+        long userId = 42L;
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        String description = "끼니별 빠른 기록\n아침: 밥·잡곡밥\n점심: 기록 없음\n저녁: 기록 없음";
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(
+                DiabetesRiskProfile.builder().userId(userId).aiProcessingConsent(true).build()));
+        when(dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)).thenReturn(Optional.of(
+                DailyHealthLog.builder().userId(userId).logDate(date).mealDescription(description).build()));
+        when(healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString()))
+                .thenReturn(Optional.empty());
+        when(healthAiClient.completeJson(anyString(), anyString())).thenReturn("""
+                {"balanceLabel":"BALANCED","balanceScore":82,"balanceRationale":"기록된 식사에 곡류와 채소가 포함되어 있습니다.","summary":"채소를 포함한 식사입니다.","positivePoints":[],"improvements":[]}
+                """);
+        when(healthAiClient.getModel()).thenReturn("test-model");
+        when(healthMealReviewRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> review = service.reviewDailyMeal(userId, date);
+
+        assertEquals(82, review.get("balanceScore"));
+        assertEquals("기록된 식사에 곡류와 채소가 포함되어 있습니다.", review.get("balanceRationale"));
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(healthAiClient).completeJson(systemPrompt.capture(), anyString());
+        assertTrue(systemPrompt.getValue().contains("끼니 수나 기록 완성도는 점수에 반영하지 마세요"));
+        verify(healthMealReviewRepository).saveAndFlush(argThat(saved ->
+                saved.getMealDescription().equals(description)
+                        && saved.getReviewJson().contains("balanceScore")
+                        && saved.getUserId().equals(userId)));
+    }
+
+    @Test
+    void duplicateMealReviewInsertReusesTheAlreadyPersistedResult() {
+        long userId = 42L;
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        String description = "아침에 잡곡밥과 채소를 먹었습니다.";
+        HealthMealReview existing = HealthMealReview.builder().userId(userId).logDate(date)
+                .mealDescription(description).reviewJson("{\"balanceLabel\":\"BALANCED\",\"balanceScore\":80}")
+                .inputHash("same-hash").modelName("test-model").build();
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(
+                DiabetesRiskProfile.builder().userId(userId).aiProcessingConsent(true).build()));
+        when(dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)).thenReturn(Optional.of(
+                DailyHealthLog.builder().userId(userId).logDate(date).mealDescription(description).build()));
+        when(healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString()))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+        when(healthAiClient.completeJson(anyString(), anyString())).thenReturn("""
+                {"balanceLabel":"BALANCED","balanceScore":80,"balanceRationale":"균형이 좋습니다.","summary":"좋습니다.","positivePoints":[],"improvements":[]}
+                """);
+        when(healthAiClient.getModel()).thenReturn("test-model");
+        when(healthMealReviewRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        Map<String, Object> review = service.reviewDailyMeal(userId, date);
+
+        assertEquals(80, review.get("balanceScore"));
+        verify(healthMealReviewRepository, times(2))
+                .findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString());
+    }
+
+    @Test
+    void dailyLogSaveUsesAtomicUserDateUpsertAndReturnsPersistedRecord() {
+        long userId = 42L;
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        DailyHealthLog saved = DailyHealthLog.builder().userId(userId).logDate(date)
+                .mealDescription("아침: 밥").exerciseDescription("걷기 20분").build();
+        when(dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)).thenReturn(Optional.of(saved));
+        when(healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString()))
+                .thenReturn(Optional.empty());
+        when(healthExerciseReviewRepository.findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString()))
+                .thenReturn(Optional.empty());
+
+        Map<String, Object> result = service.saveDailyLog(userId, date,
+                new DailyHealthLogRequest(null, "아침: 밥", "걷기 20분", false, false, null, null, false));
+
+        assertEquals("아침: 밥", result.get("mealDescription"));
+        assertEquals("걷기 20분", result.get("exerciseDescription"));
+        verify(dailyHealthLogRepository).upsertDailyLog(userId, date, null, "아침: 밥", "걷기 20분", false, false);
     }
 
     @Test
@@ -202,7 +281,7 @@ class HealthManagementServiceTest {
         when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of(HealthMealReview.builder().userId(userId).logDate(date)
                         .inputHash(mealReviewHash(mealDescription))
-                        .reviewJson("{\"balanceLabel\":\"NEEDS_ATTENTION\"}").build()));
+                        .reviewJson("{\"balanceLabel\":\"NEEDS_ATTENTION\",\"balanceScore\":40}").build()));
         when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of());
         when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
@@ -213,10 +292,11 @@ class HealthManagementServiceTest {
         Map<String, Object> day = days.get(0);
 
         assertEquals(2, day.get("mealRecordedCount"));
-        assertEquals(50, day.get("mealScore"));
+        assertEquals(51, day.get("mealScore"));
         assertEquals(20, day.get("exerciseMinutes"));
         assertEquals(67, day.get("exerciseScore"));
         assertEquals(59, day.get("totalScore"));
+        assertEquals(2, day.get("scoredCategoryCount"));
     }
 
     @Test
@@ -231,7 +311,7 @@ class HealthManagementServiceTest {
         when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of(HealthMealReview.builder().userId(userId).logDate(date)
                         .inputHash(mealReviewHash(mealDescription))
-                        .reviewJson("{\"balanceLabel\":\"BALANCED\"}").build()));
+                        .reviewJson("{\"balanceLabel\":\"BALANCED\",\"balanceScore\":100}").build()));
         when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of());
         when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
@@ -240,10 +320,39 @@ class HealthManagementServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> days = (List<Map<String, Object>>) service.getCalendar(userId, month).get("days");
 
-        assertEquals(3, days.get(0).get("mealRecordedCount"));
+        assertEquals(0, days.get(0).get("mealRecordedCount"));
         assertNull(days.get(0).get("mealScore"));
         assertNull(days.get(0).get("totalScore"));
         assertTrue(((String) days.get(0).get("mealScoreReason")).contains("먹지 않음"));
+    }
+
+    @Test
+    void mealScoreCombinesActualMealCoverageWithAiCompositionScore() throws Exception {
+        long userId = 42L;
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Seoul"));
+        LocalDate date = month.atDay(1);
+        String mealDescription = "끼니별 빠른 기록\n아침: 밥·잡곡밥\n점심: 기록 없음\n저녁: 기록 없음";
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(DailyHealthLog.builder().userId(userId).logDate(date)
+                        .mealDescription(mealDescription).build()));
+        when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of(HealthMealReview.builder().userId(userId).logDate(date)
+                        .inputHash(mealReviewHash(mealDescription))
+                        .reviewJson("{\"balanceLabel\":\"BALANCED\",\"balanceScore\":100}").build()));
+        when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
+                .thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) service.getCalendar(userId, month).get("days");
+        Map<String, Object> day = days.get(0);
+
+        assertEquals(1, day.get("mealRecordedCount"));
+        assertEquals(73, day.get("mealScore"));
+        assertTrue(((String) day.get("mealScoreReason")).contains("40:60"));
+        assertEquals(73, day.get("totalScore"));
+        assertEquals(1, day.get("scoredCategoryCount"));
     }
 
     @Test
@@ -272,7 +381,7 @@ class HealthManagementServiceTest {
 
     private static String mealReviewHash(String description) throws Exception {
         byte[] hash = MessageDigest.getInstance("SHA-256")
-                .digest(("meal-review-v3|" + description).getBytes(StandardCharsets.UTF_8));
+                .digest(("meal-review-v4|" + description).getBytes(StandardCharsets.UTF_8));
         return HexFormat.of().formatHex(hash);
     }
 }

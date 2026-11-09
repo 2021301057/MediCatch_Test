@@ -26,6 +26,7 @@ import com.medicatch.health.repository.DailyHealthMissionRepository;
 import com.medicatch.health.repository.DiabetesRiskProfileRepository;
 import com.medicatch.health.repository.Hba1cResultRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -66,7 +67,7 @@ public class HealthManagementService {
     private final ObjectMapper objectMapper;
 
     private static final String AI_PROMPT_VERSION = "diabetes-guidance-v1";
-    private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v3";
+    private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v4";
     private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v2";
     private static final String MEAL_ENTRY_PREFIX = "끼니별 빠른 기록";
     private static final String EXERCISE_ENTRY_PREFIX = "운동 빠른 기록";
@@ -390,12 +391,16 @@ public class HealthManagementService {
                             .map(line -> line.substring(label.length() + 2).trim())
                             .findFirst().orElse("기록 없음");
                     mealEntries.add(entry);
-                    if (!entry.isEmpty() && !"기록 없음".equals(entry)) mealCount++;
+                    if (!entry.isEmpty() && !"기록 없음".equals(entry) && !"먹지 않음".equals(entry)) mealCount++;
                 }
                 allMealsSkipped = mealEntries.stream().allMatch("먹지 않음"::equals);
+            } else {
+                mealCount = 1;
             }
             if (allMealsSkipped) {
                 mealReason = "모든 끼니를 먹지 않음으로 기록해 식사 점수를 산정하지 않았습니다.";
+            } else if (mealCount != null && mealCount == 0) {
+                mealReason = "실제 식사 항목이 없어 점수를 산정하지 않았습니다.";
             } else {
                 String inputHash = sha256(MEAL_REVIEW_PROMPT_VERSION + "|" + description);
                 HealthMealReview review = mealReviewsByDate.getOrDefault(date, Map.of()).get(inputHash);
@@ -403,15 +408,20 @@ public class HealthManagementService {
                     mealReason = "AI 식사 평가가 없어 점수를 계산하지 않았습니다.";
                 } else {
                     try {
-                        String balanceLabel = objectMapper.readTree(review.getReviewJson()).path("balanceLabel").asText("UNKNOWN");
-                        if ("BALANCED".equals(balanceLabel)) {
-                            mealScore = 100;
-                            mealReason = "AI 평가: 식사 구성이 균형 잡힌 편입니다.";
-                        } else if ("NEEDS_ATTENTION".equals(balanceLabel)) {
-                            mealScore = 50;
-                            mealReason = "AI 평가: 식사 구성에 보완이 필요합니다.";
+                        JsonNode reviewJson = objectMapper.readTree(review.getReviewJson());
+                        JsonNode balanceScoreNode = reviewJson.path("balanceScore");
+                        String balanceLabel = reviewJson.path("balanceLabel").asText("UNKNOWN");
+                        if ("UNKNOWN".equals(balanceLabel)) {
+                            mealReason = "AI가 식사 구성을 판단하기 어려워 점수를 산정하지 않았습니다.";
+                        } else if (!balanceScoreNode.isIntegralNumber() || balanceScoreNode.intValue() < 0 || balanceScoreNode.intValue() > 100) {
+                            mealReason = "AI 평가 점수가 없어 점수를 계산하지 않았습니다.";
                         } else {
-                            mealReason = "AI 평가 결과가 불확실해 점수를 계산하지 않았습니다.";
+                            int balanceScore = balanceScoreNode.intValue();
+                            int recordedMeals = mealCount == null ? 1 : mealCount;
+                            int coverageScore = Math.round(recordedMeals * 40.0f / 3);
+                            mealScore = Math.round(coverageScore + balanceScore * 0.6f);
+                            mealReason = "실제 식사 " + recordedMeals + "끼(" + coverageScore
+                                    + "점)와 AI 식사 구성 평가 " + balanceScore + "점의 40:60 합산입니다.";
                         }
                     } catch (Exception e) {
                         mealReason = "AI 식사 평가를 읽을 수 없어 점수를 계산하지 않았습니다.";
@@ -455,6 +465,7 @@ public class HealthManagementService {
         scores.put("exerciseScore", exerciseScore);
         scores.put("exerciseScoreReason", exerciseReason);
         scores.put("totalScore", totalScore);
+        scores.put("scoredCategoryCount", availableScores.size());
         return scores;
     }
 
@@ -472,17 +483,12 @@ public class HealthManagementService {
     public Map<String, Object> saveDailyLog(Long userId, LocalDate date, DailyHealthLogRequest request) {
         validateLogDate(date);
         validateDailyLog(request);
-        DailyHealthLog log = dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)
-                .orElseGet(() -> DailyHealthLog.builder().userId(userId).logDate(date).build());
-        log.setMealQuality(clean(request.mealQuality(), 10));
-        log.setMealDescription(clean(request.mealDescription(), 1000));
-        log.setExerciseDescription(clean(request.exerciseDescription(), 1000));
-        log.setHighSugarIntake(Boolean.TRUE.equals(request.highSugarIntake()));
-        log.setLateNightMeal(Boolean.TRUE.equals(request.lateNightMeal()));
-        log.setWalkingMinutes(null);
-        log.setStepCount(null);
-        log.setExerciseCompleted(false);
-        Map<String, Object> response = toDailyLogMap(dailyHealthLogRepository.save(log));
+        dailyHealthLogRepository.upsertDailyLog(userId, date, clean(request.mealQuality(), 10),
+                clean(request.mealDescription(), 1000), clean(request.exerciseDescription(), 1000),
+                Boolean.TRUE.equals(request.highSugarIntake()), Boolean.TRUE.equals(request.lateNightMeal()));
+        DailyHealthLog saved = dailyHealthLogRepository.findByUserIdAndLogDate(userId, date)
+                .orElseThrow(() -> new IllegalStateException("오늘 기록을 저장하지 못했습니다."));
+        Map<String, Object> response = toDailyLogMap(saved);
         response.put("mealReview", getMealReview(userId, date, (String) response.get("mealDescription")));
         response.put("exerciseReview", getExerciseReview(userId, date, (String) response.get("exerciseDescription")));
         return response;
@@ -502,17 +508,50 @@ public class HealthManagementService {
         if (description == null) throw new IllegalArgumentException("먹은 음식을 먼저 입력해주세요.");
         String hash = sha256(MEAL_REVIEW_PROMPT_VERSION + "|" + description);
         HealthMealReview review = healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(userId, date, hash)
-                .orElseGet(() -> {
-                    String system = "식사 기록을 평가하는 건강정보 보조 도구입니다. 진단이나 칼로리 추측을 하지 말고 기록된 음식에 근거해 균형과 개선점만 간결하게 제안하세요. '먹지 않음'은 해당 끼니를 먹지 않았다는 뜻이며, 기록 칸을 채운 것으로 식사 균형 점수를 높이지 마세요. 모든 끼니가 먹지 않음 또는 기록 없음이면 balanceLabel은 반드시 NEEDS_ATTENTION으로 하고, 균형 잡힌 식사라고 평가하지 마세요. 입력에 기록된 음식이 부족해 판단할 수 없으면 UNKNOWN으로 하세요. 사용자에게 보이는 summary, positivePoints, improvements의 모든 문장은 자연스러운 한국어로만 작성하고 영어 문장이나 표현을 섞지 마세요. JSON 객체만 반환하고 키는 balanceLabel, summary, positivePoints, improvements로 합니다. balanceLabel은 BALANCED, NEEDS_ATTENTION, UNKNOWN 중 하나이며 배열은 각각 최대 3개입니다.";
-                    String output = healthAiClient.completeJson(system,
-                            "식사 기록: " + description + "\n당뇨 예방 관점에서 비난 없이 실천 가능한 피드백을 한국어로 작성하세요. 양이 없으면 양을 추정하지 마세요.");
-                    try { objectMapper.readTree(output); }
-                    catch (Exception e) { throw new IllegalStateException("AI 식사 평가 형식이 올바르지 않습니다."); }
-                    return healthMealReviewRepository.save(HealthMealReview.builder().userId(userId).logDate(date)
-                            .inputHash(hash).mealDescription(description).reviewJson(output)
-                            .modelName(healthAiClient.getModel()).build());
-                });
+                .orElseGet(() -> createMealReview(userId, date, description, hash));
         return mealReviewMap(review);
+    }
+
+    private HealthMealReview createMealReview(Long userId, LocalDate date, String description, String hash) {
+        String system = "식사 기록을 평가하는 건강정보 보조 도구입니다. 진단, 칼로리, 분량을 추측하지 말고 실제 기록된 음식 구성의 균형만 참고 평가하세요. balanceScore는 기록된 음식의 다양성과 구성을 기준으로 0~100 정수로 작성하고, 끼니 수나 기록 완성도는 점수에 반영하지 마세요(서버가 실제 먹은 끼니 수를 별도 반영합니다). 점수가 70 이상이면 BALANCED, 70 미만이면 NEEDS_ATTENTION으로 표시하세요. 음식 정보가 부족하거나 실제 먹은 음식이 없으면 balanceLabel은 UNKNOWN, balanceScore는 null로 하고 판단 불가 이유를 적으세요. balanceLabel은 BALANCED, NEEDS_ATTENTION, UNKNOWN 중 하나입니다. 사용자에게 보이는 모든 문장은 자연스러운 한국어로만 작성하세요. JSON 객체만 반환하고 키는 balanceLabel, balanceScore, balanceRationale, summary, positivePoints, improvements입니다. balanceRationale은 점수 근거 한 문장, 배열은 각각 최대 3개입니다.";
+        String output = healthAiClient.completeJson(system,
+                "식사 기록: " + description + "\n비난 없이 실천 가능한 피드백을 한국어로 작성하세요. 먹지 않은 끼니나 기록 없음은 음식으로 간주하지 마세요.");
+        try {
+            JsonNode json = objectMapper.readTree(output);
+            JsonNode score = json.path("balanceScore");
+            String label = json.path("balanceLabel").asText("UNKNOWN");
+            boolean validLabel = List.of("BALANCED", "NEEDS_ATTENTION", "UNKNOWN").contains(label);
+            boolean validScore = "UNKNOWN".equals(label) ? json.path("balanceScore").isNull()
+                    : score.isIntegralNumber() && score.intValue() >= 0 && score.intValue() <= 100;
+            if (validScore && "BALANCED".equals(label)) validScore = score.intValue() >= 70;
+            if (validScore && "NEEDS_ATTENTION".equals(label)) validScore = score.intValue() < 70;
+            if (!json.isObject() || !validLabel || !validScore) {
+                throw new IllegalArgumentException("invalid score");
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("AI 식사 평가 형식이 올바르지 않습니다.");
+        }
+        return saveMealReviewOrReuse(HealthMealReview.builder().userId(userId).logDate(date)
+                .inputHash(hash).mealDescription(description).reviewJson(output)
+                .modelName(healthAiClient.getModel()).build());
+    }
+
+    private HealthMealReview saveMealReviewOrReuse(HealthMealReview review) {
+        try {
+            return healthMealReviewRepository.saveAndFlush(review);
+        } catch (DataIntegrityViolationException e) {
+            return healthMealReviewRepository.findByUserIdAndLogDateAndInputHash(
+                    review.getUserId(), review.getLogDate(), review.getInputHash()).orElseThrow(() -> e);
+        }
+    }
+
+    private HealthExerciseReview saveExerciseReviewOrReuse(HealthExerciseReview review) {
+        try {
+            return healthExerciseReviewRepository.saveAndFlush(review);
+        } catch (DataIntegrityViolationException e) {
+            return healthExerciseReviewRepository.findByUserIdAndLogDateAndInputHash(
+                    review.getUserId(), review.getLogDate(), review.getInputHash()).orElseThrow(() -> e);
+        }
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -535,7 +574,7 @@ public class HealthManagementService {
                             "오늘의 운동 기록: " + description + "\n운동 종류와 기록의 구체성을 한국어로 요약하고 무리하지 않는 다음 행동을 제안하세요.");
                     try { objectMapper.readTree(output); }
                     catch (Exception e) { throw new IllegalStateException("AI 운동 평가 형식이 올바르지 않습니다."); }
-                    return healthExerciseReviewRepository.save(HealthExerciseReview.builder().userId(userId).logDate(date)
+                    return saveExerciseReviewOrReuse(HealthExerciseReview.builder().userId(userId).logDate(date)
                             .inputHash(hash).exerciseDescription(description).reviewJson(output)
                             .modelName(healthAiClient.getModel()).build());
                 });
@@ -554,6 +593,10 @@ public class HealthManagementService {
             String label = json.path("balanceLabel").asText("UNKNOWN");
             Map<String, Object> result = new HashMap<>();
             result.put("balanceLabel", List.of("BALANCED", "NEEDS_ATTENTION", "UNKNOWN").contains(label) ? label : "UNKNOWN");
+            JsonNode balanceScore = json.path("balanceScore");
+            result.put("balanceScore", !"UNKNOWN".equals(label) && balanceScore.isIntegralNumber()
+                    && balanceScore.intValue() >= 0 && balanceScore.intValue() <= 100 ? balanceScore.intValue() : null);
+            result.put("balanceRationale", json.path("balanceRationale").asText(""));
             result.put("summary", json.path("summary").asText("입력한 식사 기록을 확인했습니다."));
             result.put("positivePoints", jsonStringList(json.path("positivePoints")));
             result.put("improvements", jsonStringList(json.path("improvements")));

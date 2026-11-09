@@ -400,7 +400,7 @@ export default function Dashboard() {
                   <td><span className="mc-tbl-tag">{c.type}</span></td>
                 </tr>
               )) : (
-                <tr>
+                <tr className="mc-dashboard-empty-row">
                   <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-3)', padding: '20px 0' }}>
                     아직 연동된 진료 기록이 없어요.
                   </td>

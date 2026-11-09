@@ -362,7 +362,7 @@ const InsuranceList = () => {
                       보장 내역 · {(policy.coverageItems || []).length}건
                     </div>
                     {coverageGroups.length > 0 ? (
-                      <table className="mc-tbl">
+                      <table className="mc-tbl mc-insurance-coverage-table">
                         <thead>
                           <tr>
                             <th>보장 항목</th>
@@ -372,7 +372,7 @@ const InsuranceList = () => {
                         </thead>
                         <tbody>
                           {coverageGroups.flatMap((group) => [
-                            <tr key={`group-${group.category}`}>
+                            <tr className="mc-coverage-group-row" key={`group-${group.category}`}>
                               <td colSpan={3} style={{
                                 background: '#F6F8FC',
                                 color: 'var(--text-2)',
@@ -384,7 +384,7 @@ const InsuranceList = () => {
                             </tr>,
                             ...group.items.map((item, idx) => (
                               <tr key={`${group.category}-${idx}`}>
-                                <td>
+                                <td data-label="보장 항목">
                                   <div style={{ fontWeight: 700 }}>{item.name || item.itemName || '-'}</div>
                                   {item.agreementType && (
                                     <div style={{ marginTop: 3, color: 'var(--text-3)', fontSize: 12 }}>
@@ -392,10 +392,10 @@ const InsuranceList = () => {
                                     </div>
                                   )}
                                 </td>
-                                <td style={{ textAlign: 'right', color: 'var(--blue)', fontWeight: 700 }}>
+                                <td data-label="보장금액" style={{ textAlign: 'right', color: 'var(--blue)', fontWeight: 700 }}>
                                   {formatCoverageAmount(item)}
                                 </td>
-                                <td style={{ textAlign: 'right' }}>
+                                <td data-label="상태" style={{ textAlign: 'right' }}>
                                   <span className={`mc-tag ${item.isCovered !== false ? 'mc-tag-success' : 'mc-tag-neutral'}`}>
                                     {item.isCovered !== false ? '보장중' : '예외'}
                                   </span>

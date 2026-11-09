@@ -868,7 +868,7 @@ const HealthReport = () => {
                   <LinkBtn onClick={() => navigate('/medical-records')}>진료 기록 보기 →</LinkBtn>
                 </div>
                 <div className="mc-card mc-card-body mc-report-panel mc-report-info-card">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+                  <div className="mc-report-pattern-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
                     <div>
                       <div className="mc-field-label">자주 방문한 진료과</div>
                       {deptPattern.length === 0 ? (

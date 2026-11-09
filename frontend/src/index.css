@@ -4817,11 +4817,11 @@ body::before {
   }
 
   .mc-page-top-right {
-    display: none;
-  }
-
-  .mc-health-mbti-section {
-    display: none;
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
   }
 
   .mc-page-title {
@@ -4894,6 +4894,25 @@ body::before {
     padding: 14px;
   }
 
+  .mc-card-head {
+    align-items: flex-start;
+  }
+
+  .mc-card-title,
+  .mc-page-title,
+  .mc-sec-title,
+  .mc-list-name {
+    overflow-wrap: anywhere;
+  }
+
+  .mc-page-top-right > * {
+    max-width: 100%;
+  }
+
+  .mc-page-top-right .mc-btn {
+    min-height: 42px;
+  }
+
   .mc-row,
   .mc-row-between {
     align-items: stretch;
@@ -4903,6 +4922,21 @@ body::before {
 
   .mc-row-wrap {
     gap: 7px;
+  }
+
+  .mc-kv {
+    align-items: flex-start;
+    gap: 8px 12px;
+  }
+
+  .mc-kv-key {
+    min-width: 0;
+  }
+
+  .mc-kv-val {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
   }
 
   .mc-chip,
@@ -4965,11 +4999,26 @@ body::before {
     white-space: normal;
   }
 
+  .mc-policy-title {
+    display: block !important;
+    line-height: 1.4;
+  }
+
+  .mc-policy-title .mc-tag {
+    margin: 4px 0 0;
+  }
+
   .mc-chart-wrap,
   .mc-chart-wrap-lg {
     min-height: 260px;
     padding: 14px 10px 8px;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .mc-chart-wrap > *,
+  .mc-chart-wrap-lg > * {
+    min-width: 0;
   }
 
   .mc-report-chart-card {
@@ -5035,6 +5084,21 @@ body::before {
   .mc-peer-premium-card {
     grid-column: auto !important;
     min-height: auto;
+  }
+
+  .mc-insurance-metric-card {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .mc-insurance-metric-card .mc-stat-value {
+    margin-top: 8px;
+    font-size: 21px;
+    overflow-wrap: anywhere;
+  }
+
+  .mc-insurance-metric-card .mc-stat-sub {
+    margin-top: 6px;
   }
 
   .mc-health-mbti-card,
@@ -5611,4 +5675,376 @@ body::before {
     height: 6px;
     flex-basis: 6px;
   }
+}
+
+@media (max-width: 760px) {
+  .mc-dashboard-record-table {
+    display: block;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .mc-dashboard-record-table thead { display: none; }
+
+  .mc-dashboard-record-table tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .mc-dashboard-record-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(82px, max-content);
+    gap: 4px 12px;
+    align-items: start;
+    padding: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .mc-dashboard-record-table tbody td {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left !important;
+    white-space: normal;
+  }
+
+  .mc-dashboard-record-table tbody td:first-child { grid-row: 1 / span 2; }
+  .mc-dashboard-record-table tbody td:nth-child(2) {
+    grid-column: 2;
+    width: auto;
+    white-space: nowrap;
+  }
+  .mc-dashboard-record-table tbody td:nth-child(3) {
+    grid-column: 2;
+    width: auto;
+    justify-self: end;
+  }
+
+  .mc-dashboard-record-table .mc-tbl-tag { white-space: nowrap; }
+
+  .mc-dashboard-record-table .mc-dashboard-empty-row {
+    display: block;
+    padding: 0;
+    border: 1px solid var(--border-soft);
+  }
+
+  .mc-dashboard-record-table .mc-dashboard-empty-row td { padding: 14px 8px; }
+
+  .mc-checkup-results-table,
+  .mc-insurance-coverage-table {
+    display: block;
+    width: 100%;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    white-space: normal;
+  }
+
+  .mc-checkup-results-table thead,
+  .mc-insurance-coverage-table thead { display: none; }
+
+  .mc-checkup-results-table tbody,
+  .mc-insurance-coverage-table tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .mc-checkup-results-table tbody tr,
+  .mc-insurance-coverage-table tbody tr:not(.mc-coverage-group-row) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    padding: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .mc-checkup-results-table tbody td,
+  .mc-insurance-coverage-table tbody tr:not(.mc-coverage-group-row) td {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    text-align: left !important;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .mc-checkup-results-table tbody td::before,
+  .mc-insurance-coverage-table tbody tr:not(.mc-coverage-group-row) td::before {
+    content: attr(data-label);
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .mc-checkup-results-table tbody td:first-child,
+  .mc-insurance-coverage-table tbody tr:not(.mc-coverage-group-row) td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .mc-insurance-coverage-table .mc-coverage-group-row {
+    display: block;
+    padding: 0;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    background: #F6F8FC;
+  }
+
+  .mc-insurance-coverage-table .mc-coverage-group-row td {
+    display: block;
+    padding: 8px 12px;
+    border: 0;
+    white-space: normal;
+  }
+
+  .mc-report-pattern-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 18px !important; }
+
+  .health-calendar-score-table { border: 0; overflow: visible; }
+  .health-calendar-score-row.header { display: none; }
+  .health-calendar-score-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 10px;
+    margin-top: 8px;
+    padding: 11px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .health-calendar-score-row:first-child { border-top: 1px solid var(--border-soft); }
+  .health-calendar-score-row > :last-child { grid-column: 1 / -1; line-height: 1.45; }
+
+  .mc-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .mc-tab { flex: 1 1 auto; }
+
+  .mc-checkup-timeline-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px !important;
+    align-items: start !important;
+  }
+
+  .mc-checkup-timeline-row > :last-child {
+    grid-column: 1 / -1;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  .mc-reservation-filterbar {
+    align-items: stretch;
+  }
+
+  .mc-reservation-filterbar > * {
+    min-width: 0;
+    flex: 1 1 130px;
+  }
+
+  .mc-reservation-count { align-self: flex-start; }
+
+  .mc-reservation-hospital {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 8px 10px;
+  }
+
+  .mc-reservation-hospital > :last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .mc-page .mc-tbl {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+  }
+
+  .mc-tbl td,
+  .mc-tbl th {
+    overflow-wrap: anywhere;
+  }
+
+  .health-management-daily-grid,
+  .health-management-guidance {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .health-meal-slots,
+  .health-choice-list {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 430px) {
+  .mc-page-top-right .mc-btn {
+    flex: 1 1 auto;
+  }
+
+  .mc-insurance-overview-grid { padding: 10px; }
+
+  .mc-report-metric-grid,
+  .mc-report-insight-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .health-calendar-score-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mc-dashboard-record-table tbody tr,
+  .mc-checkup-results-table tbody tr,
+  .mc-insurance-coverage-table tbody tr:not(.mc-coverage-group-row) {
+    padding: 10px;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .health-management-daily-grid { gap: 18px; }
+
+  .health-management-section > .mc-sec-head,
+  .health-calendar-heading {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .health-management-section > .mc-sec-head .mc-card-sub {
+    flex: 0 0 auto;
+    padding-top: 2px;
+  }
+
+  .health-management-mission-card { padding: 15px; }
+
+  .health-mission-complete {
+    min-height: 46px;
+    width: 100%;
+  }
+
+  .health-management-log { padding: 16px; }
+  .health-log-fieldset + .health-log-fieldset { padding-top: 4px; }
+
+  .health-meal-choice-list,
+  .health-exercise-choice-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .health-choice {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+
+  .health-duration-choice-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .health-optional-note textarea { min-height: 76px; }
+
+  .health-management-save { display: flex; margin-top: 16px; }
+  .health-management-save .mc-btn { width: 100%; min-height: 48px; }
+
+  .health-calendar-controls { gap: 8px; }
+  .health-calendar-controls .mc-btn {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    place-items: center;
+    padding: 0;
+  }
+
+  .health-calendar-weekday,
+  .health-calendar-blank,
+  .health-calendar-cell,
+  .health-calendar-day { min-height: 62px; }
+
+  .health-calendar-day { gap: 3px; padding: 4px 1px; font-size: 12px; }
+  .health-calendar-score { font-size: 9px; }
+
+  .health-calendar-score-row.header { display: none; }
+  .health-calendar-score-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 10px;
+    padding: 12px;
+  }
+
+  .health-calendar-score-row > :last-child {
+    grid-column: 1 / -1;
+    line-height: 1.5;
+  }
+
+  .health-onboarding-actions > .mc-btn { min-height: 46px; }
+  .health-hba1c-table { display: block; width: 100%; overflow: visible; border: 0; background: transparent; }
+  .health-hba1c-table thead { display: none; }
+  .health-hba1c-table tbody { display: grid; gap: 8px; }
+  .health-hba1c-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    padding: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .health-hba1c-table tbody td {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  .health-hba1c-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .health-hba1c-table tbody td:first-child,
+  .health-hba1c-table tbody td:last-child { grid-column: 1 / -1; }
+  .health-hba1c-table tbody td:last-child { flex-direction: row; }
+  .health-hba1c-table tbody td:last-child .mc-btn { min-height: 42px; flex: 1; }
+}
+
+@media (max-width: 430px) {
+  .health-management-section > .mc-sec-head,
+  .health-calendar-heading { flex-wrap: wrap; }
+
+  .health-management-section > .mc-sec-head .mc-card-sub { margin-left: auto; }
+  .health-calendar-controls { width: 100%; justify-content: space-between; }
+
+  .health-calendar-scorecard-heading { flex-direction: row; align-items: center; }
+  .health-calendar-scorecard-heading h3 { font-size: 15px; }
+  .health-calendar-grid { gap: 3px; }
+  .health-calendar-weekday,
+  .health-calendar-blank,
+  .health-calendar-cell,
+  .health-calendar-day { min-height: 56px; }
 }

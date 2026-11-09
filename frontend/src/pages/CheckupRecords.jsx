@@ -474,7 +474,7 @@ const CheckupRecords = () => {
             )}
           </div>
           <div className="mc-card">
-            <table className="mc-tbl">
+            <table className="mc-tbl mc-checkup-results-table">
               <thead>
                 <tr>
                   <th>검사항목</th>
@@ -486,12 +486,12 @@ const CheckupRecords = () => {
               <tbody>
                 {results.map((result, idx) => (
                   <tr key={idx}>
-                    <td style={{ fontWeight: 600 }}>
+                    <td data-label="검사항목" style={{ fontWeight: 600 }}>
                       {result.category}
                     </td>
-                    <td><strong>{result.value}</strong></td>
-                    <td style={{ color: 'var(--text-2)' }}>{result.normal}</td>
-                    <td>
+                    <td data-label="측정값"><strong>{result.value}</strong></td>
+                    <td data-label="정상범위" style={{ color: 'var(--text-2)' }}>{result.normal}</td>
+                    <td data-label="상태">
                       <span className={`mc-tag ${STATUS_CLASS[result.status]}`}>
                         {STATUS_LABEL[result.status]}
                       </span>
@@ -523,6 +523,7 @@ const CheckupRecords = () => {
               return (
                 <div
                   key={month.ym}
+                  className="mc-checkup-timeline-row"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '100px minmax(0, 1fr) minmax(160px, auto)',

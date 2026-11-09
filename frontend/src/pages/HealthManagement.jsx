@@ -509,7 +509,7 @@ export default function HealthManagement() {
                 {missions.length === 0 ? (
                   <div className="mc-card mc-card-body mc-card-sub">오늘 등록된 건강 미션이 없습니다.</div>
                 ) : missions.map((mission) => (
-                  <article className="mc-card mc-card-body" key={mission.id}>
+                  <article className="mc-card mc-card-body health-management-mission-card" key={mission.id}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'start' }}>
                       <div>
                         <div className="mc-field-label">{mission.category === 'ACTIVITY' ? '운동' : '식사'} · {mission.source === 'AI' ? 'AI 추천' : '기본 추천'}</div>
@@ -522,7 +522,7 @@ export default function HealthManagement() {
                     <div className="mc-card-sub" style={{ lineHeight: 1.6 }}>{mission.description}</div>
                     <div className="mc-card-sub" style={{ marginTop: 8 }}>추천 이유: {mission.reason}</div>
                     {mission.status !== 'COMPLETED' && (
-                      <button className="mc-btn mc-btn-primary" type="button" style={{ marginTop: 14 }} onClick={() => completeMission(mission.id)}>
+                      <button className="mc-btn mc-btn-primary health-mission-complete" type="button" style={{ marginTop: 14 }} onClick={() => completeMission(mission.id)}>
                         미션 완료
                       </button>
                     )}
@@ -545,7 +545,7 @@ export default function HealthManagement() {
                     {MEAL_SLOTS.map(({ key, label }) => (
                       <fieldset className="health-meal-slot" key={key}>
                         <legend>{label}</legend>
-                        <div className="health-choice-list">
+                        <div className="health-choice-list health-meal-choice-list">
                           {MEAL_OPTIONS.map((option) => (
                             <button
                               className={`mc-btn health-choice${mealEntries[key].includes(option) ? ' selected' : ''}`}
@@ -575,6 +575,8 @@ export default function HealthManagement() {
                   </label>
                   {log.mealReview && <div className="health-meal-review" aria-live="polite">
                     <strong>{log.mealReview.balanceLabel === 'BALANCED' ? '균형 잡힌 식사예요' : log.mealReview.balanceLabel === 'NEEDS_ATTENTION' ? '조금 더 챙기면 좋아요' : '식사 기록 평가'}</strong>
+                    {log.mealReview.balanceScore != null && <div>AI 식사 구성 평가: {log.mealReview.balanceScore}점</div>}
+                    {log.mealReview.balanceRationale && <div>{log.mealReview.balanceRationale}</div>}
                     <p>{log.mealReview.summary}</p>
                     {log.mealReview.positivePoints?.length > 0 && <div>좋았던 점: {log.mealReview.positivePoints.join(' · ')}</div>}
                     {log.mealReview.improvements?.length > 0 && <div>다음 식사 제안: {log.mealReview.improvements.join(' · ')}</div>}
@@ -584,7 +586,7 @@ export default function HealthManagement() {
                 <fieldset className="health-log-fieldset">
                   <legend className="mc-field-label">오늘의 운동</legend>
                   <p className="mc-card-sub health-log-hint">오늘 한 운동 중 가장 가까운 항목 하나를 선택하세요.</p>
-                  <div className="health-choice-list">
+                  <div className="health-choice-list health-exercise-choice-list">
                     {EXERCISE_OPTIONS.map((activity) => (
                       <button
                         className={`mc-btn health-choice${exerciseEntry.activity === activity ? ' selected' : ''}`}
@@ -600,7 +602,7 @@ export default function HealthManagement() {
                   {exerciseEntry.activity && exerciseEntry.activity !== '오늘은 운동하지 않음' && (
                     <fieldset className="health-duration-group">
                       <legend className="mc-card-sub">운동 시간</legend>
-                      <div className="health-choice-list">
+                      <div className="health-choice-list health-duration-choice-list">
                         {EXERCISE_MINUTES.map((minutes) => (
                           <button
                             className={`mc-btn health-choice${exerciseEntry.minutes === minutes ? ' selected' : ''}`}
@@ -629,7 +631,7 @@ export default function HealthManagement() {
                   </div>}
                 </fieldset>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <div className="health-management-save">
                 <button className="mc-btn mc-btn-primary" type="submit" disabled={saving}>{saving ? '저장 중...' : '오늘 기록 저장'}</button>
               </div>
               </form>
@@ -682,7 +684,7 @@ export default function HealthManagement() {
               <section className="health-calendar-scorecard" aria-labelledby="health-calendar-score-title">
                 <div className="health-calendar-scorecard-heading">
                   <h3 id="health-calendar-score-title">{selectedCalendarDate} 기록 점수표</h3>
-                  <strong>종합 {selectedCalendarDay?.totalScore == null ? '미산정' : `${selectedCalendarDay.totalScore}점`}</strong>
+                  <strong>종합 {selectedCalendarDay?.totalScore == null ? '미산정' : `${selectedCalendarDay.totalScore}점`}{selectedCalendarDay?.scoredCategoryCount > 0 ? ` · ${selectedCalendarDay.scoredCategoryCount}/2 항목` : ''}</strong>
                 </div>
                 <div className="health-calendar-score-table" role="table" aria-label={`${selectedCalendarDate} 식사·운동 기록 점수`}>
                   <div className="health-calendar-score-row header" role="row">
@@ -699,7 +701,7 @@ export default function HealthManagement() {
                     <span role="cell">{selectedCalendarDay?.exerciseScoreReason || '운동 기록이 없습니다.'}</span>
                   </div>
                 </div>
-                <p className="health-calendar-score-note">식사 점수는 AI 평가 참고값(균형 100점, 보완 필요 50점)이며 평가가 없으면 미산정입니다. 세 끼 모두 먹지 않음으로 기록한 날도 점수를 산정하지 않습니다. 운동 점수는 입력된 시간(30분 기준, 최대 100점) 참고값이며 건강 상태나 의학적 평가 점수가 아닙니다.</p>
+                <p className="health-calendar-score-note">식사 점수는 실제 먹은 끼니 수(40%)와 AI 식사 구성 평가(60%)를 합산합니다. 먹은 끼니가 없거나 AI 평가가 없으면 미산정입니다. 운동 점수는 기록한 시간(30분 기준, 최대 100점)이며, 종합 점수는 산정 가능한 식사·운동 항목의 평균입니다. 모두 생활습관 기록 참고값이며 건강 상태나 의학적 평가 점수가 아닙니다.</p>
               </section>
             </div>
           </section>}
@@ -806,14 +808,14 @@ export default function HealthManagement() {
                   <div className="mc-card-sub">등록된 검사 결과가 없습니다.</div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table className="mc-tbl" style={{ minWidth: 390 }}>
+                    <table className="mc-tbl health-hba1c-table">
                       <thead><tr><th>검사일</th><th>HbA1c</th><th>병원</th><th>관리</th></tr></thead>
                       <tbody>
                         {results.map((result) => (
                           <tr key={result.id}>
-                            <td>{result.testDate}</td><td><strong>{result.value}%</strong></td>
-                            <td>{result.organizationName || '-'}</td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
+                            <td data-label="검사일">{result.testDate}</td><td data-label="HbA1c"><strong>{result.value}%</strong></td>
+                            <td data-label="병원">{result.organizationName || '-'}</td>
+                            <td data-label="관리" style={{ whiteSpace: 'nowrap' }}>
                               <button className="mc-btn" type="button" onClick={() => editHba1c(result)}>수정</button>{' '}
                               <button className="mc-btn" type="button" onClick={() => deleteHba1c(result.id)}>삭제</button>
                             </td>
