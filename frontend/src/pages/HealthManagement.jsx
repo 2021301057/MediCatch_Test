@@ -11,6 +11,11 @@ const shiftMonth = (month, amount) => {
   const shifted = new Date(Date.UTC(year, value - 1 + amount, 1));
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
 };
+const weeklyChangeText = (value, unit) => value > 0
+  ? `지난주 같은 기간보다 ${value}${unit} 늘었어요.`
+  : value < 0
+    ? `지난주 같은 기간보다 ${Math.abs(value)}${unit} 줄었어요.`
+    : '지난주 같은 기간과 같아요.';
 
 const EMPTY_LOG = {
   mealDescription: '',
@@ -103,6 +108,7 @@ export default function HealthManagement() {
   const [results, setResults] = useState([]);
   const [missions, setMissions] = useState([]);
   const [aiGuidance, setAiGuidance] = useState(null);
+  const [weeklySummary, setWeeklySummary] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(currentMonthKst);
   const [calendarDays, setCalendarDays] = useState([]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(todayKst);
@@ -125,10 +131,11 @@ export default function HealthManagement() {
   const load = useCallback(async () => {
     setLoading(true);
     setMessage('');
-    const [assessmentResult, resultsResult, logResult] = await Promise.allSettled([
+    const [assessmentResult, resultsResult, logResult, weeklyResult] = await Promise.allSettled([
       healthAPI.getDiabetesAssessment(),
       healthAPI.getHba1cResults(),
       healthAPI.getDailyHealthLog(today),
+      healthAPI.getHealthWeeklySummary(),
     ]);
     if (assessmentResult.status === 'fulfilled') {
       const data = assessmentResult.value;
@@ -152,13 +159,14 @@ export default function HealthManagement() {
       }
     }
     if (resultsResult.status === 'fulfilled') setResults(Array.isArray(resultsResult.value) ? resultsResult.value : []);
+    if (weeklyResult.status === 'fulfilled') setWeeklySummary(weeklyResult.value);
     if (logResult.status === 'fulfilled') {
       const dailyLog = logResult.value;
       setLog({ ...EMPTY_LOG, ...dailyLog });
       setMealEntries(parseMealDescription(dailyLog.mealDescription));
       setExerciseEntry(parseExerciseDescription(dailyLog.exerciseDescription));
     }
-    if ([assessmentResult, resultsResult, logResult].some((result) => result.status === 'rejected')) {
+    if ([assessmentResult, resultsResult, logResult, weeklyResult].some((result) => result.status === 'rejected')) {
       setMessage('일부 건강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
     }
 
@@ -483,7 +491,7 @@ export default function HealthManagement() {
                         <option value="true">동의합니다</option>
                         <option value="false">동의하지 않습니다</option>
                       </select>
-                      <span className="mc-card-sub">동의하면 위험 단계와 필요한 검사 수치가 AI 제공업체로 전송됩니다. 이름과 병원명은 보내지 않습니다. 동의하지 않아도 규칙 기반 안내와 기록 기능은 이용할 수 있습니다.</span>
+                      <span className="mc-card-sub">동의하면 검진 위험 정보·검사 수치와 최근 7일 식사·운동 집계가 AI 제공업체로 전송되어 안내와 미션 생성에 사용됩니다. AI 식사 평가를 요청하면 입력한 식사 내용도 전송됩니다. 이름과 병원명은 보내지 않으며, 동의하지 않아도 규칙 기반 안내와 기록 기능은 이용할 수 있습니다.</span>
                     </label>
                   </div>
                 )}
@@ -499,6 +507,22 @@ export default function HealthManagement() {
           {activeStage === 2 && assessment && !assessment.onboardingComplete && (
             <div className="mc-alert mc-alert-blue">먼저 검진 이력과 건강관리 시작 정보를 입력하면 오늘의 미션이 개인화됩니다. 기록 기능은 계속 이용할 수 있어요.</div>
           )}
+          {activeStage === 2 && weeklySummary?.metrics && <section className="health-weekly-summary" aria-labelledby="health-weekly-summary-title">
+            <div className="health-weekly-summary-heading">
+              <h2 id="health-weekly-summary-title">이번 주 활동</h2>
+              <span>{weeklySummary.weekStart} ~ {weeklySummary.weekEnd}</span>
+            </div>
+            <div className="mc-card mc-card-body">
+              <div className="health-weekly-summary-stats">
+                <div><span>출석</span><strong>{weeklySummary.metrics.attendanceDays}/{weeklySummary.daysElapsed}일</strong><small>{weeklyChangeText(weeklySummary.changes.attendanceDays, '일')}</small></div>
+                <div><span>식사 기록</span><strong>{weeklySummary.metrics.mealRecordDays}일</strong><small>{weeklyChangeText(weeklySummary.changes.mealRecordDays, '일')}</small></div>
+                <div><span>운동</span><strong>{weeklySummary.metrics.exerciseDays}일 · {weeklySummary.metrics.exerciseMinutes}분</strong><small>{weeklyChangeText(weeklySummary.changes.exerciseDays, '일')}</small></div>
+                <div><span>미션 완료</span><strong>{weeklySummary.metrics.completedMissions}/{weeklySummary.metrics.availableMissions}</strong><small>{weeklyChangeText(weeklySummary.changes.completedMissions, '회')}</small></div>
+              </div>
+              <p className="health-weekly-summary-headline">{weeklySummary.headline}</p>
+              <p className="health-weekly-summary-next">{weeklySummary.nextStep}</p>
+            </div>
+          </section>}
           {activeStage === 2 && <div className="health-management-daily-grid">
             <section className="health-management-section">
               <div className="mc-sec-head">
@@ -760,7 +784,7 @@ export default function HealthManagement() {
                       <option value="true">동의</option>
                       <option value="false">동의하지 않음</option>
                     </select>
-                    <span className="mc-card-sub">동의하면 식사·운동 문장과 필요한 건강 정보가 AI 제공업체로 전송됩니다. 이름과 병원명은 보내지 않습니다.</span>
+                    <span className="mc-card-sub">AI 안내·미션 생성에는 검진 정보와 최근 7일 식사·운동 집계가 사용됩니다. AI 식사 평가를 요청하면 해당 식사 내용도 AI 제공업체로 전송됩니다. 이름과 병원명은 보내지 않습니다.</span>
                   </label>
                   <button className="mc-btn mc-btn-primary" type="button" onClick={saveAiConsent}>설정 저장</button>
                 </div>}

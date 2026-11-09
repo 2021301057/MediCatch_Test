@@ -131,6 +131,7 @@ export const healthAPI = {
   completeMission: (id) => api.patch(`/health/missions/${id}/complete`),
   recordHealthAttendance: () => api.post('/health/attendance/today'),
   getHealthCalendar: (month) => api.get('/health/calendar', { params: { month } }),
+  getHealthWeeklySummary: () => api.get('/health/weekly-summary'),
   syncCheckupStep1: (data) => api.post('/health/sync/checkup/step1', withSyncRequestAliases(data), { timeout: 120000 }),
   syncCheckupStep2: (data) => api.post('/health/sync/checkup/step2', data, { timeout: 120000 }),
   syncMedicalStep1: (data) => api.post('/health/sync/medical/step1', withSyncRequestAliases(data), { timeout: 120000 }),

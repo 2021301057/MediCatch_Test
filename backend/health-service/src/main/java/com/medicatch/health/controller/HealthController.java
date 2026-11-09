@@ -441,6 +441,11 @@ public class HealthController {
         return ResponseEntity.ok(healthManagementService.recordTodayAttendance(userId));
     }
 
+    @GetMapping("/weekly-summary")
+    public ResponseEntity<Map<String, Object>> getHealthWeeklySummary(@RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(healthManagementService.getWeeklySummary(userId));
+    }
+
     @GetMapping("/calendar")
     public ResponseEntity<?> getHealthCalendar(@RequestHeader("X-User-Id") Long userId,
                                                @RequestParam String month) {

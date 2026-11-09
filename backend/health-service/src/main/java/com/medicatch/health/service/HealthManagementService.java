@@ -39,6 +39,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.YearMonth;
+import java.time.DayOfWeek;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -66,12 +69,22 @@ public class HealthManagementService {
     private final HealthAiClient healthAiClient;
     private final ObjectMapper objectMapper;
 
-    private static final String AI_PROMPT_VERSION = "diabetes-guidance-v1";
+    private static final String AI_PROMPT_VERSION = "diabetes-guidance-v2";
     private static final String MEAL_REVIEW_PROMPT_VERSION = "meal-review-v4";
     private static final String EXERCISE_REVIEW_PROMPT_VERSION = "exercise-review-v2";
     private static final String MEAL_ENTRY_PREFIX = "끼니별 빠른 기록";
     private static final String EXERCISE_ENTRY_PREFIX = "운동 빠른 기록";
     private static final Pattern EXERCISE_MINUTES_PATTERN = Pattern.compile("(\\d{1,3})\\s*분");
+
+    private record RecentHabitSummary(int mealDays, int sugaryDrinkDays, int vegetableDays,
+                                      int exerciseDays, int exerciseMinutes, List<String> recentMissionCodes) {}
+
+    private record MissionPlan(String category, String code, String title, String description, String reason) {}
+
+    private record WeeklyMetrics(int attendanceDays, int mealRecordDays, int exerciseDays, int exerciseMinutes,
+                                 Integer mealAverageScore, int mealScoredDays,
+                                 Integer exerciseAverageScore, int exerciseScoredDays,
+                                 int completedMissions, int availableMissions) {}
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getHba1cResults(Long userId) {
@@ -326,6 +339,118 @@ public class HealthManagementService {
         LocalDate today = LocalDate.now(APP_ZONE);
         healthDailyAttendanceRepository.recordAttendance(userId, today);
         return Map.of("date", today, "attended", true);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getWeeklySummary(Long userId) {
+        LocalDate today = LocalDate.now(APP_ZONE);
+        LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        int elapsedDays = (int) ChronoUnit.DAYS.between(weekStart, today) + 1;
+        LocalDate previousWeekStart = weekStart.minusDays(7);
+        LocalDate previousWeekEnd = previousWeekStart.plusDays(elapsedDays - 1L);
+        WeeklyMetrics current = getWeeklyMetrics(userId, weekStart, today);
+        WeeklyMetrics previous = getWeeklyMetrics(userId, previousWeekStart, previousWeekEnd);
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("weekStart", weekStart);
+        summary.put("weekEnd", today);
+        summary.put("daysElapsed", elapsedDays);
+        summary.put("metrics", weeklyMetricsMap(current));
+        Map<String, Object> changes = new HashMap<>();
+        changes.put("attendanceDays", current.attendanceDays() - previous.attendanceDays());
+        changes.put("mealRecordDays", current.mealRecordDays() - previous.mealRecordDays());
+        changes.put("exerciseDays", current.exerciseDays() - previous.exerciseDays());
+        changes.put("exerciseMinutes", current.exerciseMinutes() - previous.exerciseMinutes());
+        changes.put("completedMissions", current.completedMissions() - previous.completedMissions());
+        summary.put("changes", changes);
+        summary.put("headline", weeklyHeadline(current, changes));
+        summary.put("nextStep", weeklyNextStep(current));
+        return summary;
+    }
+
+    private WeeklyMetrics getWeeklyMetrics(Long userId, LocalDate start, LocalDate end) {
+        List<DailyHealthLog> logs = dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, start, end);
+        Map<LocalDate, Map<String, HealthMealReview>> reviewsByDate = new HashMap<>();
+        healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, start, end).forEach(review ->
+                reviewsByDate.computeIfAbsent(review.getLogDate(), ignored -> new HashMap<>()).put(review.getInputHash(), review));
+
+        int mealRecordDays = 0;
+        int exerciseDays = 0;
+        int exerciseMinutes = 0;
+        int mealScoreSum = 0;
+        int mealScoredDays = 0;
+        int exerciseScoreSum = 0;
+        int exerciseScoredDays = 0;
+        for (DailyHealthLog log : logs) {
+            Map<String, Object> scores = dailyActivityScores(log.getLogDate(), log, reviewsByDate);
+            Object mealCount = scores.get("mealRecordedCount");
+            if (mealCount instanceof Number count && count.intValue() > 0) mealRecordDays++;
+            if (hasExerciseRecord(log.getExerciseDescription()) || log.isExerciseCompleted()
+                    || (log.getWalkingMinutes() != null && log.getWalkingMinutes() > 0)
+                    || (log.getStepCount() != null && log.getStepCount() > 0)) exerciseDays++;
+            Object minutes = scores.get("exerciseMinutes");
+            if (minutes instanceof Number value && value.intValue() > 0) {
+                exerciseMinutes += value.intValue();
+            }
+            Object mealScore = scores.get("mealScore");
+            if (mealScore instanceof Number value) {
+                mealScoreSum += value.intValue();
+                mealScoredDays++;
+            }
+            Object exerciseScore = scores.get("exerciseScore");
+            if (exerciseScore instanceof Number value) {
+                exerciseScoreSum += value.intValue();
+                exerciseScoredDays++;
+            }
+        }
+        int completedMissions = 0;
+        List<DailyHealthMission> missions = dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, start, end);
+        for (DailyHealthMission mission : missions) {
+            if ("COMPLETED".equals(mission.getStatus())) completedMissions++;
+        }
+        int attendanceDays = healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, start, end).size();
+        return new WeeklyMetrics(attendanceDays, mealRecordDays, exerciseDays, exerciseMinutes,
+                mealScoredDays == 0 ? null : Math.round((float) mealScoreSum / mealScoredDays), mealScoredDays,
+                exerciseScoredDays == 0 ? null : Math.round((float) exerciseScoreSum / exerciseScoredDays), exerciseScoredDays,
+                completedMissions, missions.size());
+    }
+
+    private Map<String, Object> weeklyMetricsMap(WeeklyMetrics metrics) {
+        Map<String, Object> values = new HashMap<>();
+        values.put("attendanceDays", metrics.attendanceDays());
+        values.put("mealRecordDays", metrics.mealRecordDays());
+        values.put("exerciseDays", metrics.exerciseDays());
+        values.put("exerciseMinutes", metrics.exerciseMinutes());
+        values.put("mealAverageScore", metrics.mealAverageScore());
+        values.put("mealScoredDays", metrics.mealScoredDays());
+        values.put("exerciseAverageScore", metrics.exerciseAverageScore());
+        values.put("exerciseScoredDays", metrics.exerciseScoredDays());
+        values.put("completedMissions", metrics.completedMissions());
+        values.put("availableMissions", metrics.availableMissions());
+        return values;
+    }
+
+    private String weeklyHeadline(WeeklyMetrics metrics, Map<String, Object> changes) {
+        int mealChange = (int) changes.get("mealRecordDays");
+        int exerciseChange = (int) changes.get("exerciseDays");
+        int attendanceChange = (int) changes.get("attendanceDays");
+        if (mealChange > 0 && mealChange >= exerciseChange && mealChange >= attendanceChange) {
+            return "지난주 같은 기간보다 식사 기록이 " + mealChange + "일 늘었어요.";
+        }
+        if (exerciseChange > 0 && exerciseChange >= attendanceChange) {
+            return "지난주 같은 기간보다 운동 기록이 " + exerciseChange + "일 늘었어요.";
+        }
+        if (attendanceChange > 0) return "지난주 같은 기간보다 출석한 날이 " + attendanceChange + "일 늘었어요.";
+        if (metrics.mealRecordDays() == 0 && metrics.exerciseDays() == 0) {
+            return "이번 주 기록을 시작해보세요. 식사나 운동 중 하나만 남겨도 좋아요.";
+        }
+        return "이번 주 식사 " + metrics.mealRecordDays() + "일, 운동 " + metrics.exerciseDays() + "일을 기록했어요.";
+    }
+
+    private String weeklyNextStep(WeeklyMetrics metrics) {
+        if (metrics.mealRecordDays() == 0 && metrics.exerciseDays() == 0) return "다음 식사나 편한 활동 하나부터 기록해보세요.";
+        if (metrics.mealRecordDays() <= metrics.exerciseDays()) return "다음 식사 한 끼를 기록해보세요.";
+        return "무리하지 않는 범위에서 편한 활동을 이어가 보세요.";
     }
 
     @Transactional(readOnly = true)
@@ -646,20 +771,8 @@ public class HealthManagementService {
         DiabetesRiskProfile profile = diabetesRiskProfileRepository.findByUserId(userId).orElse(null);
         if (profile == null || profile.getOnboardingCompletedAt() == null) return List.of();
 
-        Map<String, Object> assessment = getDiabetesAssessment(userId);
-        List<DailyHealthLog> recentLogs = dailyHealthLogRepository.findTop7ByUserIdOrderByLogDateDesc(userId);
-        String activityReason = recentLogs.stream().anyMatch(log -> log.getWalkingMinutes() != null && log.getWalkingMinutes() >= 20)
-                ? "최근 기록을 바탕으로 오늘도 활동을 이어가도록 제안합니다."
-                : "가볍게 시작할 수 있는 오늘의 활동 목표입니다.";
-        boolean glucoseSignal = "ATTENTION".equals(assessment.get("level")) || "CONSULT".equals(assessment.get("level"));
-        String mealCode = today.getDayOfYear() % 2 == 0 ? "REDUCE_SUGARY_DRINKS" : "BALANCE_DINNER";
-        String mealTitle = "REDUCE_SUGARY_DRINKS".equals(mealCode) ? "단 음료 대신 물 선택하기" : "저녁 탄수화물 양 조절하기";
-        String mealDescription = "REDUCE_SUGARY_DRINKS".equals(mealCode)
-                ? "오늘 마실 음료 중 하나를 물이나 무가당 음료로 바꿔보세요."
-                : "저녁 식사에서 탄수화물 양을 살펴보고 채소와 단백질을 함께 챙겨보세요.";
-        String mealReason = glucoseSignal
-                ? "검진 결과를 바탕으로 식사 습관을 점검하는 미션입니다."
-                : "작은 식사 기록을 쌓기 위한 오늘의 미션입니다.";
+        RecentHabitSummary recentHabits = getRecentHabitSummary(userId, today);
+        List<MissionPlan> plans = selectMissionPlans(recentHabits);
 
         List<Map<String, Object>> aiMissions = List.of();
         Long assessmentId = null;
@@ -678,25 +791,144 @@ public class HealthManagementService {
                     }).toList();
                 }
             } catch (Exception ignored) {
-                // Existing rule-based missions remain available when AI is unavailable.
+                // Use the same personalized rule-based candidates if AI is unavailable.
             }
         }
 
         List<DailyHealthMission> toSave = new ArrayList<>();
-        Map<String, Object> activity = aiMissions.stream().filter(m -> "ACTIVITY".equals(m.get("category"))).findFirst().orElse(null);
-        Map<String, Object> meal = aiMissions.stream().filter(m -> "MEAL".equals(m.get("category"))).findFirst().orElse(null);
-        toSave.add(DailyHealthMission.builder().userId(userId).missionDate(today).category("ACTIVITY")
-                .code("WALK_20_MIN").title(textOr(activity, "title", "오늘 20분 걷기", 120))
-                .description(textOr(activity, "description", "무리가 없는 편안한 속도로 20분 걸어보세요.", 500))
-                .reason(textOr(activity, "reason", activityReason, 300)).status("PENDING")
-                .source(activity == null ? "RULE" : "AI").assessmentId(activity == null ? null : assessmentId).build());
-        toSave.add(DailyHealthMission.builder().userId(userId).missionDate(today).category("MEAL")
-                .code(mealCode).title(textOr(meal, "title", mealTitle, 120))
-                .description(textOr(meal, "description", mealDescription, 500))
-                .reason(textOr(meal, "reason", mealReason, 300)).status("PENDING")
-                .source(meal == null ? "RULE" : "AI").assessmentId(meal == null ? null : assessmentId).build());
-        List<DailyHealthMission> created = dailyHealthMissionRepository.saveAll(toSave);
-        return created.stream().map(this::toMissionMap).toList();
+        for (MissionPlan plan : plans) {
+            Map<String, Object> aiMission = aiMissions.stream()
+                    .filter(mission -> plan.category().equals(mission.get("category"))
+                            && plan.code().equals(mission.get("code")))
+                    .findFirst().orElse(null);
+            toSave.add(DailyHealthMission.builder().userId(userId).missionDate(today).category(plan.category())
+                    .code(plan.code()).title(textOr(aiMission, "title", plan.title(), 120))
+                    .description(textOr(aiMission, "description", plan.description(), 500))
+                    .reason(textOr(aiMission, "reason", plan.reason(), 300)).status("PENDING")
+                    .source(aiMission == null ? "RULE" : "AI")
+                    .assessmentId(aiMission == null ? null : assessmentId).build());
+        }
+        try {
+            List<DailyHealthMission> created = dailyHealthMissionRepository.saveAll(toSave);
+            return created.stream().map(this::toMissionMap).toList();
+        } catch (DataIntegrityViolationException e) {
+            List<DailyHealthMission> raced = dailyHealthMissionRepository
+                    .findByUserIdAndMissionDateOrderByCategoryAsc(userId, today);
+            if (!raced.isEmpty()) return raced.stream().map(this::toMissionMap).toList();
+            throw e;
+        }
+    }
+
+    private RecentHabitSummary getRecentHabitSummary(Long userId, LocalDate today) {
+        LocalDate start = today.minusDays(6);
+        List<DailyHealthLog> logs = dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, start, today);
+        int mealDays = 0;
+        int sugaryDrinkDays = 0;
+        int vegetableDays = 0;
+        int exerciseDays = 0;
+        int exerciseMinutes = 0;
+        for (DailyHealthLog log : logs) {
+            String meal = log.getMealDescription() == null ? "" : log.getMealDescription();
+            if (hasActualMeal(meal)) mealDays++;
+            if (log.isHighSugarIntake() || meal.contains("단 음료")) sugaryDrinkDays++;
+            if (meal.contains("채소")) vegetableDays++;
+
+            String exercise = log.getExerciseDescription() == null ? "" : log.getExerciseDescription();
+            if (exercise.contains("오늘은 운동하지 않음") || exercise.contains("시간: 운동하지 않음")) continue;
+            Integer minutes = extractExerciseMinutes(exercise);
+            if (minutes == null && log.getWalkingMinutes() != null && log.getWalkingMinutes() > 0) {
+                minutes = log.getWalkingMinutes();
+            }
+            if (hasExerciseRecord(exercise) || (minutes != null && minutes > 0)
+                    || log.isExerciseCompleted() || (log.getStepCount() != null && log.getStepCount() > 0)) exerciseDays++;
+            if (minutes != null && minutes > 0) {
+                exerciseMinutes += minutes;
+            }
+        }
+        List<String> recentCodes = dailyHealthMissionRepository
+                .findByUserIdAndMissionDateBetween(userId, today.minusDays(3), today.minusDays(1)).stream()
+                .map(DailyHealthMission::getCode).filter(code -> code != null && !code.isBlank()).toList();
+        return new RecentHabitSummary(mealDays, sugaryDrinkDays, vegetableDays, exerciseDays, exerciseMinutes, recentCodes);
+    }
+
+    private boolean hasActualMeal(String description) {
+        if (description == null || description.isBlank()) return false;
+        if (!description.startsWith(MEAL_ENTRY_PREFIX + "\n")) return true;
+        return description.lines().filter(line -> List.of("아침: ", "점심: ", "저녁: ").stream().anyMatch(line::startsWith))
+                .map(line -> line.substring(line.indexOf(": ") + 2).trim())
+                .anyMatch(entry -> !entry.isBlank() && !"기록 없음".equals(entry) && !"먹지 않음".equals(entry));
+    }
+
+    private boolean hasExerciseRecord(String description) {
+        if (description == null || description.isBlank()
+                || description.contains("오늘은 운동하지 않음") || description.contains("시간: 운동하지 않음")) return false;
+        if (!description.startsWith(EXERCISE_ENTRY_PREFIX + "\n")) return true;
+        String activity = description.lines().filter(line -> line.startsWith("종류: "))
+                .map(line -> line.substring("종류: ".length()).trim()).findFirst().orElse("");
+        String note = description.lines().filter(line -> line.startsWith("추가 내용: "))
+                .map(line -> line.substring("추가 내용: ".length()).trim()).findFirst().orElse("");
+        return (!activity.isBlank() && !"미선택".equals(activity)) || !note.isBlank();
+    }
+
+    private Integer extractExerciseMinutes(String description) {
+        if (description == null || description.isBlank()) return null;
+        String duration = description.lines().filter(line -> line.startsWith("시간: "))
+                .map(line -> line.substring("시간: ".length())).findFirst().orElse(description);
+        Matcher matcher = EXERCISE_MINUTES_PATTERN.matcher(duration);
+        Integer minutes = null;
+        while (matcher.find()) minutes = Integer.parseInt(matcher.group(1));
+        return minutes;
+    }
+
+    private List<MissionPlan> selectMissionPlans(RecentHabitSummary recent) {
+        List<MissionPlan> mealCandidates = new ArrayList<>();
+        if (recent.sugaryDrinkDays() >= 2) {
+            mealCandidates.add(new MissionPlan("MEAL", "MEAL_DRINK_SWAP", "단 음료 대신 물 선택하기",
+                    "오늘 마실 음료 중 하나를 물이나 무가당 음료로 바꿔보세요.",
+                    "최근 일주일 식사 기록에서 단 음료가 보여 작은 대안을 제안해요."));
+        }
+        if (recent.mealDays() > 0 && recent.vegetableDays() < recent.mealDays()) {
+            mealCandidates.add(new MissionPlan("MEAL", "MEAL_ADD_VEGETABLE", "식사에 채소 더하기",
+                    "오늘 한 끼에 채소 반찬이나 샐러드를 하나 더해보세요.",
+                    "최근 식사 기록을 바탕으로 채소를 더하는 방법을 제안해요."));
+        }
+        mealCandidates.add(new MissionPlan("MEAL", "MEAL_BALANCED_PLATE", "한 끼 균형 살펴보기",
+                "오늘 한 끼에 곡류, 채소, 단백질이 함께 있는지 살펴보세요.",
+                "부담 없이 실천할 수 있는 식사 점검 미션이에요."));
+        mealCandidates.add(new MissionPlan("MEAL", "MEAL_DRINK_SWAP", "단 음료 대신 물 선택하기",
+                "오늘 마실 음료 중 하나를 물이나 무가당 음료로 바꿔보세요.",
+                "최근 기록을 바탕으로 실천하기 쉬운 음료 선택을 제안해요."));
+        mealCandidates.add(new MissionPlan("MEAL", "MEAL_ADD_VEGETABLE", "식사에 채소 더하기",
+                "오늘 한 끼에 채소 반찬이나 샐러드를 하나 더해보세요.",
+                "채소를 더하는 작은 식사 습관을 제안해요."));
+
+        List<MissionPlan> activityCandidates = new ArrayList<>();
+        if (recent.exerciseDays() == 0) {
+            activityCandidates.add(new MissionPlan("ACTIVITY", "ACTIVITY_START_WALK", "가볍게 10분 걷기",
+                    "몸에 무리가 없는 편안한 속도로 10분 걸어보세요.",
+                    "최근 일주일 운동 기록이 없어 가볍게 시작하는 목표예요."));
+        } else if (recent.exerciseDays() >= 3) {
+            activityCandidates.add(new MissionPlan("ACTIVITY", "ACTIVITY_STRETCH", "가벼운 스트레칭 5분",
+                    "오늘 편한 부위 위주로 천천히 스트레칭해보세요.",
+                    "최근 활동을 이어가면서 몸을 가볍게 풀어보는 미션이에요."));
+        } else {
+            activityCandidates.add(new MissionPlan("ACTIVITY", "ACTIVITY_CONTINUE_WALK", "편안한 속도로 10분 걷기",
+                    "무리하지 않는 속도로 10분 걸어보세요.",
+                    "최근 운동 기록을 이어갈 수 있도록 작은 목표를 제안해요."));
+        }
+        activityCandidates.add(new MissionPlan("ACTIVITY", "ACTIVITY_STRETCH", "가벼운 스트레칭 5분",
+                "오늘 편한 부위 위주로 천천히 스트레칭해보세요.", "부담이 적은 활동 미션이에요."));
+        activityCandidates.add(new MissionPlan("ACTIVITY", "ACTIVITY_START_WALK", "가볍게 10분 걷기",
+                "몸에 무리가 없는 편안한 속도로 10분 걸어보세요.", "짧은 활동을 꾸준히 이어가도록 제안해요."));
+        activityCandidates.add(new MissionPlan("ACTIVITY", "ACTIVITY_CONTINUE_WALK", "편안한 속도로 10분 걷기",
+                "무리하지 않는 속도로 10분 걸어보세요.", "최근 운동 기록을 이어갈 수 있도록 작은 목표를 제안해요."));
+
+        List<String> recentCodes = recent.recentMissionCodes();
+        MissionPlan meal = mealCandidates.stream().filter(candidate -> !recentCodes.contains(candidate.code()))
+                .findFirst().orElse(mealCandidates.get(0));
+        MissionPlan activity = activityCandidates.stream().filter(candidate -> !recentCodes.contains(candidate.code()))
+                .findFirst().orElse(activityCandidates.get(0));
+        return List.of(activity, meal);
     }
 
     public Map<String, Object> completeMission(Long userId, Long missionId) {
@@ -764,6 +996,18 @@ public class HealthManagementService {
             input.put("latestHba1c", minimalResult);
         }
         input.put("checkupDate", assessment.get("checkupDate"));
+        RecentHabitSummary recent = getRecentHabitSummary(profile.getUserId(), LocalDate.now(APP_ZONE));
+        Map<String, Object> habitSummary = new TreeMap<>();
+        habitSummary.put("last7DaysMealLogDays", recent.mealDays());
+        habitSummary.put("last7DaysSugaryDrinkDays", recent.sugaryDrinkDays());
+        habitSummary.put("last7DaysVegetableDays", recent.vegetableDays());
+        habitSummary.put("last7DaysExerciseDays", recent.exerciseDays());
+        habitSummary.put("last7DaysExerciseMinutes", recent.exerciseMinutes());
+        input.put("recentHabits", habitSummary);
+        input.put("recentMissionCodes", recent.recentMissionCodes());
+        input.put("missionCandidates", selectMissionPlans(recent).stream()
+                .map(plan -> Map.of("category", plan.category(), "code", plan.code(), "title", plan.title()))
+                .toList());
         return input;
     }
 
@@ -771,12 +1015,13 @@ public class HealthManagementService {
                                                    String snapshotJson, String inputHash) {
         String prompt = "건강관리 대상자의 요약 데이터: " + snapshotJson + "\n"
                 + "규칙 기반 위험 단계: " + assessment.get("level") + "\n"
-                + "이 데이터를 바탕으로 짧고 실행 가능한 생활습관 안내와 오늘 할 수 있는 식사/운동 미션을 생성하세요.";
+                + "최근 7일의 집계와 최근 미션 코드를 고려해 반복을 줄인 생활습관 안내와 미션을 생성하세요. 원본 식사 입력은 제공되지 않습니다.";
         String system = "당신은 건강관리 안내 작성 도우미입니다. 진단, 치료, 약물 변경을 지시하지 말고 의료진 상담이 필요한 경우 명시하세요. "
                 + "과장하거나 입력에 없는 건강 상태를 추정하지 말고, 한국어로 작성하세요. 반드시 JSON 객체만 반환하고 형식은 "
                 + "{\\\"summary\\\":string,\\\"mealRecommendations\\\":[string],\\\"actions\\\":[string],\\\"missions\\\":["
-                + "{\\\"category\\\":\\\"MEAL\\\"|\\\"ACTIVITY\\\",\\\"title\\\":string,\\\"description\\\":string,\\\"reason\\\":string}]} 입니다. "
-                + "미션은 MEAL과 ACTIVITY 각각 하나씩만 반환하세요.";
+                + "{\\\"category\\\":\\\"MEAL\\\"|\\\"ACTIVITY\\\",\\\"code\\\":string,\\\"title\\\":string,\\\"description\\\":string,\\\"reason\\\":string}]} 입니다. "
+                + "missions의 code는 입력의 missionCandidates에 있는 해당 category의 code만 사용하고, 제목과 설명은 그 후보의 행동 범위를 벗어나지 마세요. "
+                + "recentMissionCodes에 있는 코드는 가능한 한 반복하지 말고, MEAL과 ACTIVITY 각각 하나씩 반환하세요.";
         String raw = healthAiClient.completeJson(system, prompt);
         Map<String, Object> output = normalizeAiOutput(raw);
         HealthAiAssessment entity = HealthAiAssessment.builder()
@@ -808,6 +1053,7 @@ public class HealthManagementService {
                     if (!List.of("MEAL", "ACTIVITY").contains(category)) continue;
                     Map<String, Object> mission = new HashMap<>();
                     mission.put("category", category);
+                    mission.put("code", textOr(node.path("code").asText(null), "", 40));
                     mission.put("title", textOr(node.path("title").asText(null), category.equals("MEAL") ? "식사 습관 점검" : "가벼운 신체 활동", 120));
                     mission.put("description", textOr(node.path("description").asText(null), "무리가 없는 범위에서 실천해보세요.", 500));
                     mission.put("reason", textOr(node.path("reason").asText(null), "일상 건강관리를 위한 제안입니다.", 300));

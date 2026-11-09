@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.nio.charset.StandardCharsets;
@@ -212,6 +213,151 @@ class HealthManagementServiceTest {
         assertEquals("아침: 밥", result.get("mealDescription"));
         assertEquals("걷기 20분", result.get("exerciseDescription"));
         verify(dailyHealthLogRepository).upsertDailyLog(userId, date, null, "아침: 밥", "걷기 20분", false, false);
+    }
+
+    @Test
+    void todayMissionsUseRecentRecordsAndAvoidRecentlyUsedMissionCodes() {
+        long userId = 42L;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        DiabetesRiskProfile profile = DiabetesRiskProfile.builder().userId(userId)
+                .onboardingCompletedAt(LocalDateTime.now()).aiProcessingConsent(false).build();
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateOrderByCategoryAsc(userId, today))
+                .thenReturn(List.of());
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, today.minusDays(6), today))
+                .thenReturn(List.of(
+                        DailyHealthLog.builder().userId(userId).logDate(today.minusDays(1))
+                                .mealDescription("끼니별 빠른 기록\n아침: 단 음료\n점심: 기록 없음\n저녁: 기록 없음").build(),
+                        DailyHealthLog.builder().userId(userId).logDate(today.minusDays(2))
+                                .mealDescription("끼니별 빠른 기록\n아침: 단 음료\n점심: 기록 없음\n저녁: 기록 없음").build()));
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, today.minusDays(3), today.minusDays(1)))
+                .thenReturn(List.of(
+                        DailyHealthMission.builder().code("MEAL_DRINK_SWAP").build(),
+                        DailyHealthMission.builder().code("MEAL_ADD_VEGETABLE").build(),
+                        DailyHealthMission.builder().code("ACTIVITY_START_WALK").build()));
+        when(dailyHealthMissionRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Map<String, Object>> missions = service.getTodayMissions(userId);
+
+        assertEquals(2, missions.size());
+        assertTrue(missions.stream().anyMatch(mission -> "MEAL_BALANCED_PLATE".equals(mission.get("code"))));
+        assertTrue(missions.stream().anyMatch(mission -> "ACTIVITY_STRETCH".equals(mission.get("code"))));
+        assertTrue(missions.stream().allMatch(mission -> "RULE".equals(mission.get("source"))));
+        verifyNoInteractions(healthAiClient);
+    }
+
+    @Test
+    void todayMissionsFallBackToPersonalizedRulesWhenAiIsUnavailable() {
+        long userId = 42L;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        DiabetesRiskProfile profile = DiabetesRiskProfile.builder().userId(userId)
+                .onboardingCompletedAt(LocalDateTime.now()).aiProcessingConsent(true).build();
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateOrderByCategoryAsc(userId, today))
+                .thenReturn(List.of());
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, today.minusDays(6), today))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, today.minusDays(3), today.minusDays(1)))
+                .thenReturn(List.of());
+        when(checkupResultRepository.findByUserIdOrderByCheckupDateDesc(userId)).thenReturn(List.of());
+        when(hba1cResultRepository.findByUserIdOrderByTestDateDescIdDesc(userId)).thenReturn(List.of());
+        when(healthAiAssessmentRepository.findByUserIdAndInputHashAndPromptVersion(eq(userId), anyString(), anyString()))
+                .thenReturn(Optional.empty());
+        when(healthAiClient.completeJson(anyString(), anyString())).thenThrow(new IllegalStateException("AI unavailable"));
+        when(dailyHealthMissionRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Map<String, Object>> missions = service.getTodayMissions(userId);
+
+        assertEquals(2, missions.size());
+        assertTrue(missions.stream().allMatch(mission -> "RULE".equals(mission.get("source"))));
+        assertTrue(missions.stream().anyMatch(mission -> "ACTIVITY_START_WALK".equals(mission.get("code"))));
+        assertTrue(missions.stream().anyMatch(mission -> "MEAL_BALANCED_PLATE".equals(mission.get("code"))));
+    }
+
+    @Test
+    void todayMissionsOnlyUseAiWordingForTheSelectedSafeCandidateCode() {
+        long userId = 42L;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        DiabetesRiskProfile profile = DiabetesRiskProfile.builder().userId(userId)
+                .onboardingCompletedAt(LocalDateTime.now()).aiProcessingConsent(true).build();
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateOrderByCategoryAsc(userId, today))
+                .thenReturn(List.of());
+        when(diabetesRiskProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, today.minusDays(6), today))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, today.minusDays(3), today.minusDays(1)))
+                .thenReturn(List.of());
+        when(checkupResultRepository.findByUserIdOrderByCheckupDateDesc(userId)).thenReturn(List.of());
+        when(hba1cResultRepository.findByUserIdOrderByTestDateDescIdDesc(userId)).thenReturn(List.of());
+        when(healthAiAssessmentRepository.findByUserIdAndInputHashAndPromptVersion(eq(userId), anyString(), anyString()))
+                .thenReturn(Optional.empty());
+        when(healthAiClient.completeJson(anyString(), anyString())).thenReturn("""
+                {"summary":"생활습관을 이어가세요.","mealRecommendations":[],"actions":[],"missions":[
+                  {"category":"ACTIVITY","code":"ACTIVITY_START_WALK","title":"천천히 10분 걷기","description":"편한 속도로 걸어보세요.","reason":"짧게 시작해보세요."},
+                  {"category":"MEAL","code":"UNAPPROVED_CODE","title":"고강도 달리기","description":"무리한 목표","reason":"추천 이유"}]}
+                """);
+        when(healthAiClient.getModel()).thenReturn("test-model");
+        when(healthAiAssessmentRepository.save(any())).thenAnswer(invocation -> {
+            HealthAiAssessment saved = invocation.getArgument(0);
+            saved.setId(77L);
+            return saved;
+        });
+        when(dailyHealthMissionRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<Map<String, Object>> missions = service.getTodayMissions(userId);
+
+        Map<String, Object> activity = missions.stream().filter(mission -> "ACTIVITY".equals(mission.get("category")))
+                .findFirst().orElseThrow();
+        Map<String, Object> meal = missions.stream().filter(mission -> "MEAL".equals(mission.get("category")))
+                .findFirst().orElseThrow();
+        assertEquals("AI", activity.get("source"));
+        assertEquals("천천히 10분 걷기", activity.get("title"));
+        assertEquals("RULE", meal.get("source"));
+        assertEquals("MEAL_BALANCED_PLATE", meal.get("code"));
+        assertFalse("고강도 달리기".equals(meal.get("title")));
+    }
+
+    @Test
+    void weeklySummaryComparesCurrentWeekToTheSameElapsedDaysLastWeek() {
+        long userId = 42L;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        LocalDate weekStart = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        int elapsedDays = (int) java.time.temporal.ChronoUnit.DAYS.between(weekStart, today) + 1;
+        LocalDate comparisonStart = weekStart.minusDays(7);
+        LocalDate comparisonEnd = comparisonStart.plusDays(elapsedDays - 1L);
+        String mealDescription = "끼니별 빠른 기록\n아침: 밥·잡곡밥\n점심: 기록 없음\n저녁: 기록 없음";
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, weekStart, today))
+                .thenReturn(List.of(DailyHealthLog.builder().userId(userId).logDate(today)
+                        .mealDescription(mealDescription).exerciseDescription("운동 빠른 기록\n종류: 걷기\n시간: 20분").build()));
+        when(dailyHealthLogRepository.findByUserIdAndLogDateBetween(userId, comparisonStart, comparisonEnd))
+                .thenReturn(List.of());
+        when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, weekStart, today)).thenReturn(List.of());
+        when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, comparisonStart, comparisonEnd)).thenReturn(List.of());
+        when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, weekStart, today))
+                .thenReturn(List.of(HealthDailyAttendance.builder().userId(userId).attendanceDate(today).build()));
+        when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, comparisonStart, comparisonEnd))
+                .thenReturn(List.of());
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, weekStart, today))
+                .thenReturn(List.of(DailyHealthMission.builder().status("COMPLETED").build()));
+        when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, comparisonStart, comparisonEnd))
+                .thenReturn(List.of());
+
+        Map<String, Object> summary = service.getWeeklySummary(userId);
+
+        assertEquals(weekStart, summary.get("weekStart"));
+        assertEquals(today, summary.get("weekEnd"));
+        assertEquals(elapsedDays, summary.get("daysElapsed"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metrics = (Map<String, Object>) summary.get("metrics");
+        assertEquals(1, metrics.get("attendanceDays"));
+        assertEquals(1, metrics.get("mealRecordDays"));
+        assertEquals(1, metrics.get("exerciseDays"));
+        assertEquals(20, metrics.get("exerciseMinutes"));
+        assertEquals(1, metrics.get("completedMissions"));
+        assertEquals(1, metrics.get("availableMissions"));
+        assertNull(metrics.get("mealAverageScore"));
+        assertEquals("지난주 같은 기간보다 식사 기록이 1일 늘었어요.", summary.get("headline"));
+        verify(dailyHealthLogRepository).findByUserIdAndLogDateBetween(userId, comparisonStart, comparisonEnd);
     }
 
     @Test
