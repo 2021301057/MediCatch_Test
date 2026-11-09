@@ -575,8 +575,6 @@ export default function HealthManagement() {
                   </label>
                   {log.mealReview && <div className="health-meal-review" aria-live="polite">
                     <strong>{log.mealReview.balanceLabel === 'BALANCED' ? '균형 잡힌 식사예요' : log.mealReview.balanceLabel === 'NEEDS_ATTENTION' ? '조금 더 챙기면 좋아요' : '식사 기록 평가'}</strong>
-                    {log.mealReview.balanceScore != null && <div>AI 식사 구성 평가: {log.mealReview.balanceScore}점</div>}
-                    {log.mealReview.balanceRationale && <div>{log.mealReview.balanceRationale}</div>}
                     <p>{log.mealReview.summary}</p>
                     {log.mealReview.positivePoints?.length > 0 && <div>좋았던 점: {log.mealReview.positivePoints.join(' · ')}</div>}
                     {log.mealReview.improvements?.length > 0 && <div>다음 식사 제안: {log.mealReview.improvements.join(' · ')}</div>}
@@ -684,7 +682,7 @@ export default function HealthManagement() {
               <section className="health-calendar-scorecard" aria-labelledby="health-calendar-score-title">
                 <div className="health-calendar-scorecard-heading">
                   <h3 id="health-calendar-score-title">{selectedCalendarDate} 기록 점수표</h3>
-                  <strong>종합 {selectedCalendarDay?.totalScore == null ? '미산정' : `${selectedCalendarDay.totalScore}점`}{selectedCalendarDay?.scoredCategoryCount > 0 ? ` · ${selectedCalendarDay.scoredCategoryCount}/2 항목` : ''}</strong>
+                  <strong>종합 {selectedCalendarDay?.totalScore == null ? '미산정' : `${selectedCalendarDay.totalScore}점`}{selectedCalendarDay?.scoredCategoryCount === 1 ? ' · 기록된 항목 기준' : ''}</strong>
                 </div>
                 <div className="health-calendar-score-table" role="table" aria-label={`${selectedCalendarDate} 식사·운동 기록 점수`}>
                   <div className="health-calendar-score-row header" role="row">
@@ -701,7 +699,7 @@ export default function HealthManagement() {
                     <span role="cell">{selectedCalendarDay?.exerciseScoreReason || '운동 기록이 없습니다.'}</span>
                   </div>
                 </div>
-                <p className="health-calendar-score-note">식사 점수는 실제 먹은 끼니 수(40%)와 AI 식사 구성 평가(60%)를 합산합니다. 먹은 끼니가 없거나 AI 평가가 없으면 미산정입니다. 운동 점수는 기록한 시간(30분 기준, 최대 100점)이며, 종합 점수는 산정 가능한 식사·운동 항목의 평균입니다. 모두 생활습관 기록 참고값이며 건강 상태나 의학적 평가 점수가 아닙니다.</p>
+                <p className="health-calendar-score-note">점수는 식사·운동 기록을 바탕으로 한 생활습관 참고값이며, 건강 상태나 의학적 평가를 뜻하지 않습니다. 기록이나 평가가 충분하지 않은 항목은 미산정으로 표시합니다.</p>
               </section>
             </div>
           </section>}

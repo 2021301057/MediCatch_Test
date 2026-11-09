@@ -156,8 +156,8 @@ class HealthManagementServiceTest {
 
         Map<String, Object> review = service.reviewDailyMeal(userId, date);
 
-        assertEquals(82, review.get("balanceScore"));
-        assertEquals("기록된 식사에 곡류와 채소가 포함되어 있습니다.", review.get("balanceRationale"));
+        assertFalse(review.containsKey("balanceScore"));
+        assertFalse(review.containsKey("balanceRationale"));
         ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
         verify(healthAiClient).completeJson(systemPrompt.capture(), anyString());
         assertTrue(systemPrompt.getValue().contains("끼니 수나 기록 완성도는 점수에 반영하지 마세요"));
@@ -189,7 +189,7 @@ class HealthManagementServiceTest {
 
         Map<String, Object> review = service.reviewDailyMeal(userId, date);
 
-        assertEquals(80, review.get("balanceScore"));
+        assertFalse(review.containsKey("balanceScore"));
         verify(healthMealReviewRepository, times(2))
                 .findByUserIdAndLogDateAndInputHash(eq(userId), eq(date), anyString());
     }
@@ -281,7 +281,7 @@ class HealthManagementServiceTest {
         when(healthMealReviewRepository.findByUserIdAndLogDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of(HealthMealReview.builder().userId(userId).logDate(date)
                         .inputHash(mealReviewHash(mealDescription))
-                        .reviewJson("{\"balanceLabel\":\"NEEDS_ATTENTION\",\"balanceScore\":40}").build()));
+                        .reviewJson("{\"balanceLabel\":\"NEEDS_ATTENTION\",\"balanceScore\":40,\"improvements\":[\"채소를 조금 더 챙겨보세요.\"]}").build()));
         when(healthDailyAttendanceRepository.findByUserIdAndAttendanceDateBetween(userId, date, month.atEndOfMonth()))
                 .thenReturn(List.of());
         when(dailyHealthMissionRepository.findByUserIdAndMissionDateBetween(userId, date, month.atEndOfMonth()))
@@ -295,6 +295,8 @@ class HealthManagementServiceTest {
         assertEquals(51, day.get("mealScore"));
         assertEquals(20, day.get("exerciseMinutes"));
         assertEquals(67, day.get("exerciseScore"));
+        assertEquals("채소를 조금 더 챙겨보세요.", day.get("mealScoreReason"));
+        assertEquals("20분 운동을 기록했어요.", day.get("exerciseScoreReason"));
         assertEquals(59, day.get("totalScore"));
         assertEquals(2, day.get("scoredCategoryCount"));
     }
@@ -323,7 +325,7 @@ class HealthManagementServiceTest {
         assertEquals(0, days.get(0).get("mealRecordedCount"));
         assertNull(days.get(0).get("mealScore"));
         assertNull(days.get(0).get("totalScore"));
-        assertTrue(((String) days.get(0).get("mealScoreReason")).contains("먹지 않음"));
+        assertTrue(((String) days.get(0).get("mealScoreReason")).contains("식사한 끼니가 없어"));
     }
 
     @Test
@@ -350,7 +352,8 @@ class HealthManagementServiceTest {
 
         assertEquals(1, day.get("mealRecordedCount"));
         assertEquals(73, day.get("mealScore"));
-        assertTrue(((String) day.get("mealScoreReason")).contains("40:60"));
+        assertFalse(((String) day.get("mealScoreReason")).contains("40:60"));
+        assertFalse(((String) day.get("mealScoreReason")).contains("AI 식사 구성 평가"));
         assertEquals(73, day.get("totalScore"));
         assertEquals(1, day.get("scoredCategoryCount"));
     }

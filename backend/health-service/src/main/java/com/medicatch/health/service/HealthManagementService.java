@@ -378,7 +378,7 @@ public class HealthManagementService {
         Map<String, Object> scores = new HashMap<>();
         Integer mealCount = null;
         Integer mealScore = null;
-        String mealReason = "식사 기록이 없습니다.";
+        String mealReason = "식사 기록이 없어요.";
         boolean allMealsSkipped = false;
         if (log != null && log.getMealDescription() != null && !log.getMealDescription().isBlank()) {
             String description = log.getMealDescription().trim();
@@ -398,33 +398,39 @@ public class HealthManagementService {
                 mealCount = 1;
             }
             if (allMealsSkipped) {
-                mealReason = "모든 끼니를 먹지 않음으로 기록해 식사 점수를 산정하지 않았습니다.";
+                mealReason = "식사한 끼니가 없어 점수를 산정하지 않았어요.";
             } else if (mealCount != null && mealCount == 0) {
-                mealReason = "실제 식사 항목이 없어 점수를 산정하지 않았습니다.";
+                mealReason = "먹은 음식 기록이 없어 점수를 산정하지 않았어요.";
             } else {
                 String inputHash = sha256(MEAL_REVIEW_PROMPT_VERSION + "|" + description);
                 HealthMealReview review = mealReviewsByDate.getOrDefault(date, Map.of()).get(inputHash);
                 if (review == null) {
-                    mealReason = "AI 식사 평가가 없어 점수를 계산하지 않았습니다.";
+                    mealReason = "식사 평가를 아직 받을 수 없어요.";
                 } else {
                     try {
                         JsonNode reviewJson = objectMapper.readTree(review.getReviewJson());
                         JsonNode balanceScoreNode = reviewJson.path("balanceScore");
                         String balanceLabel = reviewJson.path("balanceLabel").asText("UNKNOWN");
                         if ("UNKNOWN".equals(balanceLabel)) {
-                            mealReason = "AI가 식사 구성을 판단하기 어려워 점수를 산정하지 않았습니다.";
+                            mealReason = "기록한 음식만으로 평가하기 어려워요.";
                         } else if (!balanceScoreNode.isIntegralNumber() || balanceScoreNode.intValue() < 0 || balanceScoreNode.intValue() > 100) {
-                            mealReason = "AI 평가 점수가 없어 점수를 계산하지 않았습니다.";
+                            mealReason = "식사 평가를 완료하지 못했어요.";
                         } else {
                             int balanceScore = balanceScoreNode.intValue();
                             int recordedMeals = mealCount == null ? 1 : mealCount;
                             int coverageScore = Math.round(recordedMeals * 40.0f / 3);
                             mealScore = Math.round(coverageScore + balanceScore * 0.6f);
-                            mealReason = "실제 식사 " + recordedMeals + "끼(" + coverageScore
-                                    + "점)와 AI 식사 구성 평가 " + balanceScore + "점의 40:60 합산입니다.";
+                            if ("BALANCED".equals(balanceLabel)) {
+                                mealReason = "식사 구성이 균형 잡힌 편이에요. 지금의 습관을 이어가 보세요.";
+                            } else {
+                                String suggestion = reviewJson.path("improvements").path(0).asText("").trim();
+                                mealReason = suggestion.isEmpty()
+                                        ? "채소와 단백질을 조금 더 챙겨보세요."
+                                        : suggestion.substring(0, Math.min(suggestion.length(), 120));
+                            }
                         }
                     } catch (Exception e) {
-                        mealReason = "AI 식사 평가를 읽을 수 없어 점수를 계산하지 않았습니다.";
+                        mealReason = "식사 평가를 읽을 수 없어요.";
                     }
                 }
             }
@@ -432,11 +438,11 @@ public class HealthManagementService {
 
         Integer exerciseMinutes = null;
         Integer exerciseScore = null;
-        String exerciseReason = "운동 기록이 없습니다.";
+        String exerciseReason = "운동 기록이 없어요.";
         if (log != null && log.getExerciseDescription() != null && !log.getExerciseDescription().isBlank()) {
             String description = log.getExerciseDescription().trim();
             if (description.contains("종류: 오늘은 운동하지 않음") || description.contains("시간: 운동하지 않음")) {
-                exerciseReason = "휴식 기록은 점수 계산에서 제외합니다.";
+                exerciseReason = "운동하지 않은 날은 점수를 산정하지 않아요.";
             } else {
                 String durationEntry = description.lines()
                         .filter(line -> line.startsWith("시간: "))
@@ -446,9 +452,9 @@ public class HealthManagementService {
                 while (matcher.find()) exerciseMinutes = Integer.parseInt(matcher.group(1));
                 if (exerciseMinutes != null && exerciseMinutes > 0) {
                     exerciseScore = Math.min(100, Math.round(exerciseMinutes * 100.0f / 30));
-                    exerciseReason = exerciseMinutes + "분 기록 (30분 기준, 최대 100점)";
+                    exerciseReason = exerciseMinutes + "분 운동을 기록했어요.";
                 } else {
-                    exerciseReason = "운동 시간 정보가 없어 점수를 계산하지 않았습니다.";
+                    exerciseReason = "운동 시간을 기록하면 점수를 볼 수 있어요.";
                 }
             }
         }
@@ -593,10 +599,6 @@ public class HealthManagementService {
             String label = json.path("balanceLabel").asText("UNKNOWN");
             Map<String, Object> result = new HashMap<>();
             result.put("balanceLabel", List.of("BALANCED", "NEEDS_ATTENTION", "UNKNOWN").contains(label) ? label : "UNKNOWN");
-            JsonNode balanceScore = json.path("balanceScore");
-            result.put("balanceScore", !"UNKNOWN".equals(label) && balanceScore.isIntegralNumber()
-                    && balanceScore.intValue() >= 0 && balanceScore.intValue() <= 100 ? balanceScore.intValue() : null);
-            result.put("balanceRationale", json.path("balanceRationale").asText(""));
             result.put("summary", json.path("summary").asText("입력한 식사 기록을 확인했습니다."));
             result.put("positivePoints", jsonStringList(json.path("positivePoints")));
             result.put("improvements", jsonStringList(json.path("improvements")));
